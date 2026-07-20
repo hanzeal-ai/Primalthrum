@@ -1570,7 +1570,7 @@ Field meanings:
 
 ### P14-01 Full Commercial Smoke Script
 
-- Status: Todo
+- Status: Done
 - Goal: Add one script that proves commercial-critical flows.
 - Dependencies: P13-03
 - Inputs: existing tests, start scripts, docs

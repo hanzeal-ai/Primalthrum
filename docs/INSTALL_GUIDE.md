@@ -51,4 +51,5 @@ The script starts:
 curl http://127.0.0.1:3000/health
 curl http://127.0.0.1:3000/ready
 bash examples/research-agent/smoke.sh
+scripts/commercial-smoke.sh
 ```

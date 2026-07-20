@@ -90,6 +90,12 @@ data: {"node":"done","agent":"ResearchAgent","message":"Agent stream completed",
 scripts/smoke.sh
 ```
 
+完整商业关键路径 smoke：
+
+```bash
+scripts/commercial-smoke.sh
+```
+
 分段执行：
 
 ```bash
