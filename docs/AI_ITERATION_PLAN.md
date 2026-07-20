@@ -1590,7 +1590,7 @@ Field meanings:
 
 ### P14-02 Security And Release Checklist
 
-- Status: Todo
+- Status: Done
 - Goal: Add release checklist covering security, secrets, dangerous tools, backup, and docs.
 - Dependencies: P14-01
 - Inputs: docs, security-related code
