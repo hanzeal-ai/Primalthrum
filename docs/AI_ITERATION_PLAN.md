@@ -864,7 +864,7 @@ Field meanings:
 
 ### P2-01 Run Repository And `POST /api/runs`
 
-- Status: Todo
+- Status: Done
 - Goal: Add run creation API backed by SQLite.
 - Dependencies: P1-04
 - Inputs: `server/src/db/schema.ts`, `server/src/services/agentRepository.ts`, `server/src/app.ts`, `server/tests/agentPlatform.test.ts`

@@ -7,6 +7,7 @@ import { SqliteDatabase } from './db/sqlite';
 import { generateAgentProject } from './generators/agentProjectGenerator';
 import { AgentRepository, type CreateAgentInput } from './services/agentRepository';
 import { listProviders, listSkills, listTools } from './services/discoveryCatalog';
+import { RunRepository, type CreateRunInput } from './services/runRepository';
 
 export interface AppOptions {
   agentBaseUrl?: string;
@@ -81,10 +82,12 @@ export function createApp(options: AppOptions = {}): Koa {
   const app = new Koa();
   const router = new Router();
   const agentBaseUrl = options.agentBaseUrl ?? DEFAULT_AGENT_BASE_URL;
+  const db = new SqliteDatabase(options.dbPath ?? DEFAULT_DB_PATH);
   const agentRepository = new AgentRepository(
-    new SqliteDatabase(options.dbPath ?? DEFAULT_DB_PATH),
+    db,
     options.generatedAgentsDir ?? DEFAULT_GENERATED_AGENTS_DIR,
   );
+  const runRepository = new RunRepository(db);
 
   app.use(async (ctx, next) => {
     ctx.set('Access-Control-Allow-Origin', '*');
@@ -158,6 +161,36 @@ export function createApp(options: AppOptions = {}): Koa {
 
   router.get('/api/skills', (ctx) => {
     ctx.body = listSkills();
+  });
+
+  router.post('/api/runs', (ctx) => {
+    try {
+      const body = ctx.request.body as CreateRunInput;
+      if (!agentRepository.findById(Number(body.agentId))) {
+        ctx.status = 404;
+        ctx.body = { error: 'agent not found' };
+        return;
+      }
+
+      const created = runRepository.create(body);
+      ctx.status = 201;
+      ctx.body = created;
+    } catch (error) {
+      ctx.status = 400;
+      ctx.body = {
+        error: error instanceof Error ? error.message : 'failed to create run',
+      };
+    }
+  });
+
+  router.get('/api/runs/:id', (ctx) => {
+    const run = runRepository.findById(Number(ctx.params.id));
+    if (!run) {
+      ctx.status = 404;
+      ctx.body = { error: 'run not found' };
+      return;
+    }
+    ctx.body = run;
   });
 
   async function handleStream(ctx: Koa.Context): Promise<void> {

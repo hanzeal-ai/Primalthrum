@@ -144,3 +144,59 @@ test('discovery APIs expose typed providers tools and skills', async () => {
     rag: true,
   });
 });
+
+test('POST /api/runs creates a pending run for an existing agent', async () => {
+  const createAgentResponse = await fetch(`${baseUrl}/api/agents`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      name: 'Run Agent',
+      description: 'Run API demo',
+    }),
+  });
+  const agent = await createAgentResponse.json() as { id: number };
+
+  const createRunResponse = await fetch(`${baseUrl}/api/runs`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      agentId: agent.id,
+      input: 'Research the product requirements',
+    }),
+  });
+
+  assert.equal(createRunResponse.status, 201);
+  const run = await createRunResponse.json() as {
+    id: number;
+    agentId: number;
+    input: string;
+    status: string;
+    startedAt: string;
+    endedAt: string | null;
+  };
+  assert.ok(run.id > 0);
+  assert.equal(run.agentId, agent.id);
+  assert.equal(run.input, 'Research the product requirements');
+  assert.equal(run.status, 'pending');
+  assert.ok(run.startedAt);
+  assert.equal(run.endedAt, null);
+
+  const getRunResponse = await fetch(`${baseUrl}/api/runs/${run.id}`);
+  assert.equal(getRunResponse.status, 200);
+  const loaded = await getRunResponse.json() as { id: number; agentId: number };
+  assert.equal(loaded.id, run.id);
+  assert.equal(loaded.agentId, agent.id);
+});
+
+test('POST /api/runs rejects unknown agents', async () => {
+  const response = await fetch(`${baseUrl}/api/runs`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      agentId: 999999,
+      input: 'This should fail',
+    }),
+  });
+
+  assert.equal(response.status, 404);
+});
