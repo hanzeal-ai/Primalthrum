@@ -155,6 +155,19 @@ class RuntimeRegistryTest(unittest.TestCase):
             [("doc-b", "doc-b:0"), ("doc-a", "doc-a:0")],
         )
 
+    def test_in_memory_rag_delete_removes_document_chunks(self) -> None:
+        provider = InMemoryRagProvider()
+        provider.upsert("doc-a", "alpha beta")
+        provider.upsert("doc-b", "gamma delta")
+
+        provider.delete("doc-b")
+
+        results = provider.retrieve("gamma delta", top_k=2)
+        self.assertEqual(
+            [(result["document_id"], result["chunk_id"]) for result in results],
+            [("doc-a", "doc-a:0")],
+        )
+
     def test_runtime_respects_disabled_tools_skills_and_rag(self) -> None:
         runtime = create_runtime(
             AgentRuntimeConfig(

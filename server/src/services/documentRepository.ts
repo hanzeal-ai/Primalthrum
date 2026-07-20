@@ -118,6 +118,19 @@ export class DocumentRepository {
     `);
     return this.findByAgentDocument(agentId, documentId);
   }
+
+  deleteByAgentDocument(agentId: number, documentId: number): boolean {
+    const existing = this.findByAgentDocument(agentId, documentId);
+    if (!existing) {
+      return false;
+    }
+
+    this.db.run(`
+      DELETE FROM documents
+      WHERE agent_id = ${sqlValue(agentId)} AND id = ${sqlValue(documentId)};
+    `);
+    return true;
+  }
 }
 
 function normalizeFilename(filename: unknown): string {

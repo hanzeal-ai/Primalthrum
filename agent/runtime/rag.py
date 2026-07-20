@@ -63,6 +63,9 @@ class RagProvider(Protocol):
     def upsert(self, document_id: str, text: str) -> None:
         ...
 
+    def delete(self, document_id: str) -> None:
+        ...
+
     def retrieve(self, query: str, top_k: int = 4) -> list[dict[str, str]]:
         ...
 
@@ -72,6 +75,9 @@ class NullRagProvider:
     name: str = "null"
 
     def upsert(self, document_id: str, text: str) -> None:
+        return None
+
+    def delete(self, document_id: str) -> None:
         return None
 
     def retrieve(self, query: str, top_k: int = 4) -> list[dict[str, str]]:
@@ -119,6 +125,12 @@ class InMemoryRagProvider:
                 "text": entry.text,
             }
             for _, _, entry in scored[:top_k]
+        ]
+
+    def delete(self, document_id: str) -> None:
+        self.entries = [
+            entry for entry in self.entries
+            if entry.document_id != document_id
         ]
 
 

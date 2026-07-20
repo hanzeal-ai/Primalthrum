@@ -1444,7 +1444,7 @@ Field meanings:
 
 ### P11-03 RAG Reindex And Delete Operations
 
-- Status: Todo
+- Status: Done
 - Goal: Add reliable RAG reindex/delete operations.
 - Dependencies: P11-01, P5-03
 - Inputs: RAG providers, document APIs

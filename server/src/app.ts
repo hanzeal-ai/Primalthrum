@@ -16,6 +16,7 @@ import {
   DocumentRepository,
   type CreateDocumentInput,
 } from './services/documentRepository';
+import { DocumentIndexRepository } from './services/documentIndexRepository';
 import { LocalDocumentStorage } from './services/fileStorage';
 import { hashPassword, verifyPassword } from './services/passwordHash';
 import { InProcessJobWorker } from './services/inProcessJobWorker';
@@ -89,6 +90,7 @@ export function createApp(options: AppOptions = {}): Koa {
   const runRepository = new RunRepository(db);
   const streamEventRepository = new StreamEventRepository(db);
   const documentRepository = new DocumentRepository(db);
+  const documentIndexRepository = new DocumentIndexRepository(db);
   const documentStorage = new LocalDocumentStorage(
     options.documentStorageDir ?? DEFAULT_DOCUMENT_STORAGE_DIR,
   );
@@ -104,7 +106,7 @@ export function createApp(options: AppOptions = {}): Koa {
     ctx.set('Access-Control-Allow-Origin', origin || '*');
     ctx.set('Access-Control-Allow-Credentials', 'true');
     ctx.set('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization');
-    ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
+    ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     ctx.set('Vary', 'Origin');
 
     if (ctx.method === 'OPTIONS') {
@@ -313,11 +315,18 @@ export function createApp(options: AppOptions = {}): Koa {
       payload: { agentId, documentId },
     });
     const completedJob = jobWorker.run(job.id, () => {
+      const existing = documentRepository.findByAgentDocument(agentId, documentId);
+      const content = existing?.storageRef
+        ? documentStorage.read(existing.storageRef)
+        : '';
+      const entries = existing
+        ? documentIndexRepository.reindex(existing, content)
+        : [];
       indexed = documentRepository.markIndexed(agentId, documentId);
       if (!indexed) {
         throw new Error('document not found');
       }
-      return { document: indexed };
+      return { document: indexed, indexEntryCount: entries.length };
     });
 
     if (completedJob.status !== 'succeeded' || !indexed) {
@@ -329,6 +338,35 @@ export function createApp(options: AppOptions = {}): Koa {
     ctx.body = {
       ...indexed,
       job: completedJob,
+    };
+  });
+
+  router.delete('/api/agents/:id/documents/:documentId', (ctx) => {
+    const agentId = Number(ctx.params.id);
+    if (!agentRepository.findById(agentId)) {
+      ctx.status = 404;
+      ctx.body = { error: 'agent not found' };
+      return;
+    }
+
+    const documentId = Number(ctx.params.documentId);
+    const document = documentRepository.findByAgentDocument(agentId, documentId);
+    if (!document) {
+      ctx.status = 404;
+      ctx.body = { error: 'document not found' };
+      return;
+    }
+
+    const removedIndexEntries = documentIndexRepository.deleteByDocument(document.id);
+    if (document.storageRef) {
+      documentStorage.delete(document.storageRef);
+    }
+    documentRepository.deleteByAgentDocument(agentId, documentId);
+
+    ctx.body = {
+      documentId,
+      deleted: true,
+      removedIndexEntries,
     };
   });
 

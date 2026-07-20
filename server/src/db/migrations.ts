@@ -36,6 +36,10 @@ export const MIGRATIONS: Migration[] = [
     id: '006_document_storage_refs',
     up: applyDocumentStorageRefs,
   },
+  {
+    id: '007_document_index_entries',
+    up: applyDocumentIndexEntries,
+  },
 ];
 
 export function runMigrations(db: DatabaseAdapter): void {
@@ -250,6 +254,24 @@ function applyBackgroundJobs(db: DatabaseAdapter): void {
 
 function applyDocumentStorageRefs(db: DatabaseAdapter): void {
   ensureColumn(db, 'documents', 'storage_ref', "TEXT NOT NULL DEFAULT ''");
+}
+
+function applyDocumentIndexEntries(db: DatabaseAdapter): void {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS document_index_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL DEFAULT ${DEFAULT_WORKSPACE_ID},
+      agent_id INTEGER NOT NULL,
+      document_id INTEGER NOT NULL,
+      chunk_id TEXT NOT NULL,
+      text TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(document_id, chunk_id),
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+      FOREIGN KEY(agent_id) REFERENCES agents(id) ON DELETE CASCADE,
+      FOREIGN KEY(document_id) REFERENCES documents(id) ON DELETE CASCADE
+    );
+  `);
 }
 
 function ensureColumn(

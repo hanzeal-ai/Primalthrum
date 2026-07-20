@@ -687,6 +687,27 @@ test('document APIs register and list agent document metadata', async () => {
     agentId: agent.id,
     documentId: document.id,
   });
+  const db = new SqliteDatabase(dbPath);
+  const indexedEntries = db.query<{ count: number }>(`
+    SELECT COUNT(*) AS count
+    FROM document_index_entries
+    WHERE document_id = ${sqlValue(document.id)};
+  `);
+  assert.equal(Number(indexedEntries[0]?.count ?? 0), 1);
+
+  const reindexResponse = await fetch(
+    `${baseUrl}/api/agents/${agent.id}/documents/${document.id}/index`,
+    { method: 'POST', headers: authHeaders },
+  );
+  assert.equal(reindexResponse.status, 200);
+  const reindexed = await reindexResponse.json() as typeof indexed;
+  assert.equal(reindexed.indexStatus, 'indexed');
+  const reindexedEntries = db.query<{ count: number }>(`
+    SELECT COUNT(*) AS count
+    FROM document_index_entries
+    WHERE document_id = ${sqlValue(document.id)};
+  `);
+  assert.equal(Number(reindexedEntries[0]?.count ?? 0), 1);
 
   const jobResponse = await fetch(`${baseUrl}/api/jobs/${indexed.job.id}`, {
     headers: authHeaders,
@@ -695,6 +716,32 @@ test('document APIs register and list agent document metadata', async () => {
   const loadedJob = await jobResponse.json() as { id: number; status: string };
   assert.equal(loadedJob.id, indexed.job.id);
   assert.equal(loadedJob.status, 'succeeded');
+
+  const deleteResponse = await fetch(
+    `${baseUrl}/api/agents/${agent.id}/documents/${document.id}`,
+    { method: 'DELETE', headers: authHeaders },
+  );
+  assert.equal(deleteResponse.status, 200);
+  const deleted = await deleteResponse.json() as {
+    documentId: number;
+    deleted: boolean;
+    removedIndexEntries: number;
+  };
+  assert.deepEqual(deleted, {
+    documentId: document.id,
+    deleted: true,
+    removedIndexEntries: 1,
+  });
+  const deletedEntries = db.query<{ count: number }>(`
+    SELECT COUNT(*) AS count
+    FROM document_index_entries
+    WHERE document_id = ${sqlValue(document.id)};
+  `);
+  assert.equal(Number(deletedEntries[0]?.count ?? 0), 0);
+  assert.throws(
+    () => new LocalDocumentStorage(documentStorageDir).read(document.storageRef),
+    /ENOENT/,
+  );
 });
 
 test('run stream events can be inserted and replayed', async () => {
