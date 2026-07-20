@@ -882,7 +882,7 @@ Field meanings:
 
 ### P2-02 Persist Stream Events
 
-- Status: Todo
+- Status: Done
 - Goal: Store stream events for each run and replay them.
 - Dependencies: P2-01
 - Inputs: `server/src/app.ts`, `server/src/services/**`, `server/tests/**`

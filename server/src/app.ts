@@ -8,6 +8,10 @@ import { generateAgentProject } from './generators/agentProjectGenerator';
 import { AgentRepository, type CreateAgentInput } from './services/agentRepository';
 import { listProviders, listSkills, listTools } from './services/discoveryCatalog';
 import { RunRepository, type CreateRunInput } from './services/runRepository';
+import {
+  StreamEventRepository,
+  type CreateStreamEventInput,
+} from './services/streamEventRepository';
 
 export interface AppOptions {
   agentBaseUrl?: string;
@@ -88,6 +92,7 @@ export function createApp(options: AppOptions = {}): Koa {
     options.generatedAgentsDir ?? DEFAULT_GENERATED_AGENTS_DIR,
   );
   const runRepository = new RunRepository(db);
+  const streamEventRepository = new StreamEventRepository(db);
 
   app.use(async (ctx, next) => {
     ctx.set('Access-Control-Allow-Origin', '*');
@@ -191,6 +196,43 @@ export function createApp(options: AppOptions = {}): Koa {
       return;
     }
     ctx.body = run;
+  });
+
+  router.post('/api/runs/:id/events', (ctx) => {
+    const runId = Number(ctx.params.id);
+    if (!runRepository.findById(runId)) {
+      ctx.status = 404;
+      ctx.body = { error: 'run not found' };
+      return;
+    }
+
+    try {
+      const body = ctx.request.body as Omit<CreateStreamEventInput, 'runId'>;
+      const created = streamEventRepository.create({
+        runId,
+        eventType: body.eventType,
+        node: body.node,
+        payload: body.payload,
+      });
+      ctx.status = 201;
+      ctx.body = created;
+    } catch (error) {
+      ctx.status = 400;
+      ctx.body = {
+        error: error instanceof Error ? error.message : 'failed to create stream event',
+      };
+    }
+  });
+
+  router.get('/api/runs/:id/events', (ctx) => {
+    const runId = Number(ctx.params.id);
+    if (!runRepository.findById(runId)) {
+      ctx.status = 404;
+      ctx.body = { error: 'run not found' };
+      return;
+    }
+
+    ctx.body = streamEventRepository.listByRunId(runId);
   });
 
   async function handleStream(ctx: Koa.Context): Promise<void> {

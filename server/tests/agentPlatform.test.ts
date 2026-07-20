@@ -200,3 +200,63 @@ test('POST /api/runs rejects unknown agents', async () => {
 
   assert.equal(response.status, 404);
 });
+
+test('run stream events can be inserted and replayed', async () => {
+  const createAgentResponse = await fetch(`${baseUrl}/api/agents`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      name: 'Event Agent',
+      description: 'Event replay demo',
+    }),
+  });
+  const agent = await createAgentResponse.json() as { id: number };
+
+  const createRunResponse = await fetch(`${baseUrl}/api/runs`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      agentId: agent.id,
+      input: 'Replay stream events',
+    }),
+  });
+  const run = await createRunResponse.json() as { id: number };
+
+  const createEventResponse = await fetch(`${baseUrl}/api/runs/${run.id}/events`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      eventType: 'agent.node.completed',
+      node: 'plan',
+      payload: {
+        message: 'plan completed',
+        status: 'running',
+      },
+    }),
+  });
+
+  assert.equal(createEventResponse.status, 201);
+  const event = await createEventResponse.json() as {
+    id: number;
+    runId: number;
+    eventType: string;
+    node: string;
+    payload: Record<string, unknown>;
+    createdAt: string;
+  };
+  assert.ok(event.id > 0);
+  assert.equal(event.runId, run.id);
+  assert.equal(event.eventType, 'agent.node.completed');
+  assert.equal(event.node, 'plan');
+  assert.deepEqual(event.payload, {
+    message: 'plan completed',
+    status: 'running',
+  });
+  assert.ok(event.createdAt);
+
+  const listEventsResponse = await fetch(`${baseUrl}/api/runs/${run.id}/events`);
+  assert.equal(listEventsResponse.status, 200);
+  const events = await listEventsResponse.json() as Array<{ id: number; eventType: string }>;
+  assert.deepEqual(events.map((item) => item.id), [event.id]);
+  assert.equal(events[0]?.eventType, 'agent.node.completed');
+});
