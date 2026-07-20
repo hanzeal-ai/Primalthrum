@@ -19,7 +19,9 @@ import {
 } from './services/documentRepository';
 import { DocumentIndexRepository } from './services/documentIndexRepository';
 import { LocalDocumentStorage } from './services/fileStorage';
+import { checkServerReadiness } from './services/healthReadiness';
 import { JsonConsoleLogger, type StructuredLogger } from './services/logger';
+import { MetricsRegistry } from './services/metricsRegistry';
 import { hashPassword, verifyPassword } from './services/passwordHash';
 import { InProcessJobWorker } from './services/inProcessJobWorker';
 import { JobRepository } from './services/jobRepository';
@@ -53,6 +55,7 @@ export interface AppOptions {
   documentStorageDir?: string;
   generatedAgentsDir?: string;
   logger?: StructuredLogger;
+  metrics?: MetricsRegistry;
 }
 
 const DEFAULT_AGENT_BASE_URL = 'http://127.0.0.1:8000';
@@ -86,6 +89,7 @@ export function createApp(options: AppOptions = {}): Koa {
   const router = new Router();
   const agentBaseUrl = options.agentBaseUrl ?? DEFAULT_AGENT_BASE_URL;
   const logger = options.logger ?? new JsonConsoleLogger();
+  const metrics = options.metrics ?? new MetricsRegistry();
   const db = new SqliteDatabase(options.dbPath ?? DEFAULT_DB_PATH);
   const agentRepository = new AgentRepository(
     db,
@@ -121,6 +125,19 @@ export function createApp(options: AppOptions = {}): Koa {
     await next();
   });
   app.use(bodyParser());
+  app.use(async (ctx, next) => {
+    const startedAt = Date.now();
+    try {
+      await next();
+    } finally {
+      metrics.observeHttpRequest({
+        method: ctx.method,
+        path: ctx.path,
+        status: ctx.status,
+        durationMs: Date.now() - startedAt,
+      });
+    }
+  });
   app.use(createAuthMiddleware(sessionRepository));
 
   router.get('/health', (ctx) => {
@@ -129,6 +146,17 @@ export function createApp(options: AppOptions = {}): Koa {
       service: 'server',
       agentBaseUrl,
     };
+  });
+
+  router.get('/ready', async (ctx) => {
+    const report = await checkServerReadiness({ db, agentBaseUrl });
+    ctx.status = report.status === 'ready' ? 200 : 503;
+    ctx.body = report;
+  });
+
+  router.get('/metrics', (ctx) => {
+    ctx.type = 'text/plain; version=0.0.4';
+    ctx.body = metrics.toPrometheusText();
   });
 
   router.get('/api/setup/status', (ctx) => {

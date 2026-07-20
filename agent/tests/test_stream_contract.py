@@ -40,6 +40,23 @@ def sse_messages(body: str) -> list[tuple[str, dict]]:
 
 
 class StreamContractTest(unittest.TestCase):
+    def test_health_and_readiness_endpoints_expose_runtime_status(self) -> None:
+        client = TestClient(app)
+
+        health_response = client.get("/health")
+        self.assertEqual(health_response.status_code, 200)
+        self.assertEqual(health_response.json()["status"], "ok")
+
+        readiness_response = client.get("/ready")
+        self.assertEqual(readiness_response.status_code, 200)
+        readiness = readiness_response.json()
+        self.assertEqual(readiness["status"], "ready")
+        self.assertEqual(readiness["service"], "agent")
+        self.assertIn("checks", readiness)
+        self.assertTrue(
+            any(check["name"] == "runtime_registry" for check in readiness["checks"])
+        )
+
     def test_stream_endpoint_emits_canonical_agent_events(self) -> None:
         client = TestClient(app)
 

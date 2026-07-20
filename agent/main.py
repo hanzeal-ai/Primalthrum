@@ -1,12 +1,13 @@
 import asyncio
 import hashlib
 import json
+import time
 from collections.abc import AsyncIterator
 from typing import Any, TypedDict
 
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import JSONResponse, StreamingResponse
 from langgraph.graph import END, StateGraph
 from pydantic import BaseModel, Field
 
@@ -257,6 +258,55 @@ async def legacy_stream(request: AgentRequest) -> StreamingResponse:
 @app.get("/health")
 async def health() -> dict[str, str]:
     return {"status": "ok", "service": "agent"}
+
+
+@app.get("/ready")
+async def ready() -> JSONResponse:
+    started_at = time.monotonic()
+    checks: list[dict[str, Any]] = []
+
+    try:
+        runtime = create_runtime(
+            AgentRuntimeConfig(
+                agent_name="ReadinessAgent",
+                enabled_tools=[],
+                enabled_skills=[],
+                memory_provider="null",
+                cache_provider="null",
+                rag_provider="null",
+            )
+        )
+        checks.append(
+            {
+                "name": "runtime_registry",
+                "status": "ok",
+                "loaded_tools": runtime.tools.names(),
+                "loaded_skills": runtime.skills.names(),
+            }
+        )
+        checks.append({"name": "langgraph", "status": "ok"})
+        status_code = 200
+        status = "ready"
+    except Exception as error:
+        checks.append(
+            {
+                "name": "runtime_registry",
+                "status": "failed",
+                "message": str(error),
+            }
+        )
+        status_code = 503
+        status = "not_ready"
+
+    return JSONResponse(
+        status_code=status_code,
+        content={
+            "status": status,
+            "service": "agent",
+            "latency_ms": round((time.monotonic() - started_at) * 1000, 3),
+            "checks": checks,
+        },
+    )
 
 
 if __name__ == "__main__":

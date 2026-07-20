@@ -5,7 +5,7 @@ import { readFile, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 import { after, before, test } from 'node:test';
-import { type Server } from 'node:http';
+import { createServer, type Server } from 'node:http';
 import { promisify } from 'node:util';
 
 import { createApp } from '../src/app';
@@ -341,6 +341,74 @@ test('admin setup login session and logout enforce platform auth', async () => {
   assert.equal(login.user.email, 'admin@example.com');
   assert.equal(login.user.role, 'admin');
   authHeaders = { authorization: `Bearer ${login.session.token}` };
+});
+
+test('readiness checks dependencies and metrics exports counters', async () => {
+  const readinessRootDir = mkdtempSync(join(tmpdir(), 'primalthrum-readiness-'));
+  const agentHealthServer = createServer((request, response) => {
+    if (request.url === '/ready') {
+      response.setHeader('content-type', 'application/json');
+      response.end(JSON.stringify({ status: 'ready', service: 'agent' }));
+      return;
+    }
+
+    response.statusCode = 404;
+    response.end();
+  });
+
+  try {
+    await new Promise<void>((resolve) => {
+      agentHealthServer.listen(0, '127.0.0.1', resolve);
+    });
+    const agentAddress = agentHealthServer.address();
+    assert(agentAddress && typeof agentAddress === 'object');
+
+    const readinessApp = createApp({
+      agentBaseUrl: `http://127.0.0.1:${agentAddress.port}`,
+      dbPath: join(readinessRootDir, 'platform.sqlite'),
+      documentStorageDir: join(readinessRootDir, 'documents'),
+      generatedAgentsDir: join(readinessRootDir, 'generated-agents'),
+      logger: { log: () => undefined },
+    });
+    const readinessServer = readinessApp.listen(0, '127.0.0.1');
+    await new Promise<void>((resolve) => readinessServer.once('listening', resolve));
+    const readinessAddress = readinessServer.address();
+    assert(readinessAddress && typeof readinessAddress === 'object');
+    const readinessBaseUrl = `http://127.0.0.1:${readinessAddress.port}`;
+
+    try {
+      const readyResponse = await fetch(`${readinessBaseUrl}/ready`);
+      assert.equal(readyResponse.status, 200);
+      const readyBody = await readyResponse.json() as {
+        status: string;
+        checks: Array<{ name: string; status: string }>;
+      };
+      assert.equal(readyBody.status, 'ready');
+      assert.deepEqual(
+        readyBody.checks.map((check) => [check.name, check.status]),
+        [
+          ['database', 'ok'],
+          ['agent_runtime', 'ok'],
+        ],
+      );
+
+      const metricsResponse = await fetch(`${readinessBaseUrl}/metrics`);
+      assert.equal(metricsResponse.status, 200);
+      assert.match(
+        metricsResponse.headers.get('content-type') ?? '',
+        /^text\/plain/,
+      );
+      const metrics = await metricsResponse.text();
+      assert.match(metrics, /primalthrum_http_requests_total/);
+      assert.match(metrics, /primalthrum_process_uptime_seconds/);
+      assert.match(metrics, /path="\/ready"/);
+    } finally {
+      await new Promise<void>((resolve) => readinessServer.close(() => resolve()));
+    }
+  } finally {
+    await new Promise<void>((resolve) => agentHealthServer.close(() => resolve()));
+    rmSync(readinessRootDir, { recursive: true, force: true });
+  }
 });
 
 test('POST /api/agents persists an agent config in SQLite metadata', async () => {

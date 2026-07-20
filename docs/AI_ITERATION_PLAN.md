@@ -1480,7 +1480,7 @@ Field meanings:
 
 ### P12-02 Health Readiness And Metrics Hooks
 
-- Status: Todo
+- Status: Done
 - Goal: Add production health/readiness checks and metrics export hook.
 - Dependencies: P12-01
 - Inputs: `server/src/app.ts`, agent health route

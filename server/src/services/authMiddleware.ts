@@ -76,7 +76,12 @@ export function clearSessionCookie(): string {
 }
 
 function isPublicRequest(ctx: Koa.Context): boolean {
-  if (ctx.method === 'OPTIONS' || ctx.path === '/health') {
+  if (
+    ctx.method === 'OPTIONS'
+    || ctx.path === '/health'
+    || ctx.path === '/ready'
+    || ctx.path === '/metrics'
+  ) {
     return true;
   }
 

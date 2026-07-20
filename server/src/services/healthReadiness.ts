@@ -1,0 +1,93 @@
+import { type DatabaseAdapter } from '../db/adapter';
+
+export type ReadinessCheckStatus = 'ok' | 'failed';
+export type ReadinessStatus = 'ready' | 'not_ready';
+
+export interface ReadinessCheck {
+  name: string;
+  status: ReadinessCheckStatus;
+  latencyMs: number;
+  message?: string;
+}
+
+export interface ReadinessReport {
+  status: ReadinessStatus;
+  service: string;
+  checks: ReadinessCheck[];
+}
+
+export async function checkServerReadiness(input: {
+  db: DatabaseAdapter;
+  agentBaseUrl: string;
+  agentTimeoutMs?: number;
+}): Promise<ReadinessReport> {
+  const checks = [
+    checkDatabase(input.db),
+    await checkAgentRuntime(input.agentBaseUrl, input.agentTimeoutMs ?? 1500),
+  ];
+
+  return {
+    status: checks.every((check) => check.status === 'ok') ? 'ready' : 'not_ready',
+    service: 'server',
+    checks,
+  };
+}
+
+function checkDatabase(db: DatabaseAdapter): ReadinessCheck {
+  const startedAt = Date.now();
+  try {
+    const rows = db.query<{ ok: number }>('SELECT 1 AS ok;');
+    if (Number(rows[0]?.ok) !== 1) {
+      throw new Error('database probe returned an unexpected result');
+    }
+    return {
+      name: 'database',
+      status: 'ok',
+      latencyMs: Date.now() - startedAt,
+    };
+  } catch (error) {
+    return {
+      name: 'database',
+      status: 'failed',
+      latencyMs: Date.now() - startedAt,
+      message: error instanceof Error ? error.message : 'database probe failed',
+    };
+  }
+}
+
+async function checkAgentRuntime(
+  agentBaseUrl: string,
+  timeoutMs: number,
+): Promise<ReadinessCheck> {
+  const startedAt = Date.now();
+  const controller = new AbortController();
+  const timeout = setTimeout(() => controller.abort(), timeoutMs);
+
+  try {
+    const response = await fetch(`${trimTrailingSlash(agentBaseUrl)}/ready`, {
+      signal: controller.signal,
+      headers: { accept: 'application/json' },
+    });
+    if (!response.ok) {
+      throw new Error(`agent readiness returned ${response.status}`);
+    }
+    return {
+      name: 'agent_runtime',
+      status: 'ok',
+      latencyMs: Date.now() - startedAt,
+    };
+  } catch (error) {
+    return {
+      name: 'agent_runtime',
+      status: 'failed',
+      latencyMs: Date.now() - startedAt,
+      message: error instanceof Error ? error.message : 'agent readiness failed',
+    };
+  } finally {
+    clearTimeout(timeout);
+  }
+}
+
+function trimTrailingSlash(value: string): string {
+  return value.replace(/\/+$/, '');
+}
