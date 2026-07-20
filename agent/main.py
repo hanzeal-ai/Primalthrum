@@ -158,6 +158,16 @@ async def stream_graph(request: AgentRequest) -> AsyncIterator[str]:
         "status": "queued",
     }
 
+    yield sse(
+        "agent.run.started",
+        {
+            "node": "run",
+            "agent": initial_state["agent"],
+            "message": "Agent run started",
+            "status": "running",
+        },
+    )
+
     async for update in compiled_graph.astream(initial_state, stream_mode="updates"):
         for node, patch in update.items():
             payload = {
@@ -169,11 +179,11 @@ async def stream_graph(request: AgentRequest) -> AsyncIterator[str]:
             for key in ("tools", "skills", "runtime", "plan", "artifacts", "checks"):
                 if key in patch:
                     payload[key] = patch[key]
-            yield sse("agent.update", payload)
+            yield sse("agent.node.completed", payload)
             await asyncio.sleep(0)
 
     yield sse(
-        "agent.done",
+        "agent.run.completed",
         {
             "node": "done",
             "agent": initial_state["agent"],

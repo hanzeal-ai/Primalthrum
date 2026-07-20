@@ -919,7 +919,7 @@ Field meanings:
 
 ### P2-04 Canonical Stream Event Names
 
-- Status: Todo
+- Status: Done
 - Goal: Replace generic event names with canonical first-version stream events.
 - Dependencies: P2-03
 - Inputs: `agent/main.py`, `server/src/app.ts`, stream tests

@@ -28,9 +28,11 @@ before(async () => {
         'content-type': 'text/event-stream; charset=utf-8',
         'cache-control': 'no-cache',
       });
-      res.write('event: agent.update\n');
+      res.write('event: agent.run.started\n');
+      res.write('data: {"node":"run","message":"started","status":"running"}\n\n');
+      res.write('event: agent.node.completed\n');
       res.write('data: {"node":"intake","message":"accepted"}\n\n');
-      res.write('event: agent.done\n');
+      res.write('event: agent.run.completed\n');
       res.end('data: {"status":"done","agent":"TestAgent"}\n\n');
       return;
     }
@@ -75,9 +77,10 @@ test('POST /api/stream proxies the agent SSE stream', async () => {
   assert.match(response.headers.get('content-type') ?? '', /^text\/event-stream/);
 
   const body = await response.text();
-  assert.match(body, /event: agent\.update/);
+  assert.match(body, /event: agent\.run\.started/);
+  assert.match(body, /event: agent\.node\.completed/);
   assert.match(body, /"node":"intake"/);
-  assert.match(body, /event: agent\.done/);
+  assert.match(body, /event: agent\.run\.completed/);
   assert.match(body, /"status":"done"/);
 });
 
@@ -112,7 +115,7 @@ test('POST /api/stream can run by agentId and persist proxied events', async () 
   const runId = Number(response.headers.get('x-primalthrum-run-id'));
   assert.ok(runId > 0);
   const body = await response.text();
-  assert.match(body, /event: agent\.update/);
+  assert.match(body, /event: agent\.node\.completed/);
   assert.equal(upstreamPayloads.length, 1);
   assert.deepEqual(upstreamPayloads[0], {
     goal: 'Use the saved agent config',
@@ -137,7 +140,12 @@ test('POST /api/stream can run by agentId and persist proxied events', async () 
     node: string;
     payload: Record<string, unknown>;
   }>;
-  assert.deepEqual(events.map((event) => event.eventType), ['agent.update', 'agent.done']);
-  assert.equal(events[0]?.node, 'intake');
-  assert.equal(events[1]?.payload.status, 'done');
+  assert.deepEqual(events.map((event) => event.eventType), [
+    'agent.run.started',
+    'agent.node.completed',
+    'agent.run.completed',
+  ]);
+  assert.equal(events[0]?.node, 'run');
+  assert.equal(events[1]?.node, 'intake');
+  assert.equal(events[2]?.payload.status, 'done');
 });
