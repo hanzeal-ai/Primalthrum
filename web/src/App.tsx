@@ -1,19 +1,8 @@
 import { useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
+import { streamAgentRun } from './api/client'
+import type { RunStatus, StreamPayload } from './api/types'
 import './App.css'
-
-type RunStatus = 'idle' | 'running' | 'done' | 'error'
-
-interface StreamPayload {
-  node?: string
-  agent?: string
-  message?: string
-  status?: RunStatus | string
-  tools?: string[]
-  plan?: string[]
-  artifacts?: string[]
-  checks?: string[]
-}
 
 interface TimelineEvent extends StreamPayload {
   id: number
@@ -21,37 +10,10 @@ interface TimelineEvent extends StreamPayload {
   receivedAt: string
 }
 
-interface ParsedSseEvent {
-  event: string
-  data: StreamPayload
-}
-
 const DEFAULT_FORM = {
   agent: 'ResearchAgent',
   goal: 'Create a research agent that can plan tasks, collect evidence, and stream progress to the product UI.',
   tools: 'planner, memory, file_search',
-}
-
-function parseSseBlock(block: string): ParsedSseEvent | null {
-  const lines = block.split('\n')
-  const event = lines
-    .find((line) => line.startsWith('event:'))
-    ?.replace('event:', '')
-    .trim() ?? 'message'
-  const data = lines
-    .filter((line) => line.startsWith('data:'))
-    .map((line) => line.replace('data:', '').trim())
-    .join('')
-
-  if (!data) {
-    return null
-  }
-
-  try {
-    return { event, data: JSON.parse(data) as StreamPayload }
-  } catch {
-    return null
-  }
 }
 
 function statusLabel(status: RunStatus): string {
@@ -110,32 +72,9 @@ export default function App() {
     setSummary({})
 
     try {
-      const response = await fetch('/api/stream', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ agent, goal, tools }),
+      await streamAgentRun({ agent, goal, tools }, {
         signal: controller.signal,
-      })
-
-      if (!response.ok || !response.body) {
-        throw new Error(`Stream request failed with HTTP ${response.status}`)
-      }
-
-      const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
-      let buffer = ''
-
-      while (true) {
-        const { done, value } = await reader.read()
-        if (done) break
-
-        buffer += value
-        const blocks = buffer.split('\n\n')
-        buffer = blocks.pop() ?? ''
-
-        for (const block of blocks) {
-          const parsed = parseSseBlock(block)
-          if (!parsed) continue
-
+        onEvent: (parsed) => {
           const nextEvent: TimelineEvent = {
             id: eventIdRef.current++,
             event: parsed.event,
@@ -151,8 +90,8 @@ export default function App() {
           } else if (parsed.event === 'agent.error' || parsed.data.status === 'error') {
             setStatus('error')
           }
-        }
-      }
+        },
+      })
     } catch (error) {
       if (!controller.signal.aborted) {
         setStatus('error')

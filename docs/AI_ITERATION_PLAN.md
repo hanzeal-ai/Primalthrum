@@ -1108,7 +1108,7 @@ Field meanings:
 
 ### P6-01 Web API Client Layer
 
-- Status: Todo
+- Status: Done
 - Goal: Add typed Web API client for platform endpoints.
 - Dependencies: P5-03
 - Inputs: `web/src/App.tsx`, `server/src/app.ts`
