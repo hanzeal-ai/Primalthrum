@@ -1125,7 +1125,7 @@ Field meanings:
 
 ### P6-02 Agents View
 
-- Status: Todo
+- Status: Done
 - Goal: Build Agents list/create view.
 - Dependencies: P6-01
 - Inputs: `web/src/App.tsx`, `web/src/App.css`

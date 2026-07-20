@@ -94,6 +94,13 @@ h3 {
   align-items: stretch;
 }
 
+.management-shell {
+  display: grid;
+  grid-template-columns: minmax(420px, 1fr) minmax(290px, 360px);
+  gap: 16px;
+  padding: 16px 16px 0;
+}
+
 .panel {
   min-width: 0;
   border: 1px solid #d5dbd3;
@@ -104,8 +111,17 @@ h3 {
 
 .control-panel,
 .timeline-panel,
-.summary-panel {
+.summary-panel,
+.agents-panel,
+.create-agent-panel {
   padding: 18px;
+}
+
+.agents-panel,
+.create-agent-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
 }
 
 .control-panel {
@@ -201,6 +217,81 @@ button:disabled {
   border: 1px solid #c7d0ca;
   background: #ffffff;
   color: #39433f;
+}
+
+.compact {
+  width: 86px;
+  height: 34px;
+}
+
+.agent-list {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+  gap: 10px;
+}
+
+.agent-item {
+  min-height: 70px;
+  height: auto;
+  padding: 10px 11px;
+  border: 1px solid #d7ded8;
+  border-radius: 8px;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+  background: #fbfcf8;
+  color: #1b1f24;
+  text-align: left;
+}
+
+.agent-item.selected {
+  border-color: #246bfe;
+  box-shadow: 0 0 0 3px rgba(36, 107, 254, 0.11);
+}
+
+.agent-item span {
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.agent-item strong,
+.agent-item small {
+  overflow-wrap: anywhere;
+}
+
+.agent-item strong {
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.agent-item small {
+  color: #66736d;
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.agent-item em {
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: #eef2ef;
+  color: #47605a;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.inline-empty {
+  min-height: 70px;
+  border: 1px dashed #cdd6d0;
+  border-radius: 8px;
+  display: grid;
+  place-content: center;
+  color: #66736d;
+  font-size: 14px;
 }
 
 .timeline-panel {
@@ -339,6 +430,10 @@ code {
 }
 
 @media (max-width: 1120px) {
+  .management-shell {
+    grid-template-columns: 1fr;
+  }
+
   .shell {
     grid-template-columns: minmax(280px, 360px) minmax(420px, 1fr);
   }
@@ -357,6 +452,14 @@ code {
   .shell {
     grid-template-columns: 1fr;
     padding: 10px;
+  }
+
+  .management-shell {
+    padding: 10px 10px 0;
+  }
+
+  .agent-list {
+    grid-template-columns: 1fr;
   }
 
   .panel-heading.inline {

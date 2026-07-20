@@ -1,7 +1,7 @@
-import { useMemo, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { streamAgentRun } from './api/client'
-import type { RunStatus, StreamPayload } from './api/types'
+import { createAgent, listAgents, streamAgentRun } from './api/client'
+import type { AgentRecord, RunStatus, StreamPayload } from './api/types'
 import './App.css'
 
 interface TimelineEvent extends StreamPayload {
@@ -16,6 +16,11 @@ const DEFAULT_FORM = {
   tools: 'planner, memory, file_search',
 }
 
+const DEFAULT_AGENT_FORM = {
+  name: 'Research Agent',
+  description: 'Research assistant with memory, tools, and optional RAG.',
+}
+
 function statusLabel(status: RunStatus): string {
   if (status === 'running') return 'Running'
   if (status === 'done') return 'Complete'
@@ -25,6 +30,10 @@ function statusLabel(status: RunStatus): string {
 
 export default function App() {
   const [form, setForm] = useState(DEFAULT_FORM)
+  const [agentForm, setAgentForm] = useState(DEFAULT_AGENT_FORM)
+  const [agents, setAgents] = useState<AgentRecord[]>([])
+  const [agentsStatus, setAgentsStatus] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [agentsMessage, setAgentsMessage] = useState('Loading agents')
   const [events, setEvents] = useState<TimelineEvent[]>([])
   const [status, setStatus] = useState<RunStatus>('idle')
   const [summary, setSummary] = useState<StreamPayload>({})
@@ -34,6 +43,10 @@ export default function App() {
   const latestMessage = events.at(-1)?.message ?? 'Ready to stream an agent run.'
   const hasOutput = events.length > 0
 
+  useEffect(() => {
+    void refreshAgents()
+  }, [])
+
   const visibleArtifacts = useMemo(() => {
     return {
       tools: summary.tools ?? [],
@@ -42,6 +55,57 @@ export default function App() {
       checks: summary.checks ?? [],
     }
   }, [summary])
+
+  async function refreshAgents() {
+    setAgentsStatus('loading')
+    setAgentsMessage('Loading agents')
+    try {
+      const nextAgents = await listAgents()
+      setAgents(nextAgents)
+      setAgentsStatus('ready')
+      setAgentsMessage(`${nextAgents.length} agents available`)
+    } catch (error) {
+      setAgentsStatus('error')
+      setAgentsMessage(error instanceof Error ? error.message : 'Failed to load agents')
+    }
+  }
+
+  async function handleCreateAgent(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const name = agentForm.name.trim()
+    const description = agentForm.description.trim()
+
+    if (!name) {
+      setAgentsStatus('error')
+      setAgentsMessage('Agent name is required.')
+      return
+    }
+
+    setAgentsStatus('loading')
+    setAgentsMessage('Creating agent')
+    try {
+      const created = await createAgent({
+        name,
+        description,
+        enabledTools: ['file_reader'],
+        enabledSkills: ['research'],
+        ragProvider: 'none',
+      })
+      const nextAgents = await listAgents()
+      setAgents(nextAgents)
+      setAgentForm(DEFAULT_AGENT_FORM)
+      setForm((current) => ({ ...current, agent: created.name }))
+      setAgentsStatus('ready')
+      setAgentsMessage(`Created ${created.name}`)
+    } catch (error) {
+      setAgentsStatus('error')
+      setAgentsMessage(error instanceof Error ? error.message : 'Failed to create agent')
+    }
+  }
+
+  function selectAgent(agent: AgentRecord) {
+    setForm((current) => ({ ...current, agent: agent.name }))
+  }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -130,6 +194,76 @@ export default function App() {
           {statusLabel(status)}
         </div>
       </header>
+
+      <section className="management-shell">
+        <section className="panel agents-panel">
+          <div className="panel-heading inline">
+            <div>
+              <h2>Agents</h2>
+              <p>{agentsMessage}</p>
+            </div>
+            <button className="secondary compact" type="button" onClick={refreshAgents}>
+              Refresh
+            </button>
+          </div>
+
+          <div className="agent-list" aria-busy={agentsStatus === 'loading'}>
+            {agents.length === 0 ? (
+              <div className="inline-empty">No agents registered</div>
+            ) : (
+              agents.map((agent) => (
+                <button
+                  className={agent.name === form.agent ? 'agent-item selected' : 'agent-item'}
+                  key={agent.id}
+                  onClick={() => selectAgent(agent)}
+                  type="button"
+                >
+                  <span>
+                    <strong>{agent.name}</strong>
+                    <small>{agent.slug}</small>
+                  </span>
+                  <em>{agent.status}</em>
+                </button>
+              ))
+            )}
+          </div>
+        </section>
+
+        <form className="panel create-agent-panel" onSubmit={handleCreateAgent}>
+          <div className="panel-heading">
+            <h2>Create Agent</h2>
+            <p>Registers a platform agent with the default research skill.</p>
+          </div>
+
+          <label>
+            <span>Name</span>
+            <input
+              value={agentForm.name}
+              onChange={(event) => setAgentForm((current) => ({
+                ...current,
+                name: event.target.value,
+              }))}
+              placeholder="Research Agent"
+            />
+          </label>
+
+          <label>
+            <span>Description</span>
+            <input
+              value={agentForm.description}
+              onChange={(event) => setAgentForm((current) => ({
+                ...current,
+                description: event.target.value,
+              }))}
+              placeholder="What this agent is responsible for"
+            />
+          </label>
+
+          <button className="primary" type="submit" disabled={agentsStatus === 'loading'}>
+            Create
+          </button>
+        </form>
+      </section>
 
       <section className="shell">
         <form className="panel control-panel" onSubmit={handleSubmit}>
