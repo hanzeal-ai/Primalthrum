@@ -3,6 +3,7 @@ import { SqliteDatabase, sqlValue } from '../db/sqlite';
 export interface RunRecord {
   id: number;
   agentId: number;
+  workspaceId: number;
   input: string;
   status: string;
   startedAt: string;
@@ -17,6 +18,7 @@ export interface CreateRunInput {
 interface RunRow {
   id: number;
   agent_id: number;
+  workspace_id: number;
   input: string;
   status: string;
   started_at: string;
@@ -30,16 +32,21 @@ export class RunRepository {
     const normalized = normalizeRunInput(input);
 
     this.db.run(`
-      INSERT INTO runs (agent_id, input, status)
+      INSERT INTO runs (agent_id, workspace_id, input, status)
       VALUES (
         ${sqlValue(normalized.agentId)},
+        (
+          SELECT workspace_id
+          FROM agents
+          WHERE id = ${sqlValue(normalized.agentId)}
+        ),
         ${sqlValue(normalized.input)},
         'pending'
       );
     `);
 
     const rows = this.db.query<RunRow>(`
-      SELECT id, agent_id, input, status, started_at, ended_at
+      SELECT id, agent_id, workspace_id, input, status, started_at, ended_at
       FROM runs
       ORDER BY id DESC
       LIMIT 1;
@@ -54,7 +61,7 @@ export class RunRepository {
 
   findById(id: number): RunRecord | null {
     const rows = this.db.query<RunRow>(`
-      SELECT id, agent_id, input, status, started_at, ended_at
+      SELECT id, agent_id, workspace_id, input, status, started_at, ended_at
       FROM runs
       WHERE id = ${sqlValue(id)}
       LIMIT 1;
@@ -97,6 +104,7 @@ function toRunRecord(row: RunRow): RunRecord {
   return {
     id: Number(row.id),
     agentId: Number(row.agent_id),
+    workspaceId: Number(row.workspace_id),
     input: row.input,
     status: row.status,
     startedAt: row.started_at,

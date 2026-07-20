@@ -2,6 +2,7 @@ import { join } from 'node:path';
 
 import { initializeSchema } from '../db/schema';
 import { SqliteDatabase, sqlValue } from '../db/sqlite';
+import { DEFAULT_WORKSPACE_ID } from '../db/workspaceDefaults';
 
 export interface AgentConfig {
   memoryProvider: string;
@@ -14,6 +15,7 @@ export interface AgentConfig {
 
 export interface AgentRecord {
   id: number;
+  workspaceId: number;
   name: string;
   slug: string;
   description: string;
@@ -35,6 +37,7 @@ export interface CreateAgentInput {
 
 interface AgentRow {
   id: number;
+  workspace_id: number;
   name: string;
   slug: string;
   description: string;
@@ -59,8 +62,9 @@ export class AgentRepository {
     const path = join(this.generatedAgentsDir, slug);
 
     this.db.run(`
-      INSERT INTO agents (name, slug, description, path, status)
+      INSERT INTO agents (workspace_id, name, slug, description, path, status)
       VALUES (
+        ${DEFAULT_WORKSPACE_ID},
         ${sqlValue(name)},
         ${sqlValue(slug)},
         ${sqlValue(description)},
@@ -84,7 +88,15 @@ export class AgentRepository {
 
   list(): AgentRecord[] {
     return this.db.query<AgentRow>(`
-      SELECT a.id, a.name, a.slug, a.description, a.path, a.status, c.config_json
+      SELECT
+        a.id,
+        a.workspace_id,
+        a.name,
+        a.slug,
+        a.description,
+        a.path,
+        a.status,
+        c.config_json
       FROM agents a
       JOIN agent_configs c ON c.agent_id = a.id
       ORDER BY a.id ASC;
@@ -93,7 +105,15 @@ export class AgentRepository {
 
   findById(id: number): AgentRecord | null {
     const rows = this.db.query<AgentRow>(`
-      SELECT a.id, a.name, a.slug, a.description, a.path, a.status, c.config_json
+      SELECT
+        a.id,
+        a.workspace_id,
+        a.name,
+        a.slug,
+        a.description,
+        a.path,
+        a.status,
+        c.config_json
       FROM agents a
       JOIN agent_configs c ON c.agent_id = a.id
       WHERE a.id = ${sqlValue(id)}
@@ -118,7 +138,15 @@ export class AgentRepository {
 
   private findBySlug(slug: string): AgentRecord | null {
     const rows = this.db.query<AgentRow>(`
-      SELECT a.id, a.name, a.slug, a.description, a.path, a.status, c.config_json
+      SELECT
+        a.id,
+        a.workspace_id,
+        a.name,
+        a.slug,
+        a.description,
+        a.path,
+        a.status,
+        c.config_json
       FROM agents a
       JOIN agent_configs c ON c.agent_id = a.id
       WHERE a.slug = ${sqlValue(slug)}
@@ -177,6 +205,7 @@ export function slugify(value: string): string {
 function toAgentRecord(row: AgentRow): AgentRecord {
   return {
     id: Number(row.id),
+    workspaceId: Number(row.workspace_id),
     name: row.name,
     slug: row.slug,
     description: row.description,

@@ -9,17 +9,20 @@ import { type Server } from 'node:http';
 import { promisify } from 'node:util';
 
 import { createApp } from '../src/app';
+import { SqliteDatabase } from '../src/db/sqlite';
 
 const execFileAsync = promisify(execFile);
 
 let server: Server;
 let baseUrl = '';
 let rootDir = '';
+let dbPath = '';
 
 before(async () => {
   rootDir = mkdtempSync(join(tmpdir(), 'primalthrum-platform-'));
+  dbPath = join(rootDir, 'platform.sqlite');
   const app = createApp({
-    dbPath: join(rootDir, 'platform.sqlite'),
+    dbPath,
     generatedAgentsDir: join(rootDir, 'generated-agents'),
   });
   server = app.listen(0, '127.0.0.1');
@@ -32,6 +35,35 @@ before(async () => {
 after(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
   rmSync(rootDir, { recursive: true, force: true });
+});
+
+test('schema bootstrap creates the default local workspace', () => {
+  const db = new SqliteDatabase(dbPath);
+  const workspaces = db.query<{
+    id: number;
+    name: string;
+    slug: string;
+  }>(`
+    SELECT id, name, slug
+    FROM workspaces
+    ORDER BY id ASC;
+  `);
+
+  assert.deepEqual(workspaces, [
+    {
+      id: 1,
+      name: 'Local Workspace',
+      slug: 'local',
+    },
+  ]);
+
+  for (const tableName of ['agents', 'runs', 'documents', 'provider_configs']) {
+    const columns = db.query<{ name: string }>(`PRAGMA table_info(${tableName});`);
+    assert.ok(
+      columns.some((column) => column.name === 'workspace_id'),
+      `${tableName} should include workspace_id`,
+    );
+  }
 });
 
 test('POST /api/agents persists an agent config in SQLite metadata', async () => {
@@ -54,15 +86,26 @@ test('POST /api/agents persists an agent config in SQLite metadata', async () =>
   });
 
   assert.equal(response.status, 201);
-  const created = await response.json() as { id: number; slug: string; config: unknown };
+  const created = await response.json() as {
+    id: number;
+    slug: string;
+    workspaceId: number;
+    config: unknown;
+  };
   assert.equal(created.slug, 'research-agent');
   assert.ok(created.id > 0);
+  assert.equal(created.workspaceId, 1);
 
   const listResponse = await fetch(`${baseUrl}/api/agents`);
   assert.equal(listResponse.status, 200);
-  const listed = await listResponse.json() as Array<{ id: number; slug: string }>;
+  const listed = await listResponse.json() as Array<{
+    id: number;
+    slug: string;
+    workspaceId: number;
+  }>;
   assert.equal(listed.length, 1);
   assert.equal(listed[0]?.slug, 'research-agent');
+  assert.equal(listed[0]?.workspaceId, 1);
 });
 
 test('POST /api/agents/:id/generate writes a standalone agent project', async () => {
@@ -166,7 +209,7 @@ test('POST /api/runs creates a pending run for an existing agent', async () => {
       description: 'Run API demo',
     }),
   });
-  const agent = await createAgentResponse.json() as { id: number };
+  const agent = await createAgentResponse.json() as { id: number; workspaceId: number };
 
   const createRunResponse = await fetch(`${baseUrl}/api/runs`, {
     method: 'POST',
@@ -182,12 +225,14 @@ test('POST /api/runs creates a pending run for an existing agent', async () => {
     id: number;
     agentId: number;
     input: string;
+    workspaceId: number;
     status: string;
     startedAt: string;
     endedAt: string | null;
   };
   assert.ok(run.id > 0);
   assert.equal(run.agentId, agent.id);
+  assert.equal(run.workspaceId, agent.workspaceId);
   assert.equal(run.input, 'Research the product requirements');
   assert.equal(run.status, 'pending');
   assert.ok(run.startedAt);
@@ -195,9 +240,14 @@ test('POST /api/runs creates a pending run for an existing agent', async () => {
 
   const getRunResponse = await fetch(`${baseUrl}/api/runs/${run.id}`);
   assert.equal(getRunResponse.status, 200);
-  const loaded = await getRunResponse.json() as { id: number; agentId: number };
+  const loaded = await getRunResponse.json() as {
+    id: number;
+    agentId: number;
+    workspaceId: number;
+  };
   assert.equal(loaded.id, run.id);
   assert.equal(loaded.agentId, agent.id);
+  assert.equal(loaded.workspaceId, agent.workspaceId);
 });
 
 test('POST /api/runs rejects unknown agents', async () => {
@@ -222,7 +272,7 @@ test('document APIs register and list agent document metadata', async () => {
       description: 'Document registry demo',
     }),
   });
-  const agent = await createAgentResponse.json() as { id: number };
+  const agent = await createAgentResponse.json() as { id: number; workspaceId: number };
 
   const createDocumentResponse = await fetch(
     `${baseUrl}/api/agents/${agent.id}/documents`,
@@ -241,6 +291,7 @@ test('document APIs register and list agent document metadata', async () => {
   const document = await createDocumentResponse.json() as {
     id: number;
     agentId: number;
+    workspaceId: number;
     filename: string;
     hash: string;
     indexStatus: string;
@@ -248,6 +299,7 @@ test('document APIs register and list agent document metadata', async () => {
   };
   assert.ok(document.id > 0);
   assert.equal(document.agentId, agent.id);
+  assert.equal(document.workspaceId, agent.workspaceId);
   assert.equal(document.filename, 'guide.md');
   assert.match(document.hash, /^[a-f0-9]{64}$/);
   assert.equal(document.indexStatus, 'registered');

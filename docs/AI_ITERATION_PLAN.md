@@ -1243,7 +1243,7 @@ Field meanings:
 
 ### P8-01 Workspace-Ready Metadata Schema
 
-- Status: Todo
+- Status: Done
 - Goal: Add workspace/user/org-ready schema while defaulting to one local workspace.
 - Dependencies: P7-03
 - Inputs: `server/src/db/schema.ts`, `server/src/services/**`

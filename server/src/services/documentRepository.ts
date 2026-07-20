@@ -12,6 +12,7 @@ export interface CreateDocumentInput {
 export interface DocumentRecord {
   id: number;
   agentId: number;
+  workspaceId: number;
   filename: string;
   hash: string;
   indexStatus: string;
@@ -21,6 +22,7 @@ export interface DocumentRecord {
 interface DocumentRow {
   id: number;
   agent_id: number;
+  workspace_id: number;
   filename: string;
   hash: string;
   status: string;
@@ -39,9 +41,14 @@ export class DocumentRepository {
     const hash = hashDocumentIdentity({ agentId, filename, collection, content });
 
     this.db.run(`
-      INSERT INTO documents (agent_id, filename, hash, status, collection)
+      INSERT INTO documents (agent_id, workspace_id, filename, hash, status, collection)
       VALUES (
         ${sqlValue(agentId)},
+        (
+          SELECT workspace_id
+          FROM agents
+          WHERE id = ${sqlValue(agentId)}
+        ),
         ${sqlValue(filename)},
         ${sqlValue(hash)},
         'registered',
@@ -50,7 +57,7 @@ export class DocumentRepository {
     `);
 
     const rows = this.db.query<DocumentRow>(`
-      SELECT id, agent_id, filename, hash, status, collection
+      SELECT id, agent_id, workspace_id, filename, hash, status, collection
       FROM documents
       WHERE agent_id = ${sqlValue(agentId)} AND hash = ${sqlValue(hash)}
       ORDER BY id DESC
@@ -64,7 +71,7 @@ export class DocumentRepository {
 
   listByAgent(agentId: number): DocumentRecord[] {
     return this.db.query<DocumentRow>(`
-      SELECT id, agent_id, filename, hash, status, collection
+      SELECT id, agent_id, workspace_id, filename, hash, status, collection
       FROM documents
       WHERE agent_id = ${sqlValue(agentId)}
       ORDER BY id ASC;
@@ -79,7 +86,7 @@ export class DocumentRepository {
     `);
 
     const rows = this.db.query<DocumentRow>(`
-      SELECT id, agent_id, filename, hash, status, collection
+      SELECT id, agent_id, workspace_id, filename, hash, status, collection
       FROM documents
       WHERE agent_id = ${sqlValue(agentId)} AND id = ${sqlValue(documentId)}
       LIMIT 1;
@@ -110,6 +117,7 @@ function toDocumentRecord(row: DocumentRow): DocumentRecord {
   return {
     id: Number(row.id),
     agentId: Number(row.agent_id),
+    workspaceId: Number(row.workspace_id),
     filename: row.filename,
     hash: row.hash,
     indexStatus: row.status,
