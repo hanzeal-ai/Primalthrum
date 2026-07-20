@@ -104,6 +104,13 @@ const DEFAULT_PROVIDER_CONFIG_FORM: ProviderConfigFormState = {
   secret: '',
 }
 
+interface OnboardingItem {
+  id: string
+  label: string
+  complete: boolean
+  targetId?: string
+}
+
 function statusLabel(status: RunStatus): string {
   if (status === 'running') return 'Running'
   if (status === 'done') return 'Complete'
@@ -191,6 +198,38 @@ export default function App() {
   const selectedDangerousTools = toolsCatalog
     .filter((tool) => tool.dangerous && agentForm.enabledTools.includes(tool.name))
     .map((tool) => tool.name)
+  const onboardingItems = useMemo<OnboardingItem[]>(() => [
+    {
+      id: 'admin',
+      label: 'Admin signed in',
+      complete: Boolean(authUser),
+    },
+    {
+      id: 'provider',
+      label: 'Provider config saved',
+      complete: providerConfigs.length > 0,
+      targetId: 'security-settings',
+    },
+    {
+      id: 'agent',
+      label: 'First agent created',
+      complete: agents.length > 0,
+      targetId: 'agent-builder',
+    },
+    {
+      id: 'knowledge',
+      label: 'Knowledge attached',
+      complete: documents.length > 0,
+      targetId: 'knowledge-base',
+    },
+    {
+      id: 'run',
+      label: 'First run completed',
+      complete: events.some((event) => event.status === 'done' || event.event === 'agent.run.completed'),
+      targetId: 'run-console',
+    },
+  ], [agents.length, authUser, documents.length, events, providerConfigs.length])
+  const completedOnboardingItems = onboardingItems.filter((item) => item.complete).length
 
   useEffect(() => {
     void initializeAuth()
@@ -641,6 +680,14 @@ export default function App() {
     setStatus('idle')
   }
 
+  function scrollToSection(targetId?: string) {
+    if (!targetId) return
+    document.getElementById(targetId)?.scrollIntoView({
+      behavior: 'smooth',
+      block: 'start',
+    })
+  }
+
   if (authMode !== 'ready') {
     return (
       <main className="workspace auth-workspace">
@@ -707,7 +754,28 @@ export default function App() {
         </div>
       </header>
 
-      <section className="management-shell">
+      <section className="onboarding-strip" aria-label="Operator checklist">
+        <div className="onboarding-summary">
+          <strong>Operator Checklist</strong>
+          <span>{completedOnboardingItems}/{onboardingItems.length} complete</span>
+        </div>
+        <div className="onboarding-items">
+          {onboardingItems.map((item) => (
+            <button
+              className={item.complete ? 'onboarding-item complete' : 'onboarding-item'}
+              disabled={!item.targetId}
+              key={item.id}
+              onClick={() => scrollToSection(item.targetId)}
+              type="button"
+            >
+              <span>{item.complete ? 'Done' : 'Next'}</span>
+              {item.label}
+            </button>
+          ))}
+        </div>
+      </section>
+
+      <section className="management-shell" id="agent-builder">
         <section className="panel agents-panel">
           <div className="panel-heading inline">
             <div>
@@ -900,7 +968,7 @@ export default function App() {
         </form>
       </section>
 
-      <section className="security-shell">
+      <section className="security-shell" id="security-settings">
         <section className="panel security-panel">
           <div className="panel-heading inline">
             <div>
@@ -1032,7 +1100,7 @@ export default function App() {
         </form>
       </section>
 
-      <section className="knowledge-shell">
+      <section className="knowledge-shell" id="knowledge-base">
         <section className="panel knowledge-panel">
           <div className="panel-heading inline">
             <div>
@@ -1149,7 +1217,7 @@ export default function App() {
         </form>
       </section>
 
-      <section className="shell">
+      <section className="shell" id="run-console">
         <form className="panel control-panel" onSubmit={handleSubmit}>
           <div className="panel-heading">
             <h2>Run Configuration</h2>

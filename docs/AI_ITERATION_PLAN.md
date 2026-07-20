@@ -1515,7 +1515,7 @@ Field meanings:
 
 ### P13-01 Commercial Onboarding Checklist
 
-- Status: Todo
+- Status: Done
 - Goal: Add setup checklist UI and docs for first-time operator flow.
 - Dependencies: P8-03, P9-03, P6-05
 - Inputs: `web/src/**`, README, docs

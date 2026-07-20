@@ -143,6 +143,82 @@ h3 {
   align-items: stretch;
 }
 
+.onboarding-strip {
+  margin: 16px 16px 0;
+  padding: 12px;
+  border: 1px solid #d5dbd3;
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: minmax(180px, 240px) 1fr;
+  gap: 12px;
+  background: #ffffff;
+  box-shadow: 0 10px 30px rgba(37, 47, 43, 0.07);
+}
+
+.onboarding-summary {
+  min-height: 58px;
+  padding: 8px 10px;
+  border: 1px solid #d7ded8;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  background: #fbfcf8;
+}
+
+.onboarding-summary strong {
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.onboarding-summary span {
+  color: #47605a;
+  font-size: 13px;
+  font-weight: 700;
+}
+
+.onboarding-items {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(116px, 1fr));
+  gap: 8px;
+}
+
+.onboarding-item {
+  min-width: 0;
+  min-height: 58px;
+  padding: 8px;
+  border: 1px solid #d7ded8;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  justify-content: center;
+  gap: 4px;
+  background: #ffffff;
+  color: #1b1f24;
+  font-size: 13px;
+  font-weight: 760;
+  line-height: 1.25;
+  text-align: left;
+}
+
+.onboarding-item span {
+  color: #47605a;
+  font-size: 11px;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.onboarding-item.complete {
+  border-color: #b8dec7;
+  background: #f0fdf4;
+}
+
+.onboarding-item.complete span {
+  color: #15803d;
+}
+
 .management-shell {
   display: grid;
   grid-template-columns: minmax(420px, 1fr) minmax(290px, 360px);
@@ -743,10 +819,15 @@ code {
 }
 
 @media (max-width: 1120px) {
+  .onboarding-strip,
   .management-shell,
   .knowledge-shell,
   .security-shell {
     grid-template-columns: 1fr;
+  }
+
+  .onboarding-items {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
   .shell {
@@ -767,6 +848,14 @@ code {
   .shell {
     grid-template-columns: 1fr;
     padding: 10px;
+  }
+
+  .onboarding-strip {
+    margin: 10px 10px 0;
+  }
+
+  .onboarding-items {
+    grid-template-columns: 1fr;
   }
 
   .management-shell,
