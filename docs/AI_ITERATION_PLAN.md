@@ -1192,7 +1192,7 @@ Field meanings:
 
 ### P7-01 One-Command Smoke Verification
 
-- Status: Todo
+- Status: Done
 - Goal: Add one command that verifies platform basics.
 - Dependencies: P6-05
 - Inputs: `start.sh`, package scripts, tests

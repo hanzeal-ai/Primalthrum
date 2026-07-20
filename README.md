@@ -72,17 +72,28 @@ curl -N http://127.0.0.1:8000/stream \
 事件格式：
 
 ```text
-event: agent.update
+event: agent.run.started
+data: {"node":"run","agent":"ResearchAgent","message":"Agent run started","status":"running"}
+
+event: agent.node.completed
 data: {"node":"intake","agent":"ResearchAgent","message":"...","status":"running"}
 
-event: agent.done
+event: agent.run.completed
 data: {"node":"done","agent":"ResearchAgent","message":"Agent stream completed","status":"done"}
 ```
 
 ## 验证
 
+一条命令执行基础 smoke 验证：
+
 ```bash
-cd agent && ./.venv/bin/python -m unittest tests/test_stream_contract.py
+scripts/smoke.sh
+```
+
+分段执行：
+
+```bash
+cd agent && ./.venv/bin/python -m unittest tests/test_runtime_registry.py tests/test_stream_contract.py
 cd server && pnpm test && pnpm typecheck
 cd web && pnpm lint && pnpm build
 ```
