@@ -1608,7 +1608,7 @@ Field meanings:
 
 ### P14-03 Versioning And Commercial Release Gate
 
-- Status: Todo
+- Status: Done
 - Goal: Add versioning, changelog, and final commercial release gate.
 - Dependencies: P14-02
 - Inputs: package files, docs
@@ -1658,3 +1658,10 @@ The project is commercially complete only when all of these are true:
 - Security and release checklists are complete.
 
 Until every item above is true, the product may be demo-ready or beta-ready, but it is not directly commercial-ready.
+
+Current commercial readiness evidence, updated 2026-07-20:
+
+- All 47 P1-P14 tasks are `Done` after P14-03.
+- `scripts/commercial-smoke.sh` exits 0.
+- `docs/SECURITY_RELEASE_CHECKLIST.md` and `docs/RELEASE_GATE.md` define the final release gates.
+- `CHANGELOG.md` records version `1.0.0`.

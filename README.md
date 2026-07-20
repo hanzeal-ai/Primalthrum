@@ -2,6 +2,8 @@
 
 Primalthrum 是一个研发 Agent 项目骨架：Python Agent 负责 LangGraph 执行，Node 服务端负责统一 API 与 SSE 代理，React + TypeScript + Vite 前端负责交互式研发控制台。
 
+当前产品版本：`1.0.0`
+
 ## 架构
 
 ```text
@@ -129,3 +131,4 @@ web/     React + TypeScript + Vite 研发控制台
 - [Operator Setup](docs/OPERATOR_SETUP.md): 首次运营者从创建管理员到完成首个 Agent 运行的检查清单。
 - [Demo Research Agent](docs/DEMO_RESEARCH_AGENT.md): 可用于演示的 Research Agent 配置、知识文档和 smoke 命令。
 - [Security And Release Checklist](docs/SECURITY_RELEASE_CHECKLIST.md): 商业发布前的安全、secrets、危险工具、备份和文档 gate。
+- [Release Gate](docs/RELEASE_GATE.md): 版本规则、发布 gate 和商业就绪证据。
