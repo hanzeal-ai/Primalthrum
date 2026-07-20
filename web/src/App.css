@@ -143,6 +143,13 @@ h3 {
   padding: 16px 16px 0;
 }
 
+.security-shell {
+  display: grid;
+  grid-template-columns: minmax(420px, 1fr) minmax(320px, 420px);
+  gap: 16px;
+  padding: 16px 16px 0;
+}
+
 .panel {
   min-width: 0;
   border: 1px solid #d5dbd3;
@@ -157,14 +164,18 @@ h3 {
 .agents-panel,
 .create-agent-panel,
 .knowledge-panel,
-.document-form-panel {
+.document-form-panel,
+.security-panel,
+.provider-form-panel {
   padding: 18px;
 }
 
 .agents-panel,
 .create-agent-panel,
 .knowledge-panel,
-.document-form-panel {
+.document-form-panel,
+.security-panel,
+.provider-form-panel {
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -372,7 +383,8 @@ button:disabled {
   gap: 10px;
 }
 
-.document-item {
+.document-item,
+.provider-config-item {
   min-height: 74px;
   padding: 11px;
   border: 1px solid #d7ded8;
@@ -383,7 +395,8 @@ button:disabled {
   background: #fbfcf8;
 }
 
-.document-item > div:first-child {
+.document-item > div:first-child,
+.provider-config-item > div:first-child {
   min-width: 0;
   display: flex;
   flex-wrap: wrap;
@@ -392,17 +405,22 @@ button:disabled {
 }
 
 .document-item strong,
-.document-item small {
+.document-item small,
+.provider-config-item strong,
+.provider-config-item small {
   overflow-wrap: anywhere;
 }
 
-.document-item strong {
+.document-item strong,
+.provider-config-item strong {
   font-size: 14px;
   line-height: 1.3;
 }
 
 .document-item small,
-.document-item em {
+.document-item em,
+.provider-config-item small,
+.provider-config-item em {
   padding: 3px 7px;
   border-radius: 6px;
   background: #eef2ef;
@@ -412,10 +430,49 @@ button:disabled {
   font-weight: 700;
 }
 
-.document-actions {
+.document-actions,
+.provider-config-actions {
   display: flex;
   align-items: center;
   gap: 8px;
+}
+
+.provider-config-list {
+  display: grid;
+  gap: 10px;
+}
+
+.provider-config-item code {
+  max-width: 240px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.danger-warning {
+  min-height: 54px;
+  padding: 11px;
+  border: 1px solid #d7ded8;
+  border-radius: 8px;
+  display: grid;
+  gap: 5px;
+  background: #fbfcf8;
+}
+
+.danger-warning.active {
+  border-color: #c2410c;
+  background: #fff7ed;
+}
+
+.danger-warning strong {
+  color: #47605a;
+  font-size: 12px;
+  text-transform: uppercase;
+}
+
+.danger-warning span {
+  color: #26302c;
+  font-size: 13px;
+  line-height: 1.45;
 }
 
 .builder-grid {
@@ -629,7 +686,8 @@ code {
 
 @media (max-width: 1120px) {
   .management-shell,
-  .knowledge-shell {
+  .knowledge-shell,
+  .security-shell {
     grid-template-columns: 1fr;
   }
 
@@ -654,7 +712,8 @@ code {
   }
 
   .management-shell,
-  .knowledge-shell {
+  .knowledge-shell,
+  .security-shell {
     padding: 10px 10px 0;
   }
 
@@ -667,11 +726,13 @@ code {
     grid-template-columns: 1fr;
   }
 
-  .document-item {
+  .document-item,
+  .provider-config-item {
     grid-template-columns: 1fr;
   }
 
-  .document-actions {
+  .document-actions,
+  .provider-config-actions {
     justify-content: space-between;
   }
 

@@ -4,6 +4,7 @@ import {
   clearStoredSessionToken,
   createDocument,
   createAgent,
+  createProviderConfig,
   generateAgentProject,
   getCurrentSession,
   getSetupStatus,
@@ -11,6 +12,7 @@ import {
   isUnauthorizedError,
   listAgents,
   listDocuments,
+  listProviderConfigs,
   listProviders,
   listSkills,
   listTools,
@@ -18,12 +20,14 @@ import {
   logoutAdmin,
   setupAdmin,
   streamAgentRun,
+  updateProviderConfig,
 } from './api/client'
 import type {
   AgentRecord,
   AuthUser,
   DocumentRecord,
   ProviderCatalog,
+  ProviderConfigRecord,
   RunStatus,
   SkillInfo,
   StreamPayload,
@@ -81,6 +85,24 @@ const DEFAULT_DOCUMENT_FORM = {
   content: '# Guide\nAdd retrieval-ready knowledge here.',
 }
 
+interface ProviderConfigFormState {
+  id: number | null
+  name: string
+  type: string
+  provider: string
+  model: string
+  secret: string
+}
+
+const DEFAULT_PROVIDER_CONFIG_FORM: ProviderConfigFormState = {
+  id: null,
+  name: 'openai-production',
+  type: 'llm',
+  provider: 'openai',
+  model: 'gpt-5-mini',
+  secret: '',
+}
+
 function statusLabel(status: RunStatus): string {
   if (status === 'running') return 'Running'
   if (status === 'done') return 'Complete'
@@ -90,6 +112,12 @@ function statusLabel(status: RunStatus): string {
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback
+}
+
+function compactSecretRef(secretRef: string): string {
+  if (!secretRef) return 'No secret reference'
+  const suffix = secretRef.slice(-8)
+  return `secret://local/...${suffix}`
 }
 
 export default function App() {
@@ -112,6 +140,10 @@ export default function App() {
   const [documentForm, setDocumentForm] = useState(DEFAULT_DOCUMENT_FORM)
   const [knowledgeStatus, setKnowledgeStatus] = useState<'idle' | 'loading' | 'error'>('idle')
   const [knowledgeMessage, setKnowledgeMessage] = useState('Select an agent to manage documents')
+  const [providerConfigs, setProviderConfigs] = useState<ProviderConfigRecord[]>([])
+  const [providerConfigForm, setProviderConfigForm] = useState(DEFAULT_PROVIDER_CONFIG_FORM)
+  const [securityStatus, setSecurityStatus] = useState<'idle' | 'loading' | 'error'>('idle')
+  const [securityMessage, setSecurityMessage] = useState('Security settings not loaded')
   const [events, setEvents] = useState<TimelineEvent[]>([])
   const [status, setStatus] = useState<RunStatus>('idle')
   const [summary, setSummary] = useState<StreamPayload>({})
@@ -121,6 +153,10 @@ export default function App() {
   const latestMessage = events.at(-1)?.message ?? 'Ready to stream an agent run.'
   const hasOutput = events.length > 0
   const selectedAgent = agents.find((agent) => agent.id === selectedAgentId) ?? null
+  const dangerousTools = toolsCatalog.filter((tool) => tool.dangerous)
+  const selectedDangerousTools = toolsCatalog
+    .filter((tool) => tool.dangerous && agentForm.enabledTools.includes(tool.name))
+    .map((tool) => tool.name)
 
   useEffect(() => {
     void initializeAuth()
@@ -131,6 +167,7 @@ export default function App() {
 
     void refreshAgents()
     void refreshBuilderCatalog()
+    void refreshSecuritySettings()
     // Initial console data should load only when auth enters the ready state.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [authMode])
@@ -211,6 +248,8 @@ export default function App() {
     setToolsCatalog([])
     setSkillsCatalog([])
     setDocuments([])
+    setProviderConfigs([])
+    setProviderConfigForm(DEFAULT_PROVIDER_CONFIG_FORM)
     setEvents([])
     setSummary({})
     setStatus('idle')
@@ -260,6 +299,92 @@ export default function App() {
       setCatalogStatus('error')
       setBuilderMessage(handleRequestError(error, 'Failed to load builder options'))
     }
+  }
+
+  async function refreshSecuritySettings() {
+    setSecurityStatus('loading')
+    setSecurityMessage('Loading security settings')
+    try {
+      const nextConfigs = await listProviderConfigs()
+      setProviderConfigs(nextConfigs)
+      setSecurityStatus('idle')
+      setSecurityMessage(`${nextConfigs.length} provider configs saved`)
+    } catch (error) {
+      setSecurityStatus('error')
+      setSecurityMessage(handleRequestError(error, 'Failed to load security settings'))
+    }
+  }
+
+  async function handleSaveProviderConfig(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const name = providerConfigForm.name.trim()
+    const type = providerConfigForm.type.trim()
+    const provider = providerConfigForm.provider.trim()
+    const model = providerConfigForm.model.trim()
+    const secret = providerConfigForm.secret
+
+    if (!name || !type || !provider) {
+      setSecurityStatus('error')
+      setSecurityMessage('Name, type, and provider are required.')
+      return
+    }
+
+    if (!providerConfigForm.id && !secret.trim()) {
+      setSecurityStatus('error')
+      setSecurityMessage('Secret is required when creating a provider config.')
+      return
+    }
+
+    setSecurityStatus('loading')
+    setSecurityMessage(providerConfigForm.id ? 'Updating provider config' : 'Creating provider config')
+    try {
+      const config = model ? { provider, model } : { provider }
+      const saved = providerConfigForm.id
+        ? await updateProviderConfig(providerConfigForm.id, {
+          name,
+          type,
+          config,
+          ...(secret.trim() ? { secret } : {}),
+        })
+        : await createProviderConfig({
+          name,
+          type,
+          config,
+          secret,
+        })
+
+      setProviderConfigs((current) => {
+        const exists = current.some((item) => item.id === saved.id)
+        return exists
+          ? current.map((item) => (item.id === saved.id ? saved : item))
+          : [...current, saved]
+      })
+      setProviderConfigForm(DEFAULT_PROVIDER_CONFIG_FORM)
+      setSecurityStatus('idle')
+      setSecurityMessage(`Saved ${saved.name}`)
+    } catch (error) {
+      setSecurityStatus('error')
+      setSecurityMessage(handleRequestError(error, 'Failed to save provider config'))
+    }
+  }
+
+  function editProviderConfig(config: ProviderConfigRecord) {
+    setProviderConfigForm({
+      id: config.id,
+      name: config.name,
+      type: config.type,
+      provider: typeof config.config.provider === 'string' ? config.config.provider : '',
+      model: typeof config.config.model === 'string' ? config.config.model : '',
+      secret: '',
+    })
+    setSecurityMessage(`Editing ${config.name}. Existing secret is hidden.`)
+  }
+
+  function updateProviderConfigForm<K extends keyof ProviderConfigFormState>(
+    key: K,
+    value: ProviderConfigFormState[K],
+  ) {
+    setProviderConfigForm((current) => ({ ...current, [key]: value }))
   }
 
   async function handleCreateAgent(event: FormEvent<HTMLFormElement>) {
@@ -713,6 +838,138 @@ export default function App() {
               type="button"
             >
               Generate
+            </button>
+          </div>
+        </form>
+      </section>
+
+      <section className="security-shell">
+        <section className="panel security-panel">
+          <div className="panel-heading inline">
+            <div>
+              <h2>Security Settings</h2>
+              <p>{securityMessage}</p>
+            </div>
+            <button
+              className="secondary compact"
+              disabled={securityStatus === 'loading'}
+              onClick={() => void refreshSecuritySettings()}
+              type="button"
+            >
+              Refresh
+            </button>
+          </div>
+
+          <div className="provider-config-list">
+            {providerConfigs.length === 0 ? (
+              <div className="inline-empty">No provider configs saved</div>
+            ) : (
+              providerConfigs.map((config) => (
+                <article className="provider-config-item" key={config.id}>
+                  <div>
+                    <strong>{config.name}</strong>
+                    <small>{config.type}</small>
+                    <code>{compactSecretRef(config.secretRef)}</code>
+                  </div>
+                  <div className="provider-config-actions">
+                    <em>Plaintext hidden</em>
+                    <button
+                      className="secondary compact"
+                      onClick={() => editProviderConfig(config)}
+                      type="button"
+                    >
+                      Edit
+                    </button>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+
+          <div className={selectedDangerousTools.length > 0 ? 'danger-warning active' : 'danger-warning'}>
+            <strong>Dangerous tools</strong>
+            <span>
+              {dangerousTools.length === 0
+                ? 'No dangerous tools are available in this workspace.'
+                : selectedDangerousTools.length > 0
+                  ? `${selectedDangerousTools.join(', ')} selected. Dangerous tools require explicit server policy.`
+                  : `${dangerousTools.length} dangerous tools available, none selected.`}
+            </span>
+          </div>
+        </section>
+
+        <form className="panel provider-form-panel" onSubmit={handleSaveProviderConfig}>
+          <div className="panel-heading">
+            <h2>Provider Config</h2>
+            <p>{providerConfigForm.id ? 'Rotate secret by entering a new value' : 'Secret is stored as a reference'}</p>
+          </div>
+
+          <div className="builder-grid">
+            <label>
+              <span>Name</span>
+              <input
+                value={providerConfigForm.name}
+                onChange={(event) => updateProviderConfigForm('name', event.target.value)}
+                placeholder="openai-production"
+              />
+            </label>
+
+            <label>
+              <span>Type</span>
+              <select
+                value={providerConfigForm.type}
+                onChange={(event) => updateProviderConfigForm('type', event.target.value)}
+              >
+                <option value="llm">llm</option>
+                <option value="embedding">embedding</option>
+                <option value="memory">memory</option>
+                <option value="cache">cache</option>
+                <option value="rag">rag</option>
+              </select>
+            </label>
+          </div>
+
+          <div className="builder-grid">
+            <label>
+              <span>Provider</span>
+              <input
+                value={providerConfigForm.provider}
+                onChange={(event) => updateProviderConfigForm('provider', event.target.value)}
+                placeholder="openai"
+              />
+            </label>
+
+            <label>
+              <span>Model</span>
+              <input
+                value={providerConfigForm.model}
+                onChange={(event) => updateProviderConfigForm('model', event.target.value)}
+                placeholder="gpt-5-mini"
+              />
+            </label>
+          </div>
+
+          <label>
+            <span>Secret</span>
+            <input
+              autoComplete="off"
+              value={providerConfigForm.secret}
+              onChange={(event) => updateProviderConfigForm('secret', event.target.value)}
+              placeholder={providerConfigForm.id ? 'Leave blank to keep current reference' : 'Provider API key'}
+              type="password"
+            />
+          </label>
+
+          <div className="builder-actions">
+            <button className="primary" disabled={securityStatus === 'loading'} type="submit">
+              {providerConfigForm.id ? 'Update' : 'Save'}
+            </button>
+            <button
+              className="secondary"
+              onClick={() => setProviderConfigForm(DEFAULT_PROVIDER_CONFIG_FORM)}
+              type="button"
+            >
+              Clear
             </button>
           </div>
         </form>

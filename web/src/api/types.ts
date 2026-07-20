@@ -65,6 +65,22 @@ export interface ProviderCatalog {
   rag: ProviderInfo[]
 }
 
+export interface ProviderConfigRecord {
+  id: number
+  workspaceId: number
+  name: string
+  type: string
+  config: Record<string, unknown>
+  secretRef: string
+}
+
+export interface SaveProviderConfigInput {
+  name?: string
+  type?: string
+  config?: Record<string, unknown>
+  secret?: string
+}
+
 export interface ToolInfo {
   name: string
   description: string

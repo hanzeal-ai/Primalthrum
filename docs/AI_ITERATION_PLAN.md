@@ -1334,7 +1334,7 @@ Field meanings:
 
 ### P9-03 Security Settings UI
 
-- Status: Todo
+- Status: Done
 - Goal: Add UI for provider configs, redacted secrets, and dangerous tool warnings.
 - Dependencies: P9-01, P9-02, P8-03
 - Inputs: `web/src/**`, provider config APIs

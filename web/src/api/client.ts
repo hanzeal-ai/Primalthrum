@@ -9,6 +9,8 @@ import type {
   GeneratedProject,
   ParsedSseEvent,
   ProviderCatalog,
+  ProviderConfigRecord,
+  SaveProviderConfigInput,
   SetupStatus,
   SkillInfo,
   StreamAgentRequest,
@@ -131,6 +133,29 @@ export async function indexDocument(
 
 export async function listProviders(): Promise<ProviderCatalog> {
   return apiFetch<ProviderCatalog>('/api/providers')
+}
+
+export async function listProviderConfigs(): Promise<ProviderConfigRecord[]> {
+  return apiFetch<ProviderConfigRecord[]>('/api/provider-configs')
+}
+
+export async function createProviderConfig(
+  input: Required<Pick<SaveProviderConfigInput, 'name' | 'type'>> & SaveProviderConfigInput,
+): Promise<ProviderConfigRecord> {
+  return apiFetch<ProviderConfigRecord>('/api/provider-configs', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function updateProviderConfig(
+  id: number,
+  input: SaveProviderConfigInput,
+): Promise<ProviderConfigRecord> {
+  return apiFetch<ProviderConfigRecord>(`/api/provider-configs/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  })
 }
 
 export async function listTools(): Promise<ToolInfo[]> {
