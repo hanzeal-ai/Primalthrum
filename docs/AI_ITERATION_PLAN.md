@@ -1425,7 +1425,7 @@ Field meanings:
 
 ### P11-02 Backup And Restore Commands
 
-- Status: Todo
+- Status: Done
 - Goal: Add backup/restore for metadata and local files.
 - Dependencies: P11-01
 - Inputs: DB and storage services

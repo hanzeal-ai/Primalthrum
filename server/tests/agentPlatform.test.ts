@@ -15,6 +15,7 @@ import { SqliteDatabase, sqlValue } from '../src/db/sqlite';
 import { InProcessJobWorker } from '../src/services/inProcessJobWorker';
 import { JobRepository } from '../src/services/jobRepository';
 import { LocalDocumentStorage } from '../src/services/fileStorage';
+import { createBackup, restoreBackup } from '../src/services/backupService';
 
 const execFileAsync = promisify(execFile);
 
@@ -188,6 +189,55 @@ test('local document storage saves reads and deletes files', () => {
     assert.throws(() => storage.read(saved.storageRef), /ENOENT/);
   } finally {
     rmSync(storageRootDir, { recursive: true, force: true });
+  }
+});
+
+test('backup service restores metadata database and document files', () => {
+  const backupRootDir = mkdtempSync(join(tmpdir(), 'primalthrum-backup-'));
+  try {
+    const dbPathForBackup = join(backupRootDir, 'platform.sqlite');
+    const documentDirForBackup = join(backupRootDir, 'documents');
+    const backupDir = join(backupRootDir, 'backup');
+    const db = new SqliteDatabase(dbPathForBackup);
+    db.run(`
+      CREATE TABLE marker (value TEXT NOT NULL);
+      INSERT INTO marker VALUES ('before');
+    `);
+    const storage = new LocalDocumentStorage(documentDirForBackup);
+    const saved = storage.save({
+      workspaceId: 1,
+      agentId: 1,
+      documentId: 1,
+      filename: 'guide.md',
+      content: 'original',
+    });
+
+    createBackup({
+      dbPath: dbPathForBackup,
+      documentStorageDir: documentDirForBackup,
+      backupDir,
+    });
+
+    db.run("UPDATE marker SET value = 'after';");
+    storage.save({
+      workspaceId: 1,
+      agentId: 1,
+      documentId: 1,
+      filename: 'guide.md',
+      content: 'mutated',
+    });
+
+    restoreBackup({
+      dbPath: dbPathForBackup,
+      documentStorageDir: documentDirForBackup,
+      backupDir,
+    });
+
+    const rows = db.query<{ value: string }>('SELECT value FROM marker;');
+    assert.equal(rows[0]?.value, 'before');
+    assert.equal(storage.read(saved.storageRef), 'original');
+  } finally {
+    rmSync(backupRootDir, { recursive: true, force: true });
   }
 });
 

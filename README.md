@@ -113,3 +113,4 @@ web/     React + TypeScript + Vite 研发控制台
 - [Database Migrations](docs/MIGRATIONS.md): 运行和维护 server SQLite 迁移。
 - [Postgres Persistence Path](docs/POSTGRES_PERSISTENCE.md): SQLite 与 Postgres 部署选择和迁移准备。
 - [File Storage](docs/FILE_STORAGE.md): 文档文件存储 provider、默认本地目录和部署环境变量。
+- [Backup And Restore](docs/BACKUP_RESTORE.md): 本地 metadata DB 与文档文件的备份恢复命令。
