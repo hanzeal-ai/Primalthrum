@@ -9,7 +9,7 @@ from .memory import MemoryProvider, NullMemory, SQLiteMemory
 from .rag import InMemoryRagProvider, NullRagProvider, RagProvider
 from .registry import Registry
 from .skills import SkillDefinition
-from .tools import FileReaderTool, ToolDefinition
+from .tools import FileReaderTool, ToolDefinition, validate_tool_definition
 
 
 @dataclass
@@ -52,7 +52,7 @@ def create_runtime(config: AgentRuntimeConfig) -> AgentRuntime:
     enabled_tools = config.enabled_tools
     for name, tool in available_tools.items():
         if enabled_tools is None or name in enabled_tools:
-            tools.register(name, tool)
+            tools.register(name, validate_tool_definition(tool))
 
     skills = Registry[SkillDefinition]()
     available_skills = {

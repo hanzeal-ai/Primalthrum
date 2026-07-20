@@ -3,6 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from runtime import AgentRuntimeConfig, create_runtime
+from runtime.tools import ToolManifest, validate_tool_manifest
 
 
 class RuntimeRegistryTest(unittest.TestCase):
@@ -15,6 +16,28 @@ class RuntimeRegistryTest(unittest.TestCase):
         self.assertEqual(runtime.rag.name, "null")
         self.assertIn("file_reader", runtime.tools.names())
         self.assertIn("research", runtime.skills.names())
+
+    def test_file_reader_exposes_valid_tool_manifest(self) -> None:
+        runtime = create_runtime(AgentRuntimeConfig(agent_name="ResearchAgent"))
+        tool = runtime.tools.get("file_reader")
+
+        self.assertEqual(tool.manifest.name, "file_reader")
+        self.assertEqual(tool.manifest.input_schema["type"], "object")
+        self.assertEqual(tool.manifest.input_schema["required"], ["path"])
+        self.assertEqual(tool.manifest.permissions, ["fs:read"])
+        self.assertFalse(tool.manifest.dangerous)
+
+    def test_tool_manifest_rejects_missing_permission_metadata(self) -> None:
+        manifest = ToolManifest(
+            name="unsafe_tool",
+            description="Missing permission metadata",
+            input_schema={"type": "object"},
+            permissions=[],
+            dangerous=False,
+        )
+
+        with self.assertRaisesRegex(ValueError, "permissions"):
+            validate_tool_manifest(manifest)
 
     def test_runtime_respects_disabled_tools_skills_and_rag(self) -> None:
         runtime = create_runtime(

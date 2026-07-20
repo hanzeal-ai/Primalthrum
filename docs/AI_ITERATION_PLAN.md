@@ -1005,7 +1005,7 @@ Field meanings:
 
 ### P4-01 Tool Manifest Schema
 
-- Status: Todo
+- Status: Done
 - Goal: Define and validate tool manifests.
 - Dependencies: P3-03
 - Inputs: `agent/runtime/tools.py`, `agent/runtime/factory.py`
