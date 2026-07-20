@@ -19,6 +19,11 @@ export interface AgentRecord {
   config: AgentConfig
 }
 
+export interface GeneratedProject {
+  path: string
+  files: string[]
+}
+
 export interface CreateAgentInput {
   name: string
   description?: string

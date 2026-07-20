@@ -1,6 +1,7 @@
 import type {
   AgentRecord,
   CreateAgentInput,
+  GeneratedProject,
   ParsedSseEvent,
   ProviderCatalog,
   SkillInfo,
@@ -19,6 +20,12 @@ export async function createAgent(input: CreateAgentInput): Promise<AgentRecord>
   return apiFetch<AgentRecord>('/api/agents', {
     method: 'POST',
     body: JSON.stringify(input),
+  })
+}
+
+export async function generateAgentProject(agentId: number): Promise<GeneratedProject> {
+  return apiFetch<GeneratedProject>(`/api/agents/${agentId}/generate`, {
+    method: 'POST',
   })
 }
 

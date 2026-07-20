@@ -1142,7 +1142,7 @@ Field meanings:
 
 ### P6-03 Agent Builder View
 
-- Status: Todo
+- Status: Done
 - Goal: Build provider/tool/skill/RAG configuration view.
 - Dependencies: P6-02, P1-04
 - Inputs: `web/src/**`, provider APIs

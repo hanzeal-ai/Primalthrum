@@ -1,7 +1,22 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
-import { createAgent, listAgents, streamAgentRun } from './api/client'
-import type { AgentRecord, RunStatus, StreamPayload } from './api/types'
+import {
+  createAgent,
+  generateAgentProject,
+  listAgents,
+  listProviders,
+  listSkills,
+  listTools,
+  streamAgentRun,
+} from './api/client'
+import type {
+  AgentRecord,
+  ProviderCatalog,
+  RunStatus,
+  SkillInfo,
+  StreamPayload,
+  ToolInfo,
+} from './api/types'
 import './App.css'
 
 interface TimelineEvent extends StreamPayload {
@@ -16,9 +31,24 @@ const DEFAULT_FORM = {
   tools: 'planner, memory, file_search',
 }
 
-const DEFAULT_AGENT_FORM = {
+interface AgentFormState {
+  name: string
+  description: string
+  memoryProvider: string
+  cacheProvider: string
+  ragProvider: string
+  enabledTools: string[]
+  enabledSkills: string[]
+}
+
+const DEFAULT_AGENT_FORM: AgentFormState = {
   name: 'Research Agent',
   description: 'Research assistant with memory, tools, and optional RAG.',
+  memoryProvider: 'null',
+  cacheProvider: 'memory',
+  ragProvider: 'none',
+  enabledTools: ['file_reader'],
+  enabledSkills: ['research'],
 }
 
 function statusLabel(status: RunStatus): string {
@@ -32,8 +62,14 @@ export default function App() {
   const [form, setForm] = useState(DEFAULT_FORM)
   const [agentForm, setAgentForm] = useState(DEFAULT_AGENT_FORM)
   const [agents, setAgents] = useState<AgentRecord[]>([])
+  const [selectedAgentId, setSelectedAgentId] = useState<number | null>(null)
   const [agentsStatus, setAgentsStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [agentsMessage, setAgentsMessage] = useState('Loading agents')
+  const [providers, setProviders] = useState<ProviderCatalog | null>(null)
+  const [toolsCatalog, setToolsCatalog] = useState<ToolInfo[]>([])
+  const [skillsCatalog, setSkillsCatalog] = useState<SkillInfo[]>([])
+  const [catalogStatus, setCatalogStatus] = useState<'loading' | 'ready' | 'error'>('loading')
+  const [builderMessage, setBuilderMessage] = useState('Loading builder options')
   const [events, setEvents] = useState<TimelineEvent[]>([])
   const [status, setStatus] = useState<RunStatus>('idle')
   const [summary, setSummary] = useState<StreamPayload>({})
@@ -45,6 +81,7 @@ export default function App() {
 
   useEffect(() => {
     void refreshAgents()
+    void refreshBuilderCatalog()
   }, [])
 
   const visibleArtifacts = useMemo(() => {
@@ -70,6 +107,26 @@ export default function App() {
     }
   }
 
+  async function refreshBuilderCatalog() {
+    setCatalogStatus('loading')
+    setBuilderMessage('Loading builder options')
+    try {
+      const [nextProviders, nextTools, nextSkills] = await Promise.all([
+        listProviders(),
+        listTools(),
+        listSkills(),
+      ])
+      setProviders(nextProviders)
+      setToolsCatalog(nextTools)
+      setSkillsCatalog(nextSkills)
+      setCatalogStatus('ready')
+      setBuilderMessage('Builder options ready')
+    } catch (error) {
+      setCatalogStatus('error')
+      setBuilderMessage(error instanceof Error ? error.message : 'Failed to load builder options')
+    }
+  }
+
   async function handleCreateAgent(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const name = agentForm.name.trim()
@@ -87,14 +144,17 @@ export default function App() {
       const created = await createAgent({
         name,
         description,
-        enabledTools: ['file_reader'],
-        enabledSkills: ['research'],
-        ragProvider: 'none',
+        memoryProvider: agentForm.memoryProvider,
+        cacheProvider: agentForm.cacheProvider,
+        ragProvider: agentForm.ragProvider,
+        enabledTools: agentForm.enabledTools,
+        enabledSkills: agentForm.enabledSkills,
       })
       const nextAgents = await listAgents()
       setAgents(nextAgents)
       setAgentForm(DEFAULT_AGENT_FORM)
       setForm((current) => ({ ...current, agent: created.name }))
+      setSelectedAgentId(created.id)
       setAgentsStatus('ready')
       setAgentsMessage(`Created ${created.name}`)
     } catch (error) {
@@ -104,7 +164,39 @@ export default function App() {
   }
 
   function selectAgent(agent: AgentRecord) {
+    setSelectedAgentId(agent.id)
     setForm((current) => ({ ...current, agent: agent.name }))
+  }
+
+  async function handleGenerateAgent() {
+    if (!selectedAgentId) return
+
+    setBuilderMessage('Generating project')
+    try {
+      const generated = await generateAgentProject(selectedAgentId)
+      await refreshAgents()
+      setBuilderMessage(`Generated ${generated.files.length} files`)
+    } catch (error) {
+      setCatalogStatus('error')
+      setBuilderMessage(error instanceof Error ? error.message : 'Failed to generate project')
+    }
+  }
+
+  function updateAgentForm<K extends keyof AgentFormState>(
+    key: K,
+    value: AgentFormState[K],
+  ) {
+    setAgentForm((current) => ({ ...current, [key]: value }))
+  }
+
+  function toggleAgentFormList(key: 'enabledTools' | 'enabledSkills', value: string) {
+    setAgentForm((current) => {
+      const values = current[key]
+      const nextValues = values.includes(value)
+        ? values.filter((item) => item !== value)
+        : [...values, value]
+      return { ...current, [key]: nextValues }
+    })
   }
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
@@ -213,7 +305,7 @@ export default function App() {
             ) : (
               agents.map((agent) => (
                 <button
-                  className={agent.name === form.agent ? 'agent-item selected' : 'agent-item'}
+                  className={agent.id === selectedAgentId ? 'agent-item selected' : 'agent-item'}
                   key={agent.id}
                   onClick={() => selectAgent(agent)}
                   type="button"
@@ -231,18 +323,15 @@ export default function App() {
 
         <form className="panel create-agent-panel" onSubmit={handleCreateAgent}>
           <div className="panel-heading">
-            <h2>Create Agent</h2>
-            <p>Registers a platform agent with the default research skill.</p>
+            <h2>Agent Builder</h2>
+            <p>{builderMessage}</p>
           </div>
 
           <label>
             <span>Name</span>
             <input
               value={agentForm.name}
-              onChange={(event) => setAgentForm((current) => ({
-                ...current,
-                name: event.target.value,
-              }))}
+              onChange={(event) => updateAgentForm('name', event.target.value)}
               placeholder="Research Agent"
             />
           </label>
@@ -251,17 +340,120 @@ export default function App() {
             <span>Description</span>
             <input
               value={agentForm.description}
-              onChange={(event) => setAgentForm((current) => ({
-                ...current,
-                description: event.target.value,
-              }))}
+              onChange={(event) => updateAgentForm('description', event.target.value)}
               placeholder="What this agent is responsible for"
             />
           </label>
 
-          <button className="primary" type="submit" disabled={agentsStatus === 'loading'}>
-            Create
-          </button>
+          <div className="builder-grid">
+            <label>
+              <span>Memory</span>
+              <select
+                value={agentForm.memoryProvider}
+                onChange={(event) => updateAgentForm('memoryProvider', event.target.value)}
+              >
+                {(providers?.memory ?? []).map((provider) => (
+                  <option
+                    disabled={provider.status !== 'available'}
+                    key={provider.name}
+                    value={provider.name}
+                  >
+                    {provider.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span>Cache</span>
+              <select
+                value={agentForm.cacheProvider}
+                onChange={(event) => updateAgentForm('cacheProvider', event.target.value)}
+              >
+                {(providers?.cache ?? []).map((provider) => (
+                  <option
+                    disabled={provider.status !== 'available'}
+                    key={provider.name}
+                    value={provider.name}
+                  >
+                    {provider.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+
+            <label>
+              <span>RAG</span>
+              <select
+                value={agentForm.ragProvider}
+                onChange={(event) => updateAgentForm('ragProvider', event.target.value)}
+              >
+                {(providers?.rag ?? []).map((provider) => (
+                  <option
+                    disabled={provider.status !== 'available'}
+                    key={provider.name}
+                    value={provider.name}
+                  >
+                    {provider.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          </div>
+
+          <fieldset className="toggle-group">
+            <legend>Tools</legend>
+            {toolsCatalog.map((tool) => (
+              <label className="toggle-row" key={tool.name}>
+                <input
+                  checked={agentForm.enabledTools.includes(tool.name)}
+                  disabled={tool.status !== 'available'}
+                  onChange={() => toggleAgentFormList('enabledTools', tool.name)}
+                  type="checkbox"
+                />
+                <span>
+                  <strong>{tool.name}</strong>
+                  <small>{tool.permissions.join(', ')}</small>
+                </span>
+              </label>
+            ))}
+          </fieldset>
+
+          <fieldset className="toggle-group">
+            <legend>Skills</legend>
+            {skillsCatalog.map((skill) => (
+              <label className="toggle-row" key={skill.name}>
+                <input
+                  checked={agentForm.enabledSkills.includes(skill.name)}
+                  disabled={skill.status !== 'available'}
+                  onChange={() => toggleAgentFormList('enabledSkills', skill.name)}
+                  type="checkbox"
+                />
+                <span>
+                  <strong>{skill.name}</strong>
+                  <small>{skill.version}</small>
+                </span>
+              </label>
+            ))}
+          </fieldset>
+
+          <div className="builder-actions">
+            <button
+              className="primary"
+              type="submit"
+              disabled={agentsStatus === 'loading' || catalogStatus === 'loading'}
+            >
+              Create
+            </button>
+            <button
+              className="secondary"
+              disabled={!selectedAgentId}
+              onClick={handleGenerateAgent}
+              type="button"
+            >
+              Generate
+            </button>
+          </div>
         </form>
       </section>
 
