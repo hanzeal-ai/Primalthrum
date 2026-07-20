@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
+  ApiError,
   clearStoredSessionToken,
   createDocument,
   createAgent,
@@ -111,6 +112,10 @@ function statusLabel(status: RunStatus): string {
 }
 
 function errorMessage(error: unknown, fallback: string): string {
+  if (error instanceof ApiError && error.code !== 'API_ERROR') {
+    return `${error.message} [${error.code}]`
+  }
+
   return error instanceof Error ? error.message : fallback
 }
 
@@ -118,6 +123,34 @@ function compactSecretRef(secretRef: string): string {
   if (!secretRef) return 'No secret reference'
   const suffix = secretRef.slice(-8)
   return `secret://local/...${suffix}`
+}
+
+type WorkflowStateTone = 'empty' | 'error' | 'loading'
+
+function WorkflowState({
+  tone = 'empty',
+  title,
+  message,
+  actionLabel,
+  onAction,
+}: {
+  tone?: WorkflowStateTone
+  title: string
+  message: string
+  actionLabel?: string
+  onAction?: () => void
+}) {
+  return (
+    <div className={`workflow-state ${tone}`} role={tone === 'error' ? 'alert' : 'status'}>
+      <strong>{title}</strong>
+      <span>{message}</span>
+      {actionLabel && onAction ? (
+        <button className="secondary compact" onClick={onAction} type="button">
+          {actionLabel}
+        </button>
+      ) : null}
+    </div>
+  )
 }
 
 export default function App() {
@@ -153,6 +186,7 @@ export default function App() {
   const latestMessage = events.at(-1)?.message ?? 'Ready to stream an agent run.'
   const hasOutput = events.length > 0
   const selectedAgent = agents.find((agent) => agent.id === selectedAgentId) ?? null
+  const knowledgeBusy = knowledgeStatus === 'loading'
   const dangerousTools = toolsCatalog.filter((tool) => tool.dangerous)
   const selectedDangerousTools = toolsCatalog
     .filter((tool) => tool.dangerous && agentForm.enabledTools.includes(tool.name))
@@ -686,8 +720,21 @@ export default function App() {
           </div>
 
           <div className="agent-list" aria-busy={agentsStatus === 'loading'}>
-            {agents.length === 0 ? (
-              <div className="inline-empty">No agents registered</div>
+            {agentsStatus === 'error' ? (
+              <WorkflowState
+                actionLabel="Retry"
+                message={agentsMessage}
+                onAction={() => void refreshAgents()}
+                title="Agents unavailable"
+                tone="error"
+              />
+            ) : agentsStatus === 'loading' ? (
+              <WorkflowState message={agentsMessage} title="Loading agents" tone="loading" />
+            ) : agents.length === 0 ? (
+              <WorkflowState
+                message="Create an agent from the builder to start running streams."
+                title="No agents registered"
+              />
             ) : (
               agents.map((agent) => (
                 <button
@@ -712,6 +759,16 @@ export default function App() {
             <h2>Agent Builder</h2>
             <p>{builderMessage}</p>
           </div>
+
+          {catalogStatus === 'error' ? (
+            <WorkflowState
+              actionLabel="Retry"
+              message={builderMessage}
+              onAction={() => void refreshBuilderCatalog()}
+              title="Builder options unavailable"
+              tone="error"
+            />
+          ) : null}
 
           <label>
             <span>Name</span>
@@ -984,7 +1041,7 @@ export default function App() {
             </div>
             <button
               className="secondary compact"
-              disabled={!selectedAgentId || knowledgeStatus === 'loading'}
+              disabled={!selectedAgentId || knowledgeBusy}
               onClick={() => void refreshDocuments()}
               type="button"
             >
@@ -993,8 +1050,25 @@ export default function App() {
           </div>
 
           <div className="document-list">
-            {documents.length === 0 ? (
-              <div className="inline-empty">No documents registered</div>
+            {knowledgeStatus === 'error' ? (
+              <WorkflowState
+                actionLabel={selectedAgentId ? 'Retry' : undefined}
+                message={knowledgeMessage}
+                onAction={selectedAgentId ? () => void refreshDocuments() : undefined}
+                title="Knowledge unavailable"
+                tone="error"
+              />
+            ) : knowledgeStatus === 'loading' ? (
+              <WorkflowState message={knowledgeMessage} title="Loading knowledge" tone="loading" />
+            ) : documents.length === 0 ? (
+              <WorkflowState
+                message={
+                  selectedAgent
+                    ? 'Register a document to prepare this agent for retrieval.'
+                    : 'Select an agent before registering documents.'
+                }
+                title="No documents registered"
+              />
             ) : (
               documents.map((document) => (
                 <article className="document-item" key={document.id}>
@@ -1007,7 +1081,7 @@ export default function App() {
                     <em>{document.indexStatus}</em>
                     <button
                       className="secondary compact"
-                      disabled={knowledgeStatus === 'loading'}
+                      disabled={knowledgeBusy}
                       onClick={() => void handleIndexDocument(document.id)}
                       type="button"
                     >
@@ -1067,7 +1141,7 @@ export default function App() {
 
           <button
             className="primary"
-            disabled={!selectedAgentId || knowledgeStatus === 'loading'}
+            disabled={!selectedAgentId || knowledgeBusy}
             type="submit"
           >
             Register
@@ -1136,7 +1210,11 @@ export default function App() {
           </div>
 
           <div className="timeline">
-            {!hasOutput && (
+            {status === 'error' ? (
+              <WorkflowState message={latestMessage} title="Run failed" tone="error" />
+            ) : null}
+
+            {!hasOutput && status !== 'error' && (
               <div className="empty-state">
                 <strong>Waiting for a run</strong>
                 <span>Submit the configuration to watch LangGraph node updates arrive as SSE events.</span>

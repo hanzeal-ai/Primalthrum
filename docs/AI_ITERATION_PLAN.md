@@ -1498,7 +1498,7 @@ Field meanings:
 
 ### P12-03 Frontend Error Boundaries
 
-- Status: Todo
+- Status: Done
 - Goal: Add frontend error boundary and user-facing errors for core workflows.
 - Dependencies: P6-05, P12-01
 - Inputs: `web/src/**`

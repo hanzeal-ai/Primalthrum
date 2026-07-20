@@ -50,6 +50,20 @@
   gap: 16px;
 }
 
+.fatal-error {
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+
+.fatal-error-panel {
+  width: min(100%, 520px);
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 .product {
   margin: 0 0 4px;
   color: #47605a;
@@ -376,6 +390,50 @@ button:disabled {
   place-content: center;
   color: #66736d;
   font-size: 14px;
+}
+
+.workflow-state {
+  min-height: 84px;
+  padding: 12px;
+  border: 1px dashed #cdd6d0;
+  border-radius: 8px;
+  display: grid;
+  align-content: center;
+  gap: 7px;
+  background: #fbfcf8;
+  color: #66736d;
+  font-size: 13px;
+}
+
+.workflow-state strong {
+  color: #1b1f24;
+  font-size: 14px;
+  line-height: 1.25;
+}
+
+.workflow-state span {
+  line-height: 1.35;
+  overflow-wrap: anywhere;
+}
+
+.workflow-state.error {
+  border-color: #f2b8a2;
+  background: #fff7ed;
+  color: #9a3412;
+}
+
+.workflow-state.error strong {
+  color: #9a3412;
+}
+
+.workflow-state.loading {
+  border-color: #c7d6ff;
+  background: #f5f8ff;
+  color: #31529b;
+}
+
+.workflow-state.loading strong {
+  color: #1d4ed8;
 }
 
 .document-list {

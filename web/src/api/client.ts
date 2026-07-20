@@ -23,19 +23,25 @@ const SESSION_TOKEN_KEY = 'primalthrum.sessionToken'
 
 export class ApiError extends Error {
   readonly status: number
+  readonly code: string
+  readonly details: unknown
 
   constructor(
     message: string,
     status: number,
+    code = 'API_ERROR',
+    details?: unknown,
   ) {
     super(message)
     this.status = status
+    this.code = code
+    this.details = details
   }
 }
 
 export class UnauthorizedError extends ApiError {
-  constructor(message = 'Authentication required') {
-    super(message, 401)
+  constructor(message = 'Authentication required', code = 'AUTHENTICATION_REQUIRED') {
+    super(message, 401, code)
   }
 }
 
@@ -182,10 +188,7 @@ export async function streamAgentRun(
   })
 
   if (!response.ok || !response.body) {
-    if (response.status === 401) {
-      throw new UnauthorizedError()
-    }
-    throw new Error(`Stream request failed with HTTP ${response.status}`)
+    throw await apiErrorFromResponse(response, 'Stream request failed')
   }
 
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
@@ -232,10 +235,7 @@ async function apiFetch<T>(path: string, init: ApiFetchInit = {}): Promise<T> {
   })
 
   if (!response.ok) {
-    if (response.status === 401) {
-      throw new UnauthorizedError()
-    }
-    throw new ApiError(`API request failed with HTTP ${response.status}`, response.status)
+    throw await apiErrorFromResponse(response, 'API request failed')
   }
 
   if (!parseJson || response.status === 204) {
@@ -269,6 +269,53 @@ function parseSseBlock(block: string): ParsedSseEvent | null {
 
 function apiUrl(path: string): string {
   return `${API_BASE_URL}${path}`
+}
+
+async function apiErrorFromResponse(response: Response, fallback: string): Promise<ApiError> {
+  const parsed = await parseErrorBody(response)
+  const message = parsed.message ?? `${fallback} with HTTP ${response.status}`
+  const code = parsed.code ?? (response.status === 401 ? 'AUTHENTICATION_REQUIRED' : 'API_ERROR')
+
+  if (response.status === 401) {
+    return new UnauthorizedError(message, code)
+  }
+
+  return new ApiError(message, response.status, code, parsed.details)
+}
+
+async function parseErrorBody(response: Response): Promise<{
+  code?: string
+  message?: string
+  details?: unknown
+}> {
+  const contentType = response.headers.get('content-type') ?? ''
+  if (!contentType.includes('application/json')) {
+    return {}
+  }
+
+  try {
+    const body = await response.json() as {
+      error?: string | {
+        code?: unknown
+        message?: unknown
+        details?: unknown
+      }
+    }
+    if (typeof body.error === 'string') {
+      return { message: body.error }
+    }
+    if (body.error && typeof body.error === 'object') {
+      return {
+        code: typeof body.error.code === 'string' ? body.error.code : undefined,
+        message: typeof body.error.message === 'string' ? body.error.message : undefined,
+        details: body.error.details,
+      }
+    }
+  } catch {
+    return {}
+  }
+
+  return {}
 }
 
 function authHeaders(
