@@ -1226,7 +1226,7 @@ Field meanings:
 
 ### P7-03 Tool And Skill Authoring Docs
 
-- Status: Todo
+- Status: Done
 - Goal: Document how to add tools and skills safely.
 - Dependencies: P7-02
 - Inputs: tool/skill runtime files
