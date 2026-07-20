@@ -1,9 +1,17 @@
 import Koa from 'koa';
 import Router from '@koa/router';
 import bodyParser from 'koa-bodyparser';
+import { join } from 'node:path';
+
+import { SqliteDatabase } from './db/sqlite';
+import { generateAgentProject } from './generators/agentProjectGenerator';
+import { AgentRepository, type CreateAgentInput } from './services/agentRepository';
+import { listProviders, listSkills, listTools } from './services/discoveryCatalog';
 
 export interface AppOptions {
   agentBaseUrl?: string;
+  dbPath?: string;
+  generatedAgentsDir?: string;
 }
 
 interface StreamPayload {
@@ -13,6 +21,8 @@ interface StreamPayload {
 }
 
 const DEFAULT_AGENT_BASE_URL = 'http://127.0.0.1:8000';
+const DEFAULT_DB_PATH = join(process.cwd(), '..', 'data', 'platform.sqlite');
+const DEFAULT_GENERATED_AGENTS_DIR = join(process.cwd(), '..', 'generated-agents');
 
 function toText(value: unknown, fallback: string): string {
   return typeof value === 'string' && value.trim() ? value.trim() : fallback;
@@ -71,6 +81,10 @@ export function createApp(options: AppOptions = {}): Koa {
   const app = new Koa();
   const router = new Router();
   const agentBaseUrl = options.agentBaseUrl ?? DEFAULT_AGENT_BASE_URL;
+  const agentRepository = new AgentRepository(
+    new SqliteDatabase(options.dbPath ?? DEFAULT_DB_PATH),
+    options.generatedAgentsDir ?? DEFAULT_GENERATED_AGENTS_DIR,
+  );
 
   app.use(async (ctx, next) => {
     ctx.set('Access-Control-Allow-Origin', '*');
@@ -92,6 +106,58 @@ export function createApp(options: AppOptions = {}): Koa {
       service: 'server',
       agentBaseUrl,
     };
+  });
+
+  router.get('/api/agents', (ctx) => {
+    ctx.body = agentRepository.list();
+  });
+
+  router.post('/api/agents', (ctx) => {
+    try {
+      const created = agentRepository.create(ctx.request.body as CreateAgentInput);
+      ctx.status = 201;
+      ctx.body = created;
+    } catch (error) {
+      ctx.status = 400;
+      ctx.body = {
+        error: error instanceof Error ? error.message : 'failed to create agent',
+      };
+    }
+  });
+
+  router.get('/api/agents/:id', (ctx) => {
+    const agent = agentRepository.findById(Number(ctx.params.id));
+    if (!agent) {
+      ctx.status = 404;
+      ctx.body = { error: 'agent not found' };
+      return;
+    }
+    ctx.body = agent;
+  });
+
+  router.post('/api/agents/:id/generate', async (ctx) => {
+    const agent = agentRepository.findById(Number(ctx.params.id));
+    if (!agent) {
+      ctx.status = 404;
+      ctx.body = { error: 'agent not found' };
+      return;
+    }
+
+    const generated = await generateAgentProject(agent);
+    agentRepository.markGenerated(agent.id);
+    ctx.body = generated;
+  });
+
+  router.get('/api/providers', (ctx) => {
+    ctx.body = listProviders();
+  });
+
+  router.get('/api/tools', (ctx) => {
+    ctx.body = listTools();
+  });
+
+  router.get('/api/skills', (ctx) => {
+    ctx.body = listSkills();
   });
 
   async function handleStream(ctx: Koa.Context): Promise<void> {

@@ -9,17 +9,25 @@ from fastapi.responses import StreamingResponse
 from langgraph.graph import END, StateGraph
 from pydantic import BaseModel, Field
 
+from runtime import AgentRuntimeConfig, create_runtime
+
 
 class AgentRequest(BaseModel):
     goal: str = Field(..., min_length=1)
     agent: str = Field(default="ResearchAgent", min_length=1)
     tools: list[str] = Field(default_factory=list)
+    skills: list[str] = Field(default_factory=list)
+    memory_provider: str = "null"
+    cache_provider: str = "memory"
+    rag_provider: str = "null"
 
 
 class AgentState(TypedDict):
     goal: str
     agent: str
     tools: list[str]
+    skills: list[str]
+    runtime: dict[str, Any]
     plan: list[str]
     artifacts: list[str]
     checks: list[str]
@@ -32,10 +40,30 @@ def normalize_tools(tools: list[str]) -> list[str]:
     return cleaned or ["planner", "memory", "executor"]
 
 
+def normalize_skills(skills: list[str]) -> list[str]:
+    return [skill.strip() for skill in skills if skill.strip()]
+
+
 def intake(state: AgentState) -> dict[str, Any]:
     tools = normalize_tools(state["tools"])
+    runtime = create_runtime(
+        AgentRuntimeConfig(
+            agent_name=state["agent"],
+            enabled_tools=tools,
+            enabled_skills=state["skills"],
+            memory_provider=state["runtime"]["memory_provider"],
+            cache_provider=state["runtime"]["cache_provider"],
+            rag_provider=state["runtime"]["rag_provider"],
+        )
+    )
     return {
         "tools": tools,
+        "runtime": {
+            **state["runtime"],
+            "loaded_tools": runtime.tools.names(),
+            "loaded_skills": runtime.skills.names(),
+            "llm_provider": runtime.llm.name,
+        },
         "message": f"Accepted goal for {state['agent']}: {state['goal']}",
         "status": "running",
     }
@@ -57,6 +85,10 @@ def scaffold_agent(state: AgentState) -> dict[str, Any]:
     artifacts = [
         f"agent:{state['agent']}",
         f"tools:{','.join(state['tools'])}",
+        f"skills:{','.join(state['skills']) or 'none'}",
+        f"memory:{state['runtime']['memory_provider']}",
+        f"cache:{state['runtime']['cache_provider']}",
+        f"rag:{state['runtime']['rag_provider']}",
         "interface:stream",
     ]
     return {
@@ -113,6 +145,12 @@ async def stream_graph(request: AgentRequest) -> AsyncIterator[str]:
         "goal": request.goal.strip(),
         "agent": request.agent.strip(),
         "tools": normalize_tools(request.tools),
+        "skills": normalize_skills(request.skills),
+        "runtime": {
+            "memory_provider": request.memory_provider,
+            "cache_provider": request.cache_provider,
+            "rag_provider": request.rag_provider,
+        },
         "plan": [],
         "artifacts": [],
         "checks": [],
@@ -128,7 +166,7 @@ async def stream_graph(request: AgentRequest) -> AsyncIterator[str]:
                 "message": patch.get("message", f"{node} completed"),
                 "status": patch.get("status", "running"),
             }
-            for key in ("tools", "plan", "artifacts", "checks"):
+            for key in ("tools", "skills", "runtime", "plan", "artifacts", "checks"):
                 if key in patch:
                     payload[key] = patch[key]
             yield sse("agent.update", payload)

@@ -35,6 +35,24 @@ PYTHON_BIN=python3.12 AGENT_PORT=8000 PORT=3000 WEB_PORT=5173 bash start.sh
 
 ## API
 
+Agent 元数据与生成：
+
+```bash
+curl http://127.0.0.1:3000/api/agents \
+  -H 'content-type: application/json' \
+  -d '{
+    "name":"Research Agent",
+    "description":"Research assistant",
+    "memoryProvider":"sqlite",
+    "cacheProvider":"sqlite",
+    "ragProvider":"in-memory",
+    "enabledTools":["file_reader"],
+    "enabledSkills":["research"]
+  }'
+
+curl -X POST http://127.0.0.1:3000/api/agents/1/generate
+```
+
 Node 对外接口：
 
 ```bash
