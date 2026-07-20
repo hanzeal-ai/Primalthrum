@@ -1039,7 +1039,7 @@ Field meanings:
 
 ### P4-03 Research Skill Package Manifest
 
-- Status: Todo
+- Status: Done
 - Goal: Move research skill from hardcoded definition toward manifest-backed package.
 - Dependencies: P4-02
 - Inputs: `agent/runtime/skills.py`, `agent/runtime/factory.py`

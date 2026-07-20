@@ -8,7 +8,7 @@ from .llm import LLMProvider, MockLLMProvider
 from .memory import MemoryProvider, NullMemory, SQLiteMemory
 from .rag import InMemoryRagProvider, NullRagProvider, RagProvider
 from .registry import Registry
-from .skills import SkillDefinition
+from .skills import SkillDefinition, load_skill_packages
 from .tools import FileReaderTool, ToolDefinition, validate_tool_definition
 
 
@@ -57,14 +57,7 @@ def create_runtime(config: AgentRuntimeConfig) -> AgentRuntime:
             tools.register(name, validate_tool_definition(tool))
 
     skills = Registry[SkillDefinition]()
-    available_skills = {
-        "research": SkillDefinition(
-            name="research",
-            version="0.1.0",
-            tools=["file_reader"],
-            instructions="Plan, retrieve evidence, act with tools, and summarize.",
-        )
-    }
+    available_skills = load_skill_packages()
     enabled_skills = config.enabled_skills
     for name, skill in available_skills.items():
         if enabled_skills is None or name in enabled_skills:

@@ -73,6 +73,14 @@ class RuntimeRegistryTest(unittest.TestCase):
             with self.assertRaises(PermissionError):
                 runtime.tools.get("file_reader").call({"path": str(file_path)})
 
+    def test_research_skill_loads_from_manifest_package(self) -> None:
+        runtime = create_runtime(AgentRuntimeConfig(agent_name="ResearchAgent"))
+        skill = runtime.skills.get("research")
+
+        self.assertEqual(skill.version, "0.1.0")
+        self.assertEqual(skill.tools, ["file_reader"])
+        self.assertIn("Use retrieved evidence before acting.", skill.instructions)
+
     def test_runtime_respects_disabled_tools_skills_and_rag(self) -> None:
         runtime = create_runtime(
             AgentRuntimeConfig(
