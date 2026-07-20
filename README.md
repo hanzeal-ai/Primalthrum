@@ -110,6 +110,10 @@ web/     React + TypeScript + Vite 研发控制台
 
 - [Provider Extension Guide](docs/PROVIDER_EXTENSION_GUIDE.md): 添加 Memory、Cache、RAG、LLM provider 的接口、注册和测试规则。
 - [Tool And Skill Authoring Guide](docs/TOOL_SKILL_AUTHORING_GUIDE.md): 添加工具、技能包和危险工具策略的规则。
+- [Install Guide](docs/INSTALL_GUIDE.md): 本地或单节点商业试点安装步骤。
+- [Upgrade Guide](docs/UPGRADE_GUIDE.md): 升级前备份、迁移、验证和重启步骤。
+- [User Workflow Guide](docs/USER_WORKFLOW_GUIDE.md): Web 控制台核心用户流程。
+- [Troubleshooting](docs/TROUBLESHOOTING.md): readiness、认证、provider、文档索引、stream 和 metrics 故障排查。
 - [Database Migrations](docs/MIGRATIONS.md): 运行和维护 server SQLite 迁移。
 - [Postgres Persistence Path](docs/POSTGRES_PERSISTENCE.md): SQLite 与 Postgres 部署选择和迁移准备。
 - [File Storage](docs/FILE_STORAGE.md): 文档文件存储 provider、默认本地目录和部署环境变量。
