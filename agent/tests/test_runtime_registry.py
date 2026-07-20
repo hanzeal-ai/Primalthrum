@@ -4,7 +4,7 @@ from tempfile import TemporaryDirectory
 
 from runtime import AgentRuntimeConfig, create_runtime
 from runtime.llm import MockLLMProvider
-from runtime.rag import chunk_text
+from runtime.rag import InMemoryRagProvider, chunk_text
 from runtime.tools import ToolManifest, validate_tool_manifest
 
 
@@ -120,6 +120,18 @@ class RuntimeRegistryTest(unittest.TestCase):
         self.assertNotEqual(first, other)
         self.assertEqual(len(first), 8)
         self.assertTrue(all(0.0 <= value <= 1.0 for value in first))
+
+    def test_in_memory_rag_returns_vector_ranked_chunks(self) -> None:
+        provider = InMemoryRagProvider()
+        provider.upsert("doc-a", "alpha beta")
+        provider.upsert("doc-b", "gamma delta")
+
+        results = provider.retrieve("gamma delta", top_k=2)
+
+        self.assertEqual(
+            [(result["document_id"], result["chunk_id"]) for result in results],
+            [("doc-b", "doc-b:0"), ("doc-a", "doc-a:0")],
+        )
 
     def test_runtime_respects_disabled_tools_skills_and_rag(self) -> None:
         runtime = create_runtime(

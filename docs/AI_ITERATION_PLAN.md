@@ -1091,7 +1091,7 @@ Field meanings:
 
 ### P5-03 In-Memory Vector Retrieval
 
-- Status: Todo
+- Status: Done
 - Goal: Implement minimal vector retrieval provider.
 - Dependencies: P5-02
 - Inputs: `agent/runtime/rag.py`

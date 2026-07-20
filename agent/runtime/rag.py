@@ -1,7 +1,10 @@
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from typing import Protocol
+
+from .llm import mock_embedding
 
 
 @dataclass(frozen=True)
@@ -9,6 +12,14 @@ class TextChunk:
     document_id: str
     chunk_id: str
     text: str
+
+
+@dataclass(frozen=True)
+class VectorEntry:
+    document_id: str
+    chunk_id: str
+    text: str
+    embedding: list[float]
 
 
 def chunk_text(
@@ -70,21 +81,51 @@ class NullRagProvider:
 @dataclass
 class InMemoryRagProvider:
     name: str = "in-memory"
-    documents: dict[str, str] = field(default_factory=dict)
+    entries: list[VectorEntry] = field(default_factory=list)
 
     def upsert(self, document_id: str, text: str) -> None:
-        self.documents[document_id] = text
+        self.entries = [
+            entry for entry in self.entries
+            if entry.document_id != document_id
+        ]
+        self.entries.extend(
+            VectorEntry(
+                document_id=chunk.document_id,
+                chunk_id=chunk.chunk_id,
+                text=chunk.text,
+                embedding=mock_embedding(chunk.text),
+            )
+            for chunk in chunk_text(document_id, text)
+        )
 
     def retrieve(self, query: str, top_k: int = 4) -> list[dict[str, str]]:
-        query_terms = {term.lower() for term in query.split() if term.strip()}
-        scored: list[tuple[int, str, str]] = []
-        for document_id, text in self.documents.items():
-            text_terms = set(text.lower().split())
-            score = len(query_terms & text_terms)
-            if score > 0:
-                scored.append((score, document_id, text))
-        scored.sort(reverse=True)
-        return [
-            {"document_id": document_id, "text": text}
-            for _, document_id, text in scored[:top_k]
+        if top_k <= 0 or not self.entries:
+            return []
+
+        query_embedding = mock_embedding(query)
+        scored = [
+            (
+                cosine_similarity(query_embedding, entry.embedding),
+                entry.chunk_id,
+                entry,
+            )
+            for entry in self.entries
         ]
+        scored.sort(key=lambda item: (-item[0], item[1]))
+        return [
+            {
+                "document_id": entry.document_id,
+                "chunk_id": entry.chunk_id,
+                "text": entry.text,
+            }
+            for _, _, entry in scored[:top_k]
+        ]
+
+
+def cosine_similarity(left: list[float], right: list[float]) -> float:
+    numerator = sum(a * b for a, b in zip(left, right))
+    left_norm = math.sqrt(sum(value * value for value in left))
+    right_norm = math.sqrt(sum(value * value for value in right))
+    if left_norm == 0.0 or right_norm == 0.0:
+        return 0.0
+    return numerator / (left_norm * right_norm)
