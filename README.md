@@ -105,3 +105,7 @@ agent/   FastAPI + LangGraph 示例图与 SSE /stream
 server/  Koa + TypeScript SSE 代理
 web/     React + TypeScript + Vite 研发控制台
 ```
+
+## 扩展
+
+- [Provider Extension Guide](docs/PROVIDER_EXTENSION_GUIDE.md): 添加 Memory、Cache、RAG、LLM provider 的接口、注册和测试规则。

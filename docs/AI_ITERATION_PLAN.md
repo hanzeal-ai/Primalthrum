@@ -1209,7 +1209,7 @@ Field meanings:
 
 ### P7-02 Provider Extension Docs
 
-- Status: Todo
+- Status: Done
 - Goal: Document how to add memory/cache/RAG/LLM providers.
 - Dependencies: P7-01
 - Inputs: runtime provider files
