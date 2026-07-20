@@ -1279,7 +1279,7 @@ Field meanings:
 
 ### P8-03 Web Setup And Login Flow
 
-- Status: Todo
+- Status: Done
 - Goal: Add setup/login UI and authenticated API client behavior.
 - Dependencies: P8-02, P6-05
 - Inputs: `web/src/**`

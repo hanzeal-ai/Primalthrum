@@ -11,6 +11,7 @@ export interface AgentConfig {
 
 export interface AgentRecord {
   id: number
+  workspaceId: number
   name: string
   slug: string
   description: string
@@ -27,6 +28,7 @@ export interface GeneratedProject {
 export interface DocumentRecord {
   id: number
   agentId: number
+  workspaceId: number
   filename: string
   hash: string
   indexStatus: string
@@ -107,4 +109,35 @@ export interface LegacyStreamAgentRequest {
 export interface StoredAgentStreamRequest {
   agentId: number
   input: string
+}
+
+export interface AuthUser {
+  id: number
+  workspaceId: number
+  email: string
+  role: string
+}
+
+export interface AuthSession {
+  token: string
+  expiresAt: string
+}
+
+export interface AuthResponse {
+  user: AuthUser
+  session: AuthSession
+}
+
+export interface CurrentSession {
+  user: AuthUser
+  expiresAt: string
+}
+
+export interface SetupStatus {
+  needsSetup: boolean
+}
+
+export interface AuthCredentials {
+  email: string
+  password: string
 }

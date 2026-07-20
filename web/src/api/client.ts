@@ -1,11 +1,15 @@
 import type {
   AgentRecord,
+  AuthCredentials,
+  AuthResponse,
   CreateAgentInput,
   CreateDocumentInput,
+  CurrentSession,
   DocumentRecord,
   GeneratedProject,
   ParsedSseEvent,
   ProviderCatalog,
+  SetupStatus,
   SkillInfo,
   StreamAgentRequest,
   StreamPayload,
@@ -13,6 +17,76 @@ import type {
 } from './types'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
+const SESSION_TOKEN_KEY = 'primalthrum.sessionToken'
+
+export class ApiError extends Error {
+  readonly status: number
+
+  constructor(
+    message: string,
+    status: number,
+  ) {
+    super(message)
+    this.status = status
+  }
+}
+
+export class UnauthorizedError extends ApiError {
+  constructor(message = 'Authentication required') {
+    super(message, 401)
+  }
+}
+
+export function isUnauthorizedError(error: unknown): error is UnauthorizedError {
+  return error instanceof UnauthorizedError
+}
+
+export function getStoredSessionToken(): string {
+  return window.localStorage.getItem(SESSION_TOKEN_KEY) ?? ''
+}
+
+export function clearStoredSessionToken(): void {
+  window.localStorage.removeItem(SESSION_TOKEN_KEY)
+}
+
+export async function getSetupStatus(): Promise<SetupStatus> {
+  return apiFetch<SetupStatus>('/api/setup/status', { auth: false })
+}
+
+export async function setupAdmin(input: AuthCredentials): Promise<AuthResponse> {
+  const response = await apiFetch<AuthResponse>('/api/setup/admin', {
+    auth: false,
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+  storeSessionToken(response.session.token)
+  return response
+}
+
+export async function loginAdmin(input: AuthCredentials): Promise<AuthResponse> {
+  const response = await apiFetch<AuthResponse>('/api/auth/login', {
+    auth: false,
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+  storeSessionToken(response.session.token)
+  return response
+}
+
+export async function logoutAdmin(): Promise<void> {
+  try {
+    await apiFetch<void>('/api/auth/logout', {
+      method: 'POST',
+      parseJson: false,
+    })
+  } finally {
+    clearStoredSessionToken()
+  }
+}
+
+export async function getCurrentSession(): Promise<CurrentSession> {
+  return apiFetch<CurrentSession>('/api/auth/session')
+}
 
 export async function listAgents(): Promise<AgentRecord[]> {
   return apiFetch<AgentRecord[]>('/api/agents')
@@ -76,12 +150,16 @@ export async function streamAgentRun(
 ): Promise<void> {
   const response = await fetch(apiUrl('/api/stream'), {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    credentials: 'include',
+    headers: authHeaders({ 'Content-Type': 'application/json' }),
     body: JSON.stringify(input),
     signal: options.signal,
   })
 
   if (!response.ok || !response.body) {
+    if (response.status === 401) {
+      throw new UnauthorizedError()
+    }
     throw new Error(`Stream request failed with HTTP ${response.status}`)
   }
 
@@ -105,17 +183,38 @@ export async function streamAgentRun(
   }
 }
 
-async function apiFetch<T>(path: string, init: RequestInit = {}): Promise<T> {
+interface ApiFetchInit extends RequestInit {
+  auth?: boolean
+  parseJson?: boolean
+}
+
+async function apiFetch<T>(path: string, init: ApiFetchInit = {}): Promise<T> {
+  const {
+    auth = true,
+    parseJson = true,
+    headers,
+    ...requestInit
+  } = init
+  const requestHeaders = new Headers({ 'Content-Type': 'application/json' })
+  new Headers(headers).forEach((value, key) => {
+    requestHeaders.set(key, value)
+  })
+
   const response = await fetch(apiUrl(path), {
-    ...init,
-    headers: {
-      'Content-Type': 'application/json',
-      ...init.headers,
-    },
+    ...requestInit,
+    credentials: 'include',
+    headers: authHeaders(requestHeaders, auth),
   })
 
   if (!response.ok) {
-    throw new Error(`API request failed with HTTP ${response.status}`)
+    if (response.status === 401) {
+      throw new UnauthorizedError()
+    }
+    throw new ApiError(`API request failed with HTTP ${response.status}`, response.status)
+  }
+
+  if (!parseJson || response.status === 204) {
+    return undefined as T
   }
 
   return response.json() as Promise<T>
@@ -145,4 +244,20 @@ function parseSseBlock(block: string): ParsedSseEvent | null {
 
 function apiUrl(path: string): string {
   return `${API_BASE_URL}${path}`
+}
+
+function authHeaders(
+  headers: HeadersInit,
+  includeAuth = true,
+): HeadersInit {
+  const nextHeaders = new Headers(headers)
+  const token = includeAuth ? getStoredSessionToken() : ''
+  if (token) {
+    nextHeaders.set('Authorization', `Bearer ${token}`)
+  }
+  return nextHeaders
+}
+
+function storeSessionToken(token: string): void {
+  window.localStorage.setItem(SESSION_TOKEN_KEY, token)
 }

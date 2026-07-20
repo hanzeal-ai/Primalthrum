@@ -15,6 +15,41 @@
   background: #fbfcf8;
 }
 
+.topbar-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+}
+
+.user-chip {
+  max-width: 220px;
+  overflow: hidden;
+  border: 1px solid #d6ddd7;
+  border-radius: 7px;
+  padding: 9px 11px;
+  background: #ffffff;
+  color: #47605a;
+  font-size: 13px;
+  font-weight: 700;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.auth-workspace {
+  display: grid;
+  place-items: center;
+  padding: 18px;
+}
+
+.auth-panel {
+  width: min(100%, 420px);
+  padding: 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
 .product {
   margin: 0 0 4px;
   color: #47605a;

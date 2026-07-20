@@ -1,19 +1,27 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
+  clearStoredSessionToken,
   createDocument,
   createAgent,
   generateAgentProject,
+  getCurrentSession,
+  getSetupStatus,
   indexDocument,
+  isUnauthorizedError,
   listAgents,
   listDocuments,
   listProviders,
   listSkills,
   listTools,
+  loginAdmin,
+  logoutAdmin,
+  setupAdmin,
   streamAgentRun,
 } from './api/client'
 import type {
   AgentRecord,
+  AuthUser,
   DocumentRecord,
   ProviderCatalog,
   RunStatus,
@@ -27,6 +35,18 @@ interface TimelineEvent extends StreamPayload {
   id: number
   event: string
   receivedAt: string
+}
+
+type AuthMode = 'checking' | 'setup' | 'login' | 'ready'
+
+interface AuthFormState {
+  email: string
+  password: string
+}
+
+const DEFAULT_AUTH_FORM: AuthFormState = {
+  email: 'admin@example.com',
+  password: '',
 }
 
 const DEFAULT_FORM = {
@@ -68,7 +88,15 @@ function statusLabel(status: RunStatus): string {
   return 'Idle'
 }
 
+function errorMessage(error: unknown, fallback: string): string {
+  return error instanceof Error ? error.message : fallback
+}
+
 export default function App() {
+  const [authMode, setAuthMode] = useState<AuthMode>('checking')
+  const [authForm, setAuthForm] = useState(DEFAULT_AUTH_FORM)
+  const [authMessage, setAuthMessage] = useState('Checking session')
+  const [authUser, setAuthUser] = useState<AuthUser | null>(null)
   const [form, setForm] = useState(DEFAULT_FORM)
   const [agentForm, setAgentForm] = useState(DEFAULT_AGENT_FORM)
   const [agents, setAgents] = useState<AgentRecord[]>([])
@@ -95,9 +123,17 @@ export default function App() {
   const selectedAgent = agents.find((agent) => agent.id === selectedAgentId) ?? null
 
   useEffect(() => {
+    void initializeAuth()
+  }, [])
+
+  useEffect(() => {
+    if (authMode !== 'ready') return
+
     void refreshAgents()
     void refreshBuilderCatalog()
-  }, [])
+    // Initial console data should load only when auth enters the ready state.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [authMode])
 
   const visibleArtifacts = useMemo(() => {
     return {
@@ -107,6 +143,90 @@ export default function App() {
       checks: summary.checks ?? [],
     }
   }, [summary])
+
+  async function initializeAuth() {
+    setAuthMode('checking')
+    setAuthMessage('Checking session')
+
+    try {
+      const setupStatus = await getSetupStatus()
+      if (setupStatus.needsSetup) {
+        setAuthMode('setup')
+        setAuthMessage('Create the first admin account')
+        return
+      }
+
+      const session = await getCurrentSession()
+      setAuthUser(session.user)
+      setAuthMode('ready')
+      setAuthMessage(`Signed in as ${session.user.email}`)
+    } catch (error) {
+      clearStoredSessionToken()
+      setAuthUser(null)
+      setAuthMode('login')
+      setAuthMessage(
+        isUnauthorizedError(error)
+          ? 'Sign in to continue'
+          : errorMessage(error, 'Unable to check session'),
+      )
+    }
+  }
+
+  async function handleAuthSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const email = authForm.email.trim()
+    const password = authForm.password
+
+    if (!email || !password) {
+      setAuthMessage('Email and password are required')
+      return
+    }
+
+    setAuthMessage(authMode === 'setup' ? 'Creating admin account' : 'Signing in')
+    try {
+      const response = authMode === 'setup'
+        ? await setupAdmin({ email, password })
+        : await loginAdmin({ email, password })
+      setAuthUser(response.user)
+      setAuthForm(DEFAULT_AUTH_FORM)
+      setAuthMode('ready')
+      setAuthMessage(`Signed in as ${response.user.email}`)
+    } catch (error) {
+      setAuthMessage(errorMessage(error, 'Authentication failed'))
+    }
+  }
+
+  async function handleLogout() {
+    await logoutAdmin()
+    clearAuthenticatedState()
+    setAuthMode('login')
+    setAuthMessage('Signed out')
+  }
+
+  function clearAuthenticatedState() {
+    setAuthUser(null)
+    setAgents([])
+    setSelectedAgentId(null)
+    setProviders(null)
+    setToolsCatalog([])
+    setSkillsCatalog([])
+    setDocuments([])
+    setEvents([])
+    setSummary({})
+    setStatus('idle')
+  }
+
+  function handleRequestError(error: unknown, fallback: string): string {
+    if (isUnauthorizedError(error)) {
+      clearStoredSessionToken()
+      clearAuthenticatedState()
+      setAuthMode('login')
+      setAuthMessage('Session expired. Sign in again.')
+      return 'Session expired. Sign in again.'
+    }
+
+    return errorMessage(error, fallback)
+  }
 
   async function refreshAgents() {
     setAgentsStatus('loading')
@@ -118,7 +238,7 @@ export default function App() {
       setAgentsMessage(`${nextAgents.length} agents available`)
     } catch (error) {
       setAgentsStatus('error')
-      setAgentsMessage(error instanceof Error ? error.message : 'Failed to load agents')
+      setAgentsMessage(handleRequestError(error, 'Failed to load agents'))
     }
   }
 
@@ -138,7 +258,7 @@ export default function App() {
       setBuilderMessage('Builder options ready')
     } catch (error) {
       setCatalogStatus('error')
-      setBuilderMessage(error instanceof Error ? error.message : 'Failed to load builder options')
+      setBuilderMessage(handleRequestError(error, 'Failed to load builder options'))
     }
   }
 
@@ -175,7 +295,7 @@ export default function App() {
       setAgentsMessage(`Created ${created.name}`)
     } catch (error) {
       setAgentsStatus('error')
-      setAgentsMessage(error instanceof Error ? error.message : 'Failed to create agent')
+      setAgentsMessage(handleRequestError(error, 'Failed to create agent'))
     }
   }
 
@@ -195,7 +315,7 @@ export default function App() {
       setBuilderMessage(`Generated ${generated.files.length} files`)
     } catch (error) {
       setCatalogStatus('error')
-      setBuilderMessage(error instanceof Error ? error.message : 'Failed to generate project')
+      setBuilderMessage(handleRequestError(error, 'Failed to generate project'))
     }
   }
 
@@ -211,7 +331,7 @@ export default function App() {
       setKnowledgeMessage(`${nextDocuments.length} documents registered`)
     } catch (error) {
       setKnowledgeStatus('error')
-      setKnowledgeMessage(error instanceof Error ? error.message : 'Failed to load documents')
+      setKnowledgeMessage(handleRequestError(error, 'Failed to load documents'))
     }
   }
 
@@ -240,7 +360,7 @@ export default function App() {
       await refreshDocuments(selectedAgentId)
     } catch (error) {
       setKnowledgeStatus('error')
-      setKnowledgeMessage(error instanceof Error ? error.message : 'Failed to register document')
+      setKnowledgeMessage(handleRequestError(error, 'Failed to register document'))
     }
   }
 
@@ -258,7 +378,7 @@ export default function App() {
       setKnowledgeMessage(`Indexed ${indexed.filename}`)
     } catch (error) {
       setKnowledgeStatus('error')
-      setKnowledgeMessage(error instanceof Error ? error.message : 'Failed to index document')
+      setKnowledgeMessage(handleRequestError(error, 'Failed to index document'))
     }
   }
 
@@ -344,7 +464,7 @@ export default function App() {
           {
             id: eventIdRef.current++,
             event: 'agent.error',
-            message: error instanceof Error ? error.message : 'Stream failed.',
+            message: handleRequestError(error, 'Stream failed.'),
             status: 'error',
             receivedAt: new Date().toLocaleTimeString(),
           },
@@ -362,6 +482,53 @@ export default function App() {
     setStatus('idle')
   }
 
+  if (authMode !== 'ready') {
+    return (
+      <main className="workspace auth-workspace">
+        <form className="panel auth-panel" onSubmit={handleAuthSubmit}>
+          <div className="panel-heading">
+            <p className="product">Primalthrum</p>
+            <h1>{authMode === 'setup' ? 'Create Admin' : 'Admin Login'}</h1>
+            <p>{authMessage}</p>
+          </div>
+
+          <label>
+            <span>Email</span>
+            <input
+              autoComplete="email"
+              disabled={authMode === 'checking'}
+              onChange={(event) => setAuthForm((current) => ({
+                ...current,
+                email: event.target.value,
+              }))}
+              type="email"
+              value={authForm.email}
+            />
+          </label>
+
+          <label>
+            <span>Password</span>
+            <input
+              autoComplete={authMode === 'setup' ? 'new-password' : 'current-password'}
+              disabled={authMode === 'checking'}
+              minLength={12}
+              onChange={(event) => setAuthForm((current) => ({
+                ...current,
+                password: event.target.value,
+              }))}
+              type="password"
+              value={authForm.password}
+            />
+          </label>
+
+          <button className="primary" disabled={authMode === 'checking'} type="submit">
+            {authMode === 'setup' ? 'Create Admin' : 'Sign In'}
+          </button>
+        </form>
+      </main>
+    )
+  }
+
   return (
     <main className="workspace">
       <header className="topbar">
@@ -369,9 +536,15 @@ export default function App() {
           <p className="product">Primalthrum</p>
           <h1>Agent R&D Console</h1>
         </div>
-        <div className={`status ${status}`}>
-          <span />
-          {statusLabel(status)}
+        <div className="topbar-actions">
+          <div className="user-chip">{authUser?.email}</div>
+          <div className={`status ${status}`}>
+            <span />
+            {statusLabel(status)}
+          </div>
+          <button className="secondary compact" onClick={() => void handleLogout()} type="button">
+            Sign Out
+          </button>
         </div>
       </header>
 
