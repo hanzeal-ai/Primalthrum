@@ -1,6 +1,8 @@
 import type {
   AgentRecord,
   CreateAgentInput,
+  CreateDocumentInput,
+  DocumentRecord,
   GeneratedProject,
   ParsedSseEvent,
   ProviderCatalog,
@@ -27,6 +29,30 @@ export async function generateAgentProject(agentId: number): Promise<GeneratedPr
   return apiFetch<GeneratedProject>(`/api/agents/${agentId}/generate`, {
     method: 'POST',
   })
+}
+
+export async function listDocuments(agentId: number): Promise<DocumentRecord[]> {
+  return apiFetch<DocumentRecord[]>(`/api/agents/${agentId}/documents`)
+}
+
+export async function createDocument(
+  agentId: number,
+  input: CreateDocumentInput,
+): Promise<DocumentRecord> {
+  return apiFetch<DocumentRecord>(`/api/agents/${agentId}/documents`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function indexDocument(
+  agentId: number,
+  documentId: number,
+): Promise<DocumentRecord> {
+  return apiFetch<DocumentRecord>(
+    `/api/agents/${agentId}/documents/${documentId}/index`,
+    { method: 'POST' },
+  )
 }
 
 export async function listProviders(): Promise<ProviderCatalog> {

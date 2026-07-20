@@ -304,9 +304,6 @@ Still needed:
 - `POST /api/runs`
 - `GET /api/runs/:id`
 - `GET /api/runs/:id/events`
-- `POST /api/agents/:id/documents`
-- `POST /api/agents/:id/documents/:documentId/index`
-- `GET /api/agents/:id/documents`
 - `GET /api/agents/:id/memory`
 - `DELETE /api/agents/:id/memory/:memoryId`
 
@@ -1177,7 +1174,7 @@ Field meanings:
 
 ### P6-05 Knowledge View
 
-- Status: Todo
+- Status: Done
 - Goal: Add document registration and indexing status UI.
 - Dependencies: P6-04, P5-01
 - Inputs: `web/src/**`, document APIs

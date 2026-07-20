@@ -24,6 +24,21 @@ export interface GeneratedProject {
   files: string[]
 }
 
+export interface DocumentRecord {
+  id: number
+  agentId: number
+  filename: string
+  hash: string
+  indexStatus: string
+  collection: string
+}
+
+export interface CreateDocumentInput {
+  filename: string
+  content: string
+  collection?: string
+}
+
 export interface CreateAgentInput {
   name: string
   description?: string

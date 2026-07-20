@@ -1,9 +1,12 @@
 import { useEffect, useMemo, useRef, useState } from 'react'
 import type { FormEvent } from 'react'
 import {
+  createDocument,
   createAgent,
   generateAgentProject,
+  indexDocument,
   listAgents,
+  listDocuments,
   listProviders,
   listSkills,
   listTools,
@@ -11,6 +14,7 @@ import {
 } from './api/client'
 import type {
   AgentRecord,
+  DocumentRecord,
   ProviderCatalog,
   RunStatus,
   SkillInfo,
@@ -51,6 +55,12 @@ const DEFAULT_AGENT_FORM: AgentFormState = {
   enabledSkills: ['research'],
 }
 
+const DEFAULT_DOCUMENT_FORM = {
+  filename: 'guide.md',
+  collection: 'research',
+  content: '# Guide\nAdd retrieval-ready knowledge here.',
+}
+
 function statusLabel(status: RunStatus): string {
   if (status === 'running') return 'Running'
   if (status === 'done') return 'Complete'
@@ -70,6 +80,10 @@ export default function App() {
   const [skillsCatalog, setSkillsCatalog] = useState<SkillInfo[]>([])
   const [catalogStatus, setCatalogStatus] = useState<'loading' | 'ready' | 'error'>('loading')
   const [builderMessage, setBuilderMessage] = useState('Loading builder options')
+  const [documents, setDocuments] = useState<DocumentRecord[]>([])
+  const [documentForm, setDocumentForm] = useState(DEFAULT_DOCUMENT_FORM)
+  const [knowledgeStatus, setKnowledgeStatus] = useState<'idle' | 'loading' | 'error'>('idle')
+  const [knowledgeMessage, setKnowledgeMessage] = useState('Select an agent to manage documents')
   const [events, setEvents] = useState<TimelineEvent[]>([])
   const [status, setStatus] = useState<RunStatus>('idle')
   const [summary, setSummary] = useState<StreamPayload>({})
@@ -156,6 +170,7 @@ export default function App() {
       setAgentForm(DEFAULT_AGENT_FORM)
       setForm((current) => ({ ...current, agent: created.name }))
       setSelectedAgentId(created.id)
+      await refreshDocuments(created.id)
       setAgentsStatus('ready')
       setAgentsMessage(`Created ${created.name}`)
     } catch (error) {
@@ -167,6 +182,7 @@ export default function App() {
   function selectAgent(agent: AgentRecord) {
     setSelectedAgentId(agent.id)
     setForm((current) => ({ ...current, agent: agent.name }))
+    void refreshDocuments(agent.id)
   }
 
   async function handleGenerateAgent() {
@@ -180,6 +196,69 @@ export default function App() {
     } catch (error) {
       setCatalogStatus('error')
       setBuilderMessage(error instanceof Error ? error.message : 'Failed to generate project')
+    }
+  }
+
+  async function refreshDocuments(agentId = selectedAgentId) {
+    if (!agentId) return
+
+    setKnowledgeStatus('loading')
+    setKnowledgeMessage('Loading documents')
+    try {
+      const nextDocuments = await listDocuments(agentId)
+      setDocuments(nextDocuments)
+      setKnowledgeStatus('idle')
+      setKnowledgeMessage(`${nextDocuments.length} documents registered`)
+    } catch (error) {
+      setKnowledgeStatus('error')
+      setKnowledgeMessage(error instanceof Error ? error.message : 'Failed to load documents')
+    }
+  }
+
+  async function handleCreateDocument(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    if (!selectedAgentId) {
+      setKnowledgeStatus('error')
+      setKnowledgeMessage('Select an agent before registering documents.')
+      return
+    }
+
+    const filename = documentForm.filename.trim()
+    const content = documentForm.content.trim()
+    const collection = documentForm.collection.trim()
+    if (!filename || !content) {
+      setKnowledgeStatus('error')
+      setKnowledgeMessage('Filename and content are required.')
+      return
+    }
+
+    setKnowledgeStatus('loading')
+    setKnowledgeMessage('Registering document')
+    try {
+      await createDocument(selectedAgentId, { filename, content, collection })
+      setDocumentForm(DEFAULT_DOCUMENT_FORM)
+      await refreshDocuments(selectedAgentId)
+    } catch (error) {
+      setKnowledgeStatus('error')
+      setKnowledgeMessage(error instanceof Error ? error.message : 'Failed to register document')
+    }
+  }
+
+  async function handleIndexDocument(documentId: number) {
+    if (!selectedAgentId) return
+
+    setKnowledgeStatus('loading')
+    setKnowledgeMessage('Indexing document')
+    try {
+      const indexed = await indexDocument(selectedAgentId, documentId)
+      setDocuments((current) => current.map((document) => (
+        document.id === indexed.id ? indexed : document
+      )))
+      setKnowledgeStatus('idle')
+      setKnowledgeMessage(`Indexed ${indexed.filename}`)
+    } catch (error) {
+      setKnowledgeStatus('error')
+      setKnowledgeMessage(error instanceof Error ? error.message : 'Failed to index document')
     }
   }
 
@@ -463,6 +542,106 @@ export default function App() {
               Generate
             </button>
           </div>
+        </form>
+      </section>
+
+      <section className="knowledge-shell">
+        <section className="panel knowledge-panel">
+          <div className="panel-heading inline">
+            <div>
+              <h2>Knowledge</h2>
+              <p>{knowledgeMessage}</p>
+            </div>
+            <button
+              className="secondary compact"
+              disabled={!selectedAgentId || knowledgeStatus === 'loading'}
+              onClick={() => void refreshDocuments()}
+              type="button"
+            >
+              Refresh
+            </button>
+          </div>
+
+          <div className="document-list">
+            {documents.length === 0 ? (
+              <div className="inline-empty">No documents registered</div>
+            ) : (
+              documents.map((document) => (
+                <article className="document-item" key={document.id}>
+                  <div>
+                    <strong>{document.filename}</strong>
+                    <small>{document.collection}</small>
+                    <code>{document.hash.slice(0, 12)}</code>
+                  </div>
+                  <div className="document-actions">
+                    <em>{document.indexStatus}</em>
+                    <button
+                      className="secondary compact"
+                      disabled={knowledgeStatus === 'loading'}
+                      onClick={() => void handleIndexDocument(document.id)}
+                      type="button"
+                    >
+                      Index
+                    </button>
+                  </div>
+                </article>
+              ))
+            )}
+          </div>
+        </section>
+
+        <form className="panel document-form-panel" onSubmit={handleCreateDocument}>
+          <div className="panel-heading">
+            <h2>Register Document</h2>
+            <p>{selectedAgent?.name ?? 'Choose an agent first'}</p>
+          </div>
+
+          <div className="builder-grid">
+            <label>
+              <span>Filename</span>
+              <input
+                value={documentForm.filename}
+                onChange={(event) => setDocumentForm((current) => ({
+                  ...current,
+                  filename: event.target.value,
+                }))}
+                placeholder="guide.md"
+              />
+            </label>
+
+            <label>
+              <span>Collection</span>
+              <input
+                value={documentForm.collection}
+                onChange={(event) => setDocumentForm((current) => ({
+                  ...current,
+                  collection: event.target.value,
+                }))}
+                placeholder="research"
+              />
+            </label>
+          </div>
+
+          <label>
+            <span>Content</span>
+            <textarea
+              value={documentForm.content}
+              onChange={(event) => setDocumentForm((current) => ({
+                ...current,
+                content: event.target.value,
+              }))}
+              rows={4}
+              placeholder="Paste knowledge text for indexing."
+            />
+          </label>
+
+          <button
+            className="primary"
+            disabled={!selectedAgentId || knowledgeStatus === 'loading'}
+            type="submit"
+          >
+            Register
+          </button>
         </form>
       </section>
 

@@ -101,6 +101,13 @@ h3 {
   padding: 16px 16px 0;
 }
 
+.knowledge-shell {
+  display: grid;
+  grid-template-columns: minmax(420px, 1fr) minmax(320px, 420px);
+  gap: 16px;
+  padding: 16px 16px 0;
+}
+
 .panel {
   min-width: 0;
   border: 1px solid #d5dbd3;
@@ -113,12 +120,16 @@ h3 {
 .timeline-panel,
 .summary-panel,
 .agents-panel,
-.create-agent-panel {
+.create-agent-panel,
+.knowledge-panel,
+.document-form-panel {
   padding: 18px;
 }
 
 .agents-panel,
-.create-agent-panel {
+.create-agent-panel,
+.knowledge-panel,
+.document-form-panel {
   display: flex;
   flex-direction: column;
   gap: 14px;
@@ -319,6 +330,57 @@ button:disabled {
   place-content: center;
   color: #66736d;
   font-size: 14px;
+}
+
+.document-list {
+  display: grid;
+  gap: 10px;
+}
+
+.document-item {
+  min-height: 74px;
+  padding: 11px;
+  border: 1px solid #d7ded8;
+  border-radius: 8px;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: 12px;
+  background: #fbfcf8;
+}
+
+.document-item > div:first-child {
+  min-width: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 7px;
+}
+
+.document-item strong,
+.document-item small {
+  overflow-wrap: anywhere;
+}
+
+.document-item strong {
+  font-size: 14px;
+  line-height: 1.3;
+}
+
+.document-item small,
+.document-item em {
+  padding: 3px 7px;
+  border-radius: 6px;
+  background: #eef2ef;
+  color: #47605a;
+  font-size: 12px;
+  font-style: normal;
+  font-weight: 700;
+}
+
+.document-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .builder-grid {
@@ -531,7 +593,8 @@ code {
 }
 
 @media (max-width: 1120px) {
-  .management-shell {
+  .management-shell,
+  .knowledge-shell {
     grid-template-columns: 1fr;
   }
 
@@ -555,7 +618,8 @@ code {
     padding: 10px;
   }
 
-  .management-shell {
+  .management-shell,
+  .knowledge-shell {
     padding: 10px 10px 0;
   }
 
@@ -566,6 +630,14 @@ code {
   .builder-grid,
   .builder-actions {
     grid-template-columns: 1fr;
+  }
+
+  .document-item {
+    grid-template-columns: 1fr;
+  }
+
+  .document-actions {
+    justify-content: space-between;
   }
 
   .panel-heading.inline {
