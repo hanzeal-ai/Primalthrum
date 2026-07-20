@@ -954,7 +954,7 @@ Field meanings:
 
 ### P3-01 SQLiteMemory Provider
 
-- Status: Todo
+- Status: Done
 - Goal: Implement durable SQLite-backed memory summaries.
 - Dependencies: P2-05
 - Inputs: `agent/runtime/memory.py`, `agent/tests/test_runtime_registry.py`

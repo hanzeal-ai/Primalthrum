@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from .cache import CacheProvider, MemoryCache, NullCache
 from .config import AgentRuntimeConfig
 from .llm import LLMProvider, MockLLMProvider
-from .memory import MemoryProvider, NullMemory
+from .memory import MemoryProvider, NullMemory, SQLiteMemory
 from .rag import InMemoryRagProvider, NullRagProvider, RagProvider
 from .registry import Registry
 from .skills import SkillDefinition
@@ -30,6 +30,8 @@ def create_runtime(config: AgentRuntimeConfig) -> AgentRuntime:
     memory_registry = Registry[MemoryProvider]()
     memory_registry.register("null", NullMemory())
     memory_registry.register("none", NullMemory())
+    if config.memory_provider == "sqlite":
+        memory_registry.register("sqlite", SQLiteMemory(config.memory_path))
 
     cache_registry = Registry[CacheProvider]()
     cache_registry.register("null", NullCache())

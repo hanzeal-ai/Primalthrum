@@ -1,4 +1,6 @@
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from runtime import AgentRuntimeConfig, create_runtime
 
@@ -27,6 +29,37 @@ class RuntimeRegistryTest(unittest.TestCase):
         self.assertEqual(runtime.tools.names(), [])
         self.assertEqual(runtime.skills.names(), [])
         self.assertEqual(runtime.rag.retrieve("anything"), [])
+
+    def test_sqlite_memory_persists_summaries_by_path(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            memory_path = str(Path(temp_dir) / "memory.sqlite3")
+            runtime = create_runtime(
+                AgentRuntimeConfig(
+                    agent_name="ResearchAgent",
+                    memory_provider="sqlite",
+                    memory_path=memory_path,
+                )
+            )
+
+            self.assertEqual(runtime.memory.name, "sqlite")
+            runtime.memory.write_summary("run-1", "accepted goal")
+            runtime.memory.write_summary("run-2", "finished graph")
+
+            reloaded = create_runtime(
+                AgentRuntimeConfig(
+                    agent_name="ResearchAgent",
+                    memory_provider="sqlite",
+                    memory_path=memory_path,
+                )
+            )
+
+            self.assertEqual(
+                reloaded.memory.list_summaries(),
+                [
+                    {"run_id": "run-1", "summary": "accepted goal"},
+                    {"run_id": "run-2", "summary": "finished graph"},
+                ],
+            )
 
 
 if __name__ == "__main__":
