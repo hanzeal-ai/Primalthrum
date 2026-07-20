@@ -76,6 +76,8 @@ fi
 info "Installing Agent dependencies"
 "$VENV/bin/python" -m pip install -q --upgrade pip
 "$VENV/bin/python" -m pip install -q -r "$ROOT/agent/requirements.txt"
+# Keep local startup on pure-Python uvicorn paths; these optional accelerators can hang on macOS loader checks.
+"$VENV/bin/python" -m pip uninstall -q -y watchfiles httptools uvloop >/dev/null 2>&1 || true
 
 for dir in server web; do
   info "Installing $dir dependencies"
@@ -94,7 +96,7 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 info "Starting Agent on http://127.0.0.1:$AGENT_PORT"
-(cd "$ROOT/agent" && "$VENV/bin/python" -m uvicorn main:app --host 0.0.0.0 --port "$AGENT_PORT" --reload) &
+(cd "$ROOT/agent" && "$VENV/bin/python" -m uvicorn main:app --host 0.0.0.0 --port "$AGENT_PORT") &
 PIDS+=("$!")
 
 for attempt in $(seq 1 20); do
@@ -110,7 +112,7 @@ done
 
 SERVER_AGENT_BASE_URL="${AGENT_BASE_URL:-http://127.0.0.1:$AGENT_PORT}"
 info "Starting Node server on http://127.0.0.1:$SERVER_PORT"
-(cd "$ROOT/server" && AGENT_BASE_URL="$SERVER_AGENT_BASE_URL" PORT="$SERVER_PORT" "$PNPM_BIN" dev) &
+(cd "$ROOT/server" && AGENT_BASE_URL="$SERVER_AGENT_BASE_URL" PORT="$SERVER_PORT" "$PNPM_BIN" exec ts-node index.ts) &
 PIDS+=("$!")
 
 for attempt in $(seq 1 20); do
