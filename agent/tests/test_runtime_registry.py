@@ -5,7 +5,12 @@ from tempfile import TemporaryDirectory
 from runtime import AgentRuntimeConfig, create_runtime
 from runtime.llm import MockLLMProvider
 from runtime.rag import InMemoryRagProvider, chunk_text
-from runtime.tools import ToolManifest, validate_tool_manifest
+from runtime.tools import (
+    ToolManifest,
+    ToolPolicy,
+    is_tool_allowed,
+    validate_tool_manifest,
+)
 
 
 class RuntimeRegistryTest(unittest.TestCase):
@@ -40,6 +45,23 @@ class RuntimeRegistryTest(unittest.TestCase):
 
         with self.assertRaisesRegex(ValueError, "permissions"):
             validate_tool_manifest(manifest)
+
+    def test_dangerous_tools_are_disabled_by_default(self) -> None:
+        manifest = ToolManifest(
+            name="shell_command",
+            description="Run shell commands.",
+            input_schema={"type": "object"},
+            permissions=["process:exec"],
+            dangerous=True,
+        )
+
+        self.assertFalse(is_tool_allowed(manifest, ToolPolicy()))
+        self.assertTrue(
+            is_tool_allowed(
+                manifest,
+                ToolPolicy(allow_dangerous_tools=True),
+            )
+        )
 
     def test_file_reader_allows_only_configured_roots(self) -> None:
         with TemporaryDirectory() as temp_dir:

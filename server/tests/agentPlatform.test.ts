@@ -553,11 +553,55 @@ test('run stream events can be inserted and replayed', async () => {
   });
   assert.ok(event.createdAt);
 
+  const createToolEventResponse = await fetch(`${baseUrl}/api/runs/${run.id}/events`, {
+    method: 'POST',
+    headers: jsonAuthHeaders(),
+    body: JSON.stringify({
+      eventType: 'agent.tool.called',
+      node: 'act_with_tools',
+      payload: {
+        tool: 'file_reader',
+        status: 'allowed',
+        dangerous: false,
+        message: 'file_reader executed',
+      },
+    }),
+  });
+  assert.equal(createToolEventResponse.status, 201);
+  const toolEvent = await createToolEventResponse.json() as { id: number };
+
   const listEventsResponse = await fetch(`${baseUrl}/api/runs/${run.id}/events`, {
     headers: authHeaders,
   });
   assert.equal(listEventsResponse.status, 200);
   const events = await listEventsResponse.json() as Array<{ id: number; eventType: string }>;
-  assert.deepEqual(events.map((item) => item.id), [event.id]);
+  assert.deepEqual(events.map((item) => item.id), [event.id, toolEvent.id]);
   assert.equal(events[0]?.eventType, 'agent.node.completed');
+
+  const auditResponse = await fetch(`${baseUrl}/api/audit/tool-calls?runId=${run.id}`, {
+    headers: authHeaders,
+  });
+  assert.equal(auditResponse.status, 200);
+  const auditRecords = await auditResponse.json() as Array<{
+    runId: number;
+    eventId: number;
+    toolName: string;
+    status: string;
+    dangerous: boolean;
+    node: string;
+    payload: Record<string, unknown>;
+  }>;
+  assert.equal(auditRecords.length, 1);
+  assert.equal(auditRecords[0]?.runId, run.id);
+  assert.equal(auditRecords[0]?.eventId, toolEvent.id);
+  assert.equal(auditRecords[0]?.toolName, 'file_reader');
+  assert.equal(auditRecords[0]?.status, 'allowed');
+  assert.equal(auditRecords[0]?.dangerous, false);
+  assert.equal(auditRecords[0]?.node, 'act_with_tools');
+  assert.deepEqual(auditRecords[0]?.payload, {
+    tool: 'file_reader',
+    status: 'allowed',
+    dangerous: false,
+    message: 'file_reader executed',
+  });
 });

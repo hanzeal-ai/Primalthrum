@@ -30,6 +30,7 @@ import {
   StreamEventRepository,
   type CreateStreamEventInput,
 } from './services/streamEventRepository';
+import { ToolAuditRepository } from './services/toolAuditRepository';
 import {
   resolveStreamRequest,
   StreamRequestError,
@@ -61,6 +62,16 @@ function normalizePassword(password: unknown): string {
   return password;
 }
 
+function parseOptionalPositiveInteger(value: unknown): number | undefined | null {
+  if (typeof value === 'undefined') {
+    return undefined;
+  }
+
+  const candidate = Array.isArray(value) ? value[0] : value;
+  const parsed = Number(candidate);
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
 export function createApp(options: AppOptions = {}): Koa {
   const app = new Koa();
   const router = new Router();
@@ -76,6 +87,7 @@ export function createApp(options: AppOptions = {}): Koa {
   const userRepository = new UserRepository(db);
   const sessionRepository = new SessionRepository(db);
   const providerConfigRepository = new ProviderConfigRepository(db);
+  const toolAuditRepository = new ToolAuditRepository(db);
 
   app.use(async (ctx, next) => {
     const origin = ctx.get('origin');
@@ -385,6 +397,7 @@ export function createApp(options: AppOptions = {}): Koa {
         node: body.node,
         payload: body.payload,
       });
+      toolAuditRepository.recordStreamEvent(created);
       ctx.status = 201;
       ctx.body = created;
     } catch (error) {
@@ -404,6 +417,17 @@ export function createApp(options: AppOptions = {}): Koa {
     }
 
     ctx.body = streamEventRepository.listByRunId(runId);
+  });
+
+  router.get('/api/audit/tool-calls', (ctx) => {
+    const runId = parseOptionalPositiveInteger(ctx.query.runId);
+    if (runId === null) {
+      ctx.status = 400;
+      ctx.body = { error: 'runId must be a positive integer' };
+      return;
+    }
+
+    ctx.body = toolAuditRepository.list(runId);
   });
 
   async function handleStream(ctx: Koa.Context): Promise<void> {
@@ -452,12 +476,13 @@ export function createApp(options: AppOptions = {}): Koa {
 
       await pipeSseStream(upstream, ctx.res, streamRequest.runId
         ? (event) => {
-            streamEventRepository.create({
+            const created = streamEventRepository.create({
               runId: streamRequest.runId as number,
               eventType: event.eventType,
               node: event.node,
               payload: event.payload,
             });
+            toolAuditRepository.recordStreamEvent(created);
           }
         : undefined);
     } catch (error) {

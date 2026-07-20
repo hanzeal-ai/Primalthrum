@@ -1315,7 +1315,7 @@ Field meanings:
 
 ### P9-02 Dangerous Tool Policy And Audit
 
-- Status: Todo
+- Status: Done
 - Goal: Enforce dangerous tool policy and audit tool calls.
 - Dependencies: P4-01, P8-02
 - Inputs: `agent/runtime/tools.py`, `server/src/db/schema.ts`, stream APIs

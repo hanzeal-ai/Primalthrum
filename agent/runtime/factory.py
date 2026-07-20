@@ -9,7 +9,13 @@ from .memory import MemoryProvider, NullMemory, SQLiteMemory
 from .rag import InMemoryRagProvider, NullRagProvider, RagProvider
 from .registry import Registry
 from .skills import SkillDefinition, load_skill_packages
-from .tools import FileReaderTool, ToolDefinition, validate_tool_definition
+from .tools import (
+    FileReaderTool,
+    ToolDefinition,
+    ToolPolicy,
+    is_tool_allowed,
+    validate_tool_definition,
+)
 
 
 @dataclass
@@ -52,9 +58,14 @@ def create_runtime(config: AgentRuntimeConfig) -> AgentRuntime:
         ),
     }
     enabled_tools = config.enabled_tools
+    tool_policy = ToolPolicy(allow_dangerous_tools=config.allow_dangerous_tools)
     for name, tool in available_tools.items():
-        if enabled_tools is None or name in enabled_tools:
-            tools.register(name, validate_tool_definition(tool))
+        tool = validate_tool_definition(tool)
+        if (
+            (enabled_tools is None or name in enabled_tools)
+            and is_tool_allowed(tool.manifest, tool_policy)
+        ):
+            tools.register(name, tool)
 
     skills = Registry[SkillDefinition]()
     available_skills = load_skill_packages()

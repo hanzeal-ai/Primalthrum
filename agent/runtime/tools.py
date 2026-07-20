@@ -14,6 +14,16 @@ class ToolManifest:
     dangerous: bool
 
 
+@dataclass(frozen=True)
+class ToolPolicy:
+    allow_dangerous_tools: bool = False
+
+
+def is_tool_allowed(manifest: ToolManifest, policy: ToolPolicy) -> bool:
+    validate_tool_manifest(manifest)
+    return policy.allow_dangerous_tools or not manifest.dangerous
+
+
 def validate_tool_manifest(manifest: ToolManifest) -> ToolManifest:
     if not manifest.name.strip():
         raise ValueError("tool manifest name is required")

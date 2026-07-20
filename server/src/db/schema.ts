@@ -126,6 +126,22 @@ export function initializeSchema(db: SqliteDatabase): void {
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
     );
+
+    CREATE TABLE IF NOT EXISTS tool_audit_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL DEFAULT ${DEFAULT_WORKSPACE_ID},
+      run_id INTEGER NOT NULL,
+      event_id INTEGER NOT NULL UNIQUE,
+      tool_name TEXT NOT NULL,
+      status TEXT NOT NULL,
+      dangerous INTEGER NOT NULL DEFAULT 0,
+      node TEXT NOT NULL DEFAULT '',
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+      FOREIGN KEY(run_id) REFERENCES runs(id) ON DELETE CASCADE,
+      FOREIGN KEY(event_id) REFERENCES stream_events(id) ON DELETE CASCADE
+    );
   `);
 
   const defaultWorkspaceColumn = `INTEGER NOT NULL DEFAULT ${DEFAULT_WORKSPACE_ID}`;

@@ -34,6 +34,8 @@ before(async () => {
       res.write('data: {"node":"run","message":"started","status":"running"}\n\n');
       res.write('event: agent.node.completed\n');
       res.write('data: {"node":"intake","message":"accepted"}\n\n');
+      res.write('event: agent.tool.called\n');
+      res.write('data: {"node":"act_with_tools","tool":"file_reader","status":"allowed","dangerous":false,"message":"file_reader executed"}\n\n');
       res.write('event: agent.run.completed\n');
       res.end('data: {"status":"done","agent":"TestAgent"}\n\n');
       return;
@@ -157,9 +159,35 @@ test('POST /api/stream can run by agentId and persist proxied events', async () 
   assert.deepEqual(events.map((event) => event.eventType), [
     'agent.run.started',
     'agent.node.completed',
+    'agent.tool.called',
     'agent.run.completed',
   ]);
   assert.equal(events[0]?.node, 'run');
   assert.equal(events[1]?.node, 'intake');
-  assert.equal(events[2]?.payload.status, 'done');
+  assert.equal(events[2]?.node, 'act_with_tools');
+  assert.equal(events[3]?.payload.status, 'done');
+
+  const auditResponse = await fetch(`${appBaseUrl}/api/audit/tool-calls?runId=${runId}`, {
+    headers: authHeaders,
+  });
+  assert.equal(auditResponse.status, 200);
+  const auditRecords = await auditResponse.json() as Array<{
+    runId: number;
+    toolName: string;
+    status: string;
+    dangerous: boolean;
+  }>;
+  assert.deepEqual(auditRecords.map((record) => ({
+    runId: record.runId,
+    toolName: record.toolName,
+    status: record.status,
+    dangerous: record.dangerous,
+  })), [
+    {
+      runId,
+      toolName: 'file_reader',
+      status: 'allowed',
+      dangerous: false,
+    },
+  ]);
 });
