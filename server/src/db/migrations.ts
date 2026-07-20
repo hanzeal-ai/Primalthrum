@@ -1,4 +1,5 @@
-import { SqliteDatabase, sqlValue } from './sqlite';
+import { type DatabaseAdapter } from './adapter';
+import { sqlValue } from './sqlite';
 import {
   DEFAULT_WORKSPACE_ID,
   DEFAULT_WORKSPACE_NAME,
@@ -7,7 +8,7 @@ import {
 
 export interface Migration {
   id: string;
-  up: (db: SqliteDatabase) => void;
+  up: (db: DatabaseAdapter) => void;
 }
 
 export const MIGRATIONS: Migration[] = [
@@ -33,7 +34,7 @@ export const MIGRATIONS: Migration[] = [
   },
 ];
 
-export function runMigrations(db: SqliteDatabase): void {
+export function runMigrations(db: DatabaseAdapter): void {
   ensureMigrationTable(db);
   const applied = new Set(
     db.query<{ id: string }>('SELECT id FROM schema_migrations;')
@@ -53,7 +54,7 @@ export function runMigrations(db: SqliteDatabase): void {
   }
 }
 
-function ensureMigrationTable(db: SqliteDatabase): void {
+function ensureMigrationTable(db: DatabaseAdapter): void {
   db.run(`
     CREATE TABLE IF NOT EXISTS schema_migrations (
       id TEXT PRIMARY KEY,
@@ -62,7 +63,7 @@ function ensureMigrationTable(db: SqliteDatabase): void {
   `);
 }
 
-function applyPlatformMetadata(db: SqliteDatabase): void {
+function applyPlatformMetadata(db: DatabaseAdapter): void {
   db.run(`
     PRAGMA foreign_keys = ON;
 
@@ -158,7 +159,7 @@ function applyPlatformMetadata(db: SqliteDatabase): void {
   backfillDefaultWorkspace(db);
 }
 
-function applyAdminSessions(db: SqliteDatabase): void {
+function applyAdminSessions(db: DatabaseAdapter): void {
   db.run(`
     CREATE TABLE IF NOT EXISTS users (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -185,7 +186,7 @@ function applyAdminSessions(db: SqliteDatabase): void {
   `);
 }
 
-function applySecretReferences(db: SqliteDatabase): void {
+function applySecretReferences(db: DatabaseAdapter): void {
   db.run(`
     CREATE TABLE IF NOT EXISTS secrets (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -201,7 +202,7 @@ function applySecretReferences(db: SqliteDatabase): void {
   `);
 }
 
-function applyToolAuditLogs(db: SqliteDatabase): void {
+function applyToolAuditLogs(db: DatabaseAdapter): void {
   db.run(`
     CREATE TABLE IF NOT EXISTS tool_audit_logs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -221,7 +222,7 @@ function applyToolAuditLogs(db: SqliteDatabase): void {
   `);
 }
 
-function applyBackgroundJobs(db: SqliteDatabase): void {
+function applyBackgroundJobs(db: DatabaseAdapter): void {
   db.run(`
     CREATE TABLE IF NOT EXISTS jobs (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -244,7 +245,7 @@ function applyBackgroundJobs(db: SqliteDatabase): void {
 }
 
 function ensureColumn(
-  db: SqliteDatabase,
+  db: DatabaseAdapter,
   tableName: string,
   columnName: string,
   definition: string,
@@ -257,7 +258,7 @@ function ensureColumn(
   db.run(`ALTER TABLE ${tableName} ADD COLUMN ${columnName} ${definition};`);
 }
 
-function backfillDefaultWorkspace(db: SqliteDatabase): void {
+function backfillDefaultWorkspace(db: DatabaseAdapter): void {
   db.run(`
     UPDATE agents
     SET workspace_id = ${DEFAULT_WORKSPACE_ID}

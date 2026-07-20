@@ -2,9 +2,11 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
+import { type DatabaseAdapter } from './adapter';
+
 export type SqlValue = string | number | boolean | null;
 
-export class SqliteDatabase {
+export class SqliteDatabase implements DatabaseAdapter {
   constructor(private readonly dbPath: string) {
     mkdirSync(dirname(dbPath), { recursive: true });
   }

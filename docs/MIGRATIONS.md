@@ -17,3 +17,5 @@ TS_NODE_TRANSPILE_ONLY=1 node --require ts-node/register src/db/migrate.ts /abso
 ```
 
 The runner records applied migration IDs in `schema_migrations` and can be run repeatedly.
+
+See [Postgres Persistence Path](POSTGRES_PERSISTENCE.md) before adding migrations that rely on SQLite-only SQL.

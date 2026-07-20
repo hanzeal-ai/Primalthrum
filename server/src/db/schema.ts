@@ -1,6 +1,6 @@
 import { runMigrations } from './migrations';
-import { SqliteDatabase } from './sqlite';
+import { type DatabaseAdapter } from './adapter';
 
-export function initializeSchema(db: SqliteDatabase): void {
+export function initializeSchema(db: DatabaseAdapter): void {
   runMigrations(db);
 }

@@ -9,6 +9,7 @@ import { type Server } from 'node:http';
 import { promisify } from 'node:util';
 
 import { createApp } from '../src/app';
+import { type DatabaseAdapter } from '../src/db/adapter';
 import { MIGRATIONS } from '../src/db/migrations';
 import { SqliteDatabase, sqlValue } from '../src/db/sqlite';
 import { InProcessJobWorker } from '../src/services/inProcessJobWorker';
@@ -81,6 +82,9 @@ test('schema migrations are ordered and idempotent', () => {
   const migrationRootDir = mkdtempSync(join(tmpdir(), 'primalthrum-migrations-'));
   try {
     const db = new SqliteDatabase(join(migrationRootDir, 'platform.sqlite'));
+    const adapter: DatabaseAdapter = db;
+    assert.equal(typeof adapter.run, 'function');
+    assert.equal(typeof adapter.query, 'function');
 
     db.run(`
       CREATE TABLE schema_migrations (

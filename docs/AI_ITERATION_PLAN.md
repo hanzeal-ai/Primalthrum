@@ -1388,7 +1388,7 @@ Field meanings:
 
 ### P10-03 Postgres Migration Path
 
-- Status: Todo
+- Status: Done
 - Goal: Document and prepare a Postgres-compatible persistence path.
 - Dependencies: P10-01
 - Inputs: `server/src/db/**`, deployment docs
