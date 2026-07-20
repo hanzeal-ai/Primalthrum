@@ -16,6 +16,7 @@ import {
   DocumentRepository,
   type CreateDocumentInput,
 } from './services/documentRepository';
+import { LocalDocumentStorage } from './services/fileStorage';
 import { hashPassword, verifyPassword } from './services/passwordHash';
 import { InProcessJobWorker } from './services/inProcessJobWorker';
 import { JobRepository } from './services/jobRepository';
@@ -46,11 +47,13 @@ import {
 export interface AppOptions {
   agentBaseUrl?: string;
   dbPath?: string;
+  documentStorageDir?: string;
   generatedAgentsDir?: string;
 }
 
 const DEFAULT_AGENT_BASE_URL = 'http://127.0.0.1:8000';
 const DEFAULT_DB_PATH = join(process.cwd(), '..', 'data', 'platform.sqlite');
+const DEFAULT_DOCUMENT_STORAGE_DIR = join(process.cwd(), '..', 'data', 'documents');
 const DEFAULT_GENERATED_AGENTS_DIR = join(process.cwd(), '..', 'generated-agents');
 
 function sse(event: string, payload: Record<string, unknown>): string {
@@ -86,6 +89,9 @@ export function createApp(options: AppOptions = {}): Koa {
   const runRepository = new RunRepository(db);
   const streamEventRepository = new StreamEventRepository(db);
   const documentRepository = new DocumentRepository(db);
+  const documentStorage = new LocalDocumentStorage(
+    options.documentStorageDir ?? DEFAULT_DOCUMENT_STORAGE_DIR,
+  );
   const userRepository = new UserRepository(db);
   const sessionRepository = new SessionRepository(db);
   const providerConfigRepository = new ProviderConfigRepository(db);
@@ -246,12 +252,25 @@ export function createApp(options: AppOptions = {}): Koa {
     }
 
     try {
+      const input = ctx.request.body as CreateDocumentInput;
       const created = documentRepository.create(
         agentId,
-        ctx.request.body as CreateDocumentInput,
+        input,
+      );
+      const stored = documentStorage.save({
+        workspaceId: created.workspaceId,
+        agentId: created.agentId,
+        documentId: created.id,
+        filename: created.filename,
+        content: input.content ?? '',
+      });
+      const withStorage = documentRepository.attachStorageRef(
+        agentId,
+        created.id,
+        stored.storageRef,
       );
       ctx.status = 201;
-      ctx.body = created;
+      ctx.body = withStorage ?? created;
     } catch (error) {
       ctx.status = 400;
       ctx.body = {

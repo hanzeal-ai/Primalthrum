@@ -112,3 +112,4 @@ web/     React + TypeScript + Vite 研发控制台
 - [Tool And Skill Authoring Guide](docs/TOOL_SKILL_AUTHORING_GUIDE.md): 添加工具、技能包和危险工具策略的规则。
 - [Database Migrations](docs/MIGRATIONS.md): 运行和维护 server SQLite 迁移。
 - [Postgres Persistence Path](docs/POSTGRES_PERSISTENCE.md): SQLite 与 Postgres 部署选择和迁移准备。
+- [File Storage](docs/FILE_STORAGE.md): 文档文件存储 provider、默认本地目录和部署环境变量。

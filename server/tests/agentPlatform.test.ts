@@ -14,6 +14,7 @@ import { MIGRATIONS } from '../src/db/migrations';
 import { SqliteDatabase, sqlValue } from '../src/db/sqlite';
 import { InProcessJobWorker } from '../src/services/inProcessJobWorker';
 import { JobRepository } from '../src/services/jobRepository';
+import { LocalDocumentStorage } from '../src/services/fileStorage';
 
 const execFileAsync = promisify(execFile);
 
@@ -21,13 +22,16 @@ let server: Server;
 let baseUrl = '';
 let rootDir = '';
 let dbPath = '';
+let documentStorageDir = '';
 let authHeaders: Record<string, string> = {};
 
 before(async () => {
   rootDir = mkdtempSync(join(tmpdir(), 'primalthrum-platform-'));
   dbPath = join(rootDir, 'platform.sqlite');
+  documentStorageDir = join(rootDir, 'documents');
   const app = createApp({
     dbPath,
+    documentStorageDir,
     generatedAgentsDir: join(rootDir, 'generated-agents'),
   });
   server = app.listen(0, '127.0.0.1');
@@ -96,6 +100,7 @@ test('schema migrations are ordered and idempotent', () => {
 
     const app = createApp({
       dbPath: join(migrationRootDir, 'platform.sqlite'),
+      documentStorageDir: join(migrationRootDir, 'documents'),
       generatedAgentsDir: join(migrationRootDir, 'generated-agents'),
     });
     void app;
@@ -107,6 +112,7 @@ test('schema migrations are ordered and idempotent', () => {
 
     const secondApp = createApp({
       dbPath: join(migrationRootDir, 'platform.sqlite'),
+      documentStorageDir: join(migrationRootDir, 'documents-2'),
       generatedAgentsDir: join(migrationRootDir, 'generated-agents-2'),
     });
     void secondApp;
@@ -160,6 +166,28 @@ test('in-process job worker records retry and failure states', () => {
     assert.equal(secondAttempt.error, 'final failure');
   } finally {
     rmSync(jobRootDir, { recursive: true, force: true });
+  }
+});
+
+test('local document storage saves reads and deletes files', () => {
+  const storageRootDir = mkdtempSync(join(tmpdir(), 'primalthrum-storage-'));
+  try {
+    const storage = new LocalDocumentStorage(storageRootDir);
+    const saved = storage.save({
+      workspaceId: 1,
+      agentId: 2,
+      documentId: 3,
+      filename: '../guide.md',
+      content: '# Guide\nStored content.',
+    });
+
+    assert.match(saved.storageRef, /^local:\/\/documents\//);
+    assert.equal(storage.read(saved.storageRef), '# Guide\nStored content.');
+
+    storage.delete(saved.storageRef);
+    assert.throws(() => storage.read(saved.storageRef), /ENOENT/);
+  } finally {
+    rmSync(storageRootDir, { recursive: true, force: true });
   }
 });
 
@@ -563,6 +591,7 @@ test('document APIs register and list agent document metadata', async () => {
     hash: string;
     indexStatus: string;
     collection: string;
+    storageRef: string;
   };
   assert.ok(document.id > 0);
   assert.equal(document.agentId, agent.id);
@@ -571,6 +600,11 @@ test('document APIs register and list agent document metadata', async () => {
   assert.match(document.hash, /^[a-f0-9]{64}$/);
   assert.equal(document.indexStatus, 'registered');
   assert.equal(document.collection, 'research');
+  assert.match(document.storageRef, /^local:\/\/documents\//);
+  assert.equal(
+    new LocalDocumentStorage(documentStorageDir).read(document.storageRef),
+    '# Guide\nUse this document for retrieval.',
+  );
 
   const listResponse = await fetch(`${baseUrl}/api/agents/${agent.id}/documents`, {
     headers: authHeaders,

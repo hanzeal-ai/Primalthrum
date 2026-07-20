@@ -32,6 +32,10 @@ export const MIGRATIONS: Migration[] = [
     id: '005_background_jobs',
     up: applyBackgroundJobs,
   },
+  {
+    id: '006_document_storage_refs',
+    up: applyDocumentStorageRefs,
+  },
 ];
 
 export function runMigrations(db: DatabaseAdapter): void {
@@ -242,6 +246,10 @@ function applyBackgroundJobs(db: DatabaseAdapter): void {
       FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
     );
   `);
+}
+
+function applyDocumentStorageRefs(db: DatabaseAdapter): void {
+  ensureColumn(db, 'documents', 'storage_ref', "TEXT NOT NULL DEFAULT ''");
 }
 
 function ensureColumn(

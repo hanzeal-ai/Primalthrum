@@ -1407,7 +1407,7 @@ Field meanings:
 
 ### P11-01 File Storage Abstraction
 
-- Status: Todo
+- Status: Done
 - Goal: Add document file storage abstraction with local provider.
 - Dependencies: P5-01, P10-02
 - Inputs: document APIs, `server/src/services/**`

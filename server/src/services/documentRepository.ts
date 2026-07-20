@@ -17,6 +17,7 @@ export interface DocumentRecord {
   hash: string;
   indexStatus: string;
   collection: string;
+  storageRef: string;
 }
 
 interface DocumentRow {
@@ -27,6 +28,7 @@ interface DocumentRow {
   hash: string;
   status: string;
   collection: string;
+  storage_ref: string;
 }
 
 export class DocumentRepository {
@@ -57,7 +59,7 @@ export class DocumentRepository {
     `);
 
     const rows = this.db.query<DocumentRow>(`
-      SELECT id, agent_id, workspace_id, filename, hash, status, collection
+      SELECT id, agent_id, workspace_id, filename, hash, status, collection, storage_ref
       FROM documents
       WHERE agent_id = ${sqlValue(agentId)} AND hash = ${sqlValue(hash)}
       ORDER BY id DESC
@@ -71,7 +73,7 @@ export class DocumentRepository {
 
   listByAgent(agentId: number): DocumentRecord[] {
     return this.db.query<DocumentRow>(`
-      SELECT id, agent_id, workspace_id, filename, hash, status, collection
+      SELECT id, agent_id, workspace_id, filename, hash, status, collection, storage_ref
       FROM documents
       WHERE agent_id = ${sqlValue(agentId)}
       ORDER BY id ASC;
@@ -80,7 +82,7 @@ export class DocumentRepository {
 
   findByAgentDocument(agentId: number, documentId: number): DocumentRecord | null {
     const rows = this.db.query<DocumentRow>(`
-      SELECT id, agent_id, workspace_id, filename, hash, status, collection
+      SELECT id, agent_id, workspace_id, filename, hash, status, collection, storage_ref
       FROM documents
       WHERE agent_id = ${sqlValue(agentId)} AND id = ${sqlValue(documentId)}
       LIMIT 1;
@@ -96,12 +98,25 @@ export class DocumentRepository {
     `);
 
     const rows = this.db.query<DocumentRow>(`
-      SELECT id, agent_id, workspace_id, filename, hash, status, collection
+      SELECT id, agent_id, workspace_id, filename, hash, status, collection, storage_ref
       FROM documents
       WHERE agent_id = ${sqlValue(agentId)} AND id = ${sqlValue(documentId)}
       LIMIT 1;
     `);
     return rows[0] ? toDocumentRecord(rows[0]) : null;
+  }
+
+  attachStorageRef(
+    agentId: number,
+    documentId: number,
+    storageRef: string,
+  ): DocumentRecord | null {
+    this.db.run(`
+      UPDATE documents
+      SET storage_ref = ${sqlValue(storageRef)}
+      WHERE agent_id = ${sqlValue(agentId)} AND id = ${sqlValue(documentId)};
+    `);
+    return this.findByAgentDocument(agentId, documentId);
   }
 }
 
@@ -132,5 +147,6 @@ function toDocumentRecord(row: DocumentRow): DocumentRecord {
     hash: row.hash,
     indexStatus: row.status,
     collection: row.collection,
+    storageRef: row.storage_ref,
   };
 }
