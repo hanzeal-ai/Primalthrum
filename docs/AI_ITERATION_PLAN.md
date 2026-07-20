@@ -971,7 +971,7 @@ Field meanings:
 
 ### P3-02 SQLiteCache Provider
 
-- Status: Todo
+- Status: Done
 - Goal: Implement durable SQLite-backed cache with normalized keys.
 - Dependencies: P3-01
 - Inputs: `agent/runtime/cache.py`, `agent/tests/**`

@@ -61,6 +61,33 @@ class RuntimeRegistryTest(unittest.TestCase):
                 ],
             )
 
+    def test_sqlite_cache_persists_values_with_normalized_keys(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            cache_path = str(Path(temp_dir) / "cache.sqlite3")
+            runtime = create_runtime(
+                AgentRuntimeConfig(
+                    agent_name="ResearchAgent",
+                    cache_provider="sqlite",
+                    cache_path=cache_path,
+                )
+            )
+
+            self.assertEqual(runtime.cache.name, "sqlite")
+            runtime.cache.set("  answer:demo  ", {"status": "ok", "tokens": 12})
+
+            reloaded = create_runtime(
+                AgentRuntimeConfig(
+                    agent_name="ResearchAgent",
+                    cache_provider="sqlite",
+                    cache_path=cache_path,
+                )
+            )
+
+            self.assertEqual(
+                reloaded.cache.get("answer:demo"),
+                {"status": "ok", "tokens": 12},
+            )
+
 
 if __name__ == "__main__":
     unittest.main()

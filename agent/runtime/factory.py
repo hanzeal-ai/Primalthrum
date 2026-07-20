@@ -2,7 +2,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from .cache import CacheProvider, MemoryCache, NullCache
+from .cache import CacheProvider, MemoryCache, NullCache, SQLiteCache
 from .config import AgentRuntimeConfig
 from .llm import LLMProvider, MockLLMProvider
 from .memory import MemoryProvider, NullMemory, SQLiteMemory
@@ -37,6 +37,8 @@ def create_runtime(config: AgentRuntimeConfig) -> AgentRuntime:
     cache_registry.register("null", NullCache())
     cache_registry.register("none", NullCache())
     cache_registry.register("memory", MemoryCache())
+    if config.cache_provider == "sqlite":
+        cache_registry.register("sqlite", SQLiteCache(config.cache_path))
 
     rag_registry = Registry[RagProvider]()
     rag_registry.register("null", NullRagProvider())
