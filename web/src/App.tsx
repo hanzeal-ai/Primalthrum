@@ -78,6 +78,7 @@ export default function App() {
 
   const latestMessage = events.at(-1)?.message ?? 'Ready to stream an agent run.'
   const hasOutput = events.length > 0
+  const selectedAgent = agents.find((agent) => agent.id === selectedAgentId) ?? null
 
   useEffect(() => {
     void refreshAgents()
@@ -207,13 +208,13 @@ export default function App() {
     const agent = form.agent.trim()
     const tools = form.tools.split(',').map((tool) => tool.trim()).filter(Boolean)
 
-    if (!goal || !agent) {
+    if (!goal || (!selectedAgentId && !agent)) {
       setStatus('error')
       setEvents([
         {
           id: eventIdRef.current++,
           event: 'agent.error',
-          message: 'Agent name and goal are required.',
+          message: selectedAgentId ? 'Run input is required.' : 'Agent name and goal are required.',
           status: 'error',
           receivedAt: new Date().toLocaleTimeString(),
         },
@@ -228,7 +229,11 @@ export default function App() {
     setSummary({})
 
     try {
-      await streamAgentRun({ agent, goal, tools }, {
+      const streamRequest = selectedAgentId
+        ? { agentId: selectedAgentId, input: goal }
+        : { agent, goal, tools }
+
+      await streamAgentRun(streamRequest, {
         signal: controller.signal,
         onEvent: (parsed) => {
           const nextEvent: TimelineEvent = {
@@ -241,7 +246,11 @@ export default function App() {
           setEvents((current) => [...current, nextEvent])
           setSummary((current) => ({ ...current, ...parsed.data }))
 
-          if (parsed.event === 'agent.done' || parsed.data.status === 'done') {
+          if (
+            parsed.event === 'agent.run.completed'
+            || parsed.event === 'agent.done'
+            || parsed.data.status === 'done'
+          ) {
             setStatus('done')
           } else if (parsed.event === 'agent.error' || parsed.data.status === 'error') {
             setStatus('error')
@@ -464,12 +473,18 @@ export default function App() {
             <p>{latestMessage}</p>
           </div>
 
+          <div className="run-target">
+            <span>Selected Agent</span>
+            <strong>{selectedAgent?.name ?? 'Legacy direct payload'}</strong>
+          </div>
+
           <label>
             <span>Agent</span>
             <input
               value={form.agent}
               onChange={(event) => setForm((current) => ({ ...current, agent: event.target.value }))}
               placeholder="ResearchAgent"
+              disabled={Boolean(selectedAgent)}
             />
           </label>
 
@@ -508,7 +523,7 @@ export default function App() {
               <h2>Stream Timeline</h2>
               <p>{hasOutput ? `${events.length} events received` : 'No stream events yet'}</p>
             </div>
-            <code>POST /api/stream</code>
+            <code>{selectedAgent ? 'POST /api/stream agentId' : 'POST /api/stream'}</code>
           </div>
 
           <div className="timeline">

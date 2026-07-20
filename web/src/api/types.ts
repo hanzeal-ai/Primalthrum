@@ -81,8 +81,15 @@ export interface ParsedSseEvent {
   data: StreamPayload
 }
 
-export interface StreamAgentRequest {
+export type StreamAgentRequest = LegacyStreamAgentRequest | StoredAgentStreamRequest
+
+export interface LegacyStreamAgentRequest {
   agent: string
   goal: string
   tools: string[]
+}
+
+export interface StoredAgentStreamRequest {
+  agentId: number
+  input: string
 }

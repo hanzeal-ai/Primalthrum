@@ -130,6 +130,31 @@ h3 {
   gap: 16px;
 }
 
+.run-target {
+  min-height: 54px;
+  padding: 10px 11px;
+  border: 1px solid #d7ded8;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  gap: 4px;
+  background: #fbfcf8;
+}
+
+.run-target span {
+  color: #47605a;
+  font-size: 12px;
+  font-weight: 760;
+  text-transform: uppercase;
+}
+
+.run-target strong {
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.35;
+}
+
 .panel-heading {
   display: flex;
   flex-direction: column;

@@ -1159,7 +1159,7 @@ Field meanings:
 
 ### P6-04 Run Console View
 
-- Status: Todo
+- Status: Done
 - Goal: Run selected agent and display canonical stream events.
 - Dependencies: P6-03, P2-04
 - Inputs: `web/src/App.tsx`, stream API
