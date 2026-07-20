@@ -3,6 +3,8 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from runtime import AgentRuntimeConfig, create_runtime
+from runtime.llm import MockLLMProvider
+from runtime.rag import chunk_text
 from runtime.tools import ToolManifest, validate_tool_manifest
 
 
@@ -80,6 +82,44 @@ class RuntimeRegistryTest(unittest.TestCase):
         self.assertEqual(skill.version, "0.1.0")
         self.assertEqual(skill.tools, ["file_reader"])
         self.assertIn("Use retrieved evidence before acting.", skill.instructions)
+
+    def test_chunk_text_is_deterministic_with_word_overlap(self) -> None:
+        chunks = chunk_text(
+            "doc-1",
+            "alpha beta gamma delta epsilon zeta",
+            max_words=3,
+            overlap_words=1,
+        )
+
+        self.assertEqual(
+            [(chunk.chunk_id, chunk.text) for chunk in chunks],
+            [
+                ("doc-1:0", "alpha beta gamma"),
+                ("doc-1:1", "gamma delta epsilon"),
+                ("doc-1:2", "epsilon zeta"),
+            ],
+        )
+        self.assertEqual(
+            chunks,
+            chunk_text(
+                "doc-1",
+                "alpha beta gamma delta epsilon zeta",
+                max_words=3,
+                overlap_words=1,
+            ),
+        )
+
+    def test_mock_embeddings_are_deterministic_fixed_width_vectors(self) -> None:
+        provider = MockLLMProvider()
+
+        first = provider.embed(["retrieval chunk"])[0]
+        second = provider.embed(["retrieval chunk"])[0]
+        other = provider.embed(["different chunk"])[0]
+
+        self.assertEqual(first, second)
+        self.assertNotEqual(first, other)
+        self.assertEqual(len(first), 8)
+        self.assertTrue(all(0.0 <= value <= 1.0 for value in first))
 
     def test_runtime_respects_disabled_tools_skills_and_rag(self) -> None:
         runtime = create_runtime(

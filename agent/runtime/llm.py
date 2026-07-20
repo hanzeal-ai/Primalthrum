@@ -1,7 +1,11 @@
 from __future__ import annotations
 
+import hashlib
 from dataclasses import dataclass
 from typing import Protocol
+
+
+MOCK_EMBEDDING_DIMENSIONS = 8
 
 
 class LLMProvider(Protocol):
@@ -23,4 +27,12 @@ class MockLLMProvider:
         return f"mock response: {latest}"
 
     def embed(self, texts: list[str]) -> list[list[float]]:
-        return [[float(len(text)), float(sum(ord(ch) for ch in text) % 997)] for text in texts]
+        return [mock_embedding(text) for text in texts]
+
+
+def mock_embedding(text: str) -> list[float]:
+    digest = hashlib.sha256(text.encode("utf-8")).digest()
+    return [
+        int.from_bytes(digest[index * 4 : (index + 1) * 4], "big") / 0xFFFFFFFF
+        for index in range(MOCK_EMBEDDING_DIMENSIONS)
+    ]

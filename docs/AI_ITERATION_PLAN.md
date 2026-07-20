@@ -1074,7 +1074,7 @@ Field meanings:
 
 ### P5-02 Chunking And Mock Embedding
 
-- Status: Todo
+- Status: Done
 - Goal: Add deterministic chunking and mock embeddings for RAG ingestion.
 - Dependencies: P5-01
 - Inputs: `agent/runtime/rag.py`, `agent/runtime/llm.py`

@@ -4,6 +4,48 @@ from dataclasses import dataclass, field
 from typing import Protocol
 
 
+@dataclass(frozen=True)
+class TextChunk:
+    document_id: str
+    chunk_id: str
+    text: str
+
+
+def chunk_text(
+    document_id: str,
+    text: str,
+    max_words: int = 120,
+    overlap_words: int = 20,
+) -> list[TextChunk]:
+    if max_words <= 0:
+        raise ValueError("max_words must be greater than 0")
+    if overlap_words < 0 or overlap_words >= max_words:
+        raise ValueError(
+            "overlap_words must be non-negative and less than max_words"
+        )
+
+    words = text.split()
+    if not words:
+        return []
+
+    chunks: list[TextChunk] = []
+    start = 0
+    while start < len(words):
+        end = min(start + max_words, len(words))
+        chunk_words = words[start:end]
+        chunks.append(
+            TextChunk(
+                document_id=document_id,
+                chunk_id=f"{document_id}:{len(chunks)}",
+                text=" ".join(chunk_words),
+            )
+        )
+        if end == len(words):
+            break
+        start = end - overlap_words
+    return chunks
+
+
 class RagProvider(Protocol):
     name: str
 
