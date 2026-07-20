@@ -17,6 +17,11 @@ import {
   type CreateDocumentInput,
 } from './services/documentRepository';
 import { hashPassword, verifyPassword } from './services/passwordHash';
+import {
+  ProviderConfigRepository,
+  type CreateProviderConfigInput,
+  type UpdateProviderConfigInput,
+} from './services/providerConfigRepository';
 import { listProviders, listSkills, listTools } from './services/discoveryCatalog';
 import { RunRepository, type CreateRunInput } from './services/runRepository';
 import { SessionRepository } from './services/sessionRepository';
@@ -70,13 +75,14 @@ export function createApp(options: AppOptions = {}): Koa {
   const documentRepository = new DocumentRepository(db);
   const userRepository = new UserRepository(db);
   const sessionRepository = new SessionRepository(db);
+  const providerConfigRepository = new ProviderConfigRepository(db);
 
   app.use(async (ctx, next) => {
     const origin = ctx.get('origin');
     ctx.set('Access-Control-Allow-Origin', origin || '*');
     ctx.set('Access-Control-Allow-Credentials', 'true');
     ctx.set('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization');
-    ctx.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, OPTIONS');
     ctx.set('Vary', 'Origin');
 
     if (ctx.method === 'OPTIONS') {
@@ -272,6 +278,57 @@ export function createApp(options: AppOptions = {}): Koa {
 
   router.get('/api/providers', (ctx) => {
     ctx.body = listProviders();
+  });
+
+  router.get('/api/provider-configs', (ctx) => {
+    ctx.body = providerConfigRepository.list();
+  });
+
+  router.post('/api/provider-configs', (ctx) => {
+    try {
+      const created = providerConfigRepository.create(
+        ctx.request.body as CreateProviderConfigInput,
+      );
+      ctx.status = 201;
+      ctx.body = created;
+    } catch (error) {
+      ctx.status = 400;
+      ctx.body = {
+        error: error instanceof Error ? error.message : 'failed to create provider config',
+      };
+    }
+  });
+
+  router.get('/api/provider-configs/:id', (ctx) => {
+    const config = providerConfigRepository.findById(Number(ctx.params.id));
+    if (!config) {
+      ctx.status = 404;
+      ctx.body = { error: 'provider config not found' };
+      return;
+    }
+
+    ctx.body = config;
+  });
+
+  router.put('/api/provider-configs/:id', (ctx) => {
+    try {
+      const updated = providerConfigRepository.update(
+        Number(ctx.params.id),
+        ctx.request.body as UpdateProviderConfigInput,
+      );
+      if (!updated) {
+        ctx.status = 404;
+        ctx.body = { error: 'provider config not found' };
+        return;
+      }
+
+      ctx.body = updated;
+    } catch (error) {
+      ctx.status = 400;
+      ctx.body = {
+        error: error instanceof Error ? error.message : 'failed to update provider config',
+      };
+    }
   });
 
   router.get('/api/tools', (ctx) => {

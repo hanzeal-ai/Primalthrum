@@ -1297,7 +1297,7 @@ Field meanings:
 
 ### P9-01 Secret Reference Storage
 
-- Status: Todo
+- Status: Done
 - Goal: Store provider secrets as protected references and never return plaintext.
 - Dependencies: P8-02
 - Inputs: `server/src/db/schema.ts`, `server/src/app.ts`

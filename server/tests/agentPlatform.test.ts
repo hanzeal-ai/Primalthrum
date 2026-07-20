@@ -9,7 +9,7 @@ import { type Server } from 'node:http';
 import { promisify } from 'node:util';
 
 import { createApp } from '../src/app';
-import { SqliteDatabase } from '../src/db/sqlite';
+import { SqliteDatabase, sqlValue } from '../src/db/sqlite';
 
 const execFileAsync = promisify(execFile);
 
@@ -295,6 +295,85 @@ test('discovery APIs expose typed providers tools and skills', async () => {
     tools: ['file_reader'],
     rag: true,
   });
+});
+
+test('provider config APIs store secrets as redacted references', async () => {
+  const createResponse = await fetch(`${baseUrl}/api/provider-configs`, {
+    method: 'POST',
+    headers: jsonAuthHeaders(),
+    body: JSON.stringify({
+      name: 'openai-production',
+      type: 'llm',
+      config: {
+        provider: 'openai',
+        model: 'gpt-5-mini',
+      },
+      secret: 'sk-live-secret-value',
+    }),
+  });
+
+  assert.equal(createResponse.status, 201);
+  const created = await createResponse.json() as {
+    id: number;
+    name: string;
+    type: string;
+    config: Record<string, unknown>;
+    secretRef: string;
+  };
+  assert.ok(created.id > 0);
+  assert.equal(created.name, 'openai-production');
+  assert.equal(created.type, 'llm');
+  assert.deepEqual(created.config, {
+    provider: 'openai',
+    model: 'gpt-5-mini',
+  });
+  assert.match(created.secretRef, /^secret:\/\/local\//);
+  assert.doesNotMatch(JSON.stringify(created), /sk-live-secret-value/);
+
+  const listResponse = await fetch(`${baseUrl}/api/provider-configs`, {
+    headers: authHeaders,
+  });
+  assert.equal(listResponse.status, 200);
+  const listed = await listResponse.json() as Array<typeof created>;
+  assert.equal(listed.length, 1);
+  assert.deepEqual(listed[0], created);
+  assert.doesNotMatch(JSON.stringify(listed), /sk-live-secret-value/);
+
+  const updateResponse = await fetch(`${baseUrl}/api/provider-configs/${created.id}`, {
+    method: 'PUT',
+    headers: jsonAuthHeaders(),
+    body: JSON.stringify({
+      config: {
+        provider: 'openai',
+        model: 'gpt-5',
+      },
+      secret: 'sk-rotated-secret-value',
+    }),
+  });
+  assert.equal(updateResponse.status, 200);
+  const updated = await updateResponse.json() as typeof created;
+  assert.equal(updated.id, created.id);
+  assert.equal(updated.secretRef, created.secretRef);
+  assert.deepEqual(updated.config, {
+    provider: 'openai',
+    model: 'gpt-5',
+  });
+  assert.doesNotMatch(JSON.stringify(updated), /sk-rotated-secret-value/);
+
+  const db = new SqliteDatabase(dbPath);
+  const storedSecrets = db.query<{
+    secret_ref: string;
+    ciphertext: string;
+  }>(`
+    SELECT secret_ref, ciphertext
+    FROM secrets
+    WHERE secret_ref = ${sqlValue(updated.secretRef)};
+  `);
+  assert.equal(storedSecrets.length, 1);
+  assert.notEqual(storedSecrets[0]?.ciphertext, 'sk-live-secret-value');
+  assert.notEqual(storedSecrets[0]?.ciphertext, 'sk-rotated-secret-value');
+  assert.doesNotMatch(JSON.stringify(storedSecrets), /sk-live-secret-value/);
+  assert.doesNotMatch(JSON.stringify(storedSecrets), /sk-rotated-secret-value/);
 });
 
 test('POST /api/runs creates a pending run for an existing agent', async () => {
