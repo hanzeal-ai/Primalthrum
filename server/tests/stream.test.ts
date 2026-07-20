@@ -6,11 +6,13 @@ import { after, before, test } from 'node:test';
 import { createServer, type Server } from 'node:http';
 
 import { createApp } from '../src/app';
+import { bootstrapAdminSession } from './authTestHelpers';
 
 let agentServer: Server;
 let appServer: Server;
 let appBaseUrl = '';
 let rootDir = '';
+let authHeaders: Record<string, string> = {};
 const upstreamPayloads: unknown[] = [];
 
 before(async () => {
@@ -54,6 +56,7 @@ before(async () => {
   const appAddress = appServer.address();
   assert(appAddress && typeof appAddress === 'object');
   appBaseUrl = `http://127.0.0.1:${appAddress.port}`;
+  authHeaders = await bootstrapAdminSession(appBaseUrl, 'stream-admin@example.com');
 });
 
 after(async () => {
@@ -62,10 +65,17 @@ after(async () => {
   rmSync(rootDir, { recursive: true, force: true });
 });
 
+function jsonAuthHeaders(): Record<string, string> {
+  return {
+    ...authHeaders,
+    'content-type': 'application/json',
+  };
+}
+
 test('POST /api/stream proxies the agent SSE stream', async () => {
   const response = await fetch(`${appBaseUrl}/api/stream`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: jsonAuthHeaders(),
     body: JSON.stringify({
       goal: 'Create a support agent',
       agent: 'TestAgent',
@@ -88,7 +98,7 @@ test('POST /api/stream can run by agentId and persist proxied events', async () 
   upstreamPayloads.length = 0;
   const agentResponse = await fetch(`${appBaseUrl}/api/agents`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: jsonAuthHeaders(),
     body: JSON.stringify({
       name: 'Configured Stream Agent',
       description: 'Uses stored config',
@@ -104,7 +114,7 @@ test('POST /api/stream can run by agentId and persist proxied events', async () 
 
   const response = await fetch(`${appBaseUrl}/api/stream`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: jsonAuthHeaders(),
     body: JSON.stringify({
       agentId: agent.id,
       input: 'Use the saved agent config',
@@ -127,13 +137,17 @@ test('POST /api/stream can run by agentId and persist proxied events', async () 
     rag_provider: 'in-memory',
   });
 
-  const runResponse = await fetch(`${appBaseUrl}/api/runs/${runId}`);
+  const runResponse = await fetch(`${appBaseUrl}/api/runs/${runId}`, {
+    headers: authHeaders,
+  });
   assert.equal(runResponse.status, 200);
   const run = await runResponse.json() as { agentId: number; input: string };
   assert.equal(run.agentId, agent.id);
   assert.equal(run.input, 'Use the saved agent config');
 
-  const eventsResponse = await fetch(`${appBaseUrl}/api/runs/${runId}/events`);
+  const eventsResponse = await fetch(`${appBaseUrl}/api/runs/${runId}/events`, {
+    headers: authHeaders,
+  });
   assert.equal(eventsResponse.status, 200);
   const events = await eventsResponse.json() as Array<{
     eventType: string;

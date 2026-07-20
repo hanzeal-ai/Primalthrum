@@ -17,6 +17,7 @@ let server: Server;
 let baseUrl = '';
 let rootDir = '';
 let dbPath = '';
+let authHeaders: Record<string, string> = {};
 
 before(async () => {
   rootDir = mkdtempSync(join(tmpdir(), 'primalthrum-platform-'));
@@ -36,6 +37,13 @@ after(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
   rmSync(rootDir, { recursive: true, force: true });
 });
+
+function jsonAuthHeaders(): Record<string, string> {
+  return {
+    ...authHeaders,
+    'content-type': 'application/json',
+  };
+}
 
 test('schema bootstrap creates the default local workspace', () => {
   const db = new SqliteDatabase(dbPath);
@@ -66,10 +74,90 @@ test('schema bootstrap creates the default local workspace', () => {
   }
 });
 
+test('admin setup login session and logout enforce platform auth', async () => {
+  const healthResponse = await fetch(`${baseUrl}/health`);
+  assert.equal(healthResponse.status, 200);
+
+  const unauthenticatedAgents = await fetch(`${baseUrl}/api/agents`);
+  assert.equal(unauthenticatedAgents.status, 401);
+
+  const setupStatusResponse = await fetch(`${baseUrl}/api/setup/status`);
+  assert.equal(setupStatusResponse.status, 200);
+  assert.deepEqual(await setupStatusResponse.json(), { needsSetup: true });
+
+  const setupResponse = await fetch(`${baseUrl}/api/setup/admin`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      email: 'admin@example.com',
+      password: 'correct horse battery staple',
+    }),
+  });
+  assert.equal(setupResponse.status, 201);
+  const setup = await setupResponse.json() as {
+    user: { id: number; email: string; role: string };
+    session: { token: string; expiresAt: string };
+  };
+  assert.ok(setup.user.id > 0);
+  assert.equal(setup.user.email, 'admin@example.com');
+  assert.equal(setup.user.role, 'admin');
+  assert.ok(setup.session.token);
+  assert.ok(setup.session.expiresAt);
+  authHeaders = { authorization: `Bearer ${setup.session.token}` };
+
+  const duplicateSetupResponse = await fetch(`${baseUrl}/api/setup/admin`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      email: 'another-admin@example.com',
+      password: 'correct horse battery staple',
+    }),
+  });
+  assert.equal(duplicateSetupResponse.status, 409);
+
+  const sessionResponse = await fetch(`${baseUrl}/api/auth/session`, {
+    headers: authHeaders,
+  });
+  assert.equal(sessionResponse.status, 200);
+  const session = await sessionResponse.json() as {
+    user: { email: string; role: string };
+  };
+  assert.equal(session.user.email, 'admin@example.com');
+  assert.equal(session.user.role, 'admin');
+
+  const logoutResponse = await fetch(`${baseUrl}/api/auth/logout`, {
+    method: 'POST',
+    headers: authHeaders,
+  });
+  assert.equal(logoutResponse.status, 204);
+
+  const revokedSessionResponse = await fetch(`${baseUrl}/api/auth/session`, {
+    headers: authHeaders,
+  });
+  assert.equal(revokedSessionResponse.status, 401);
+
+  const loginResponse = await fetch(`${baseUrl}/api/auth/login`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      email: 'admin@example.com',
+      password: 'correct horse battery staple',
+    }),
+  });
+  assert.equal(loginResponse.status, 200);
+  const login = await loginResponse.json() as {
+    user: { email: string; role: string };
+    session: { token: string };
+  };
+  assert.equal(login.user.email, 'admin@example.com');
+  assert.equal(login.user.role, 'admin');
+  authHeaders = { authorization: `Bearer ${login.session.token}` };
+});
+
 test('POST /api/agents persists an agent config in SQLite metadata', async () => {
   const response = await fetch(`${baseUrl}/api/agents`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: jsonAuthHeaders(),
     body: JSON.stringify({
       name: 'Research Agent',
       description: 'Research assistant with optional RAG',
@@ -96,7 +184,9 @@ test('POST /api/agents persists an agent config in SQLite metadata', async () =>
   assert.ok(created.id > 0);
   assert.equal(created.workspaceId, 1);
 
-  const listResponse = await fetch(`${baseUrl}/api/agents`);
+  const listResponse = await fetch(`${baseUrl}/api/agents`, {
+    headers: authHeaders,
+  });
   assert.equal(listResponse.status, 200);
   const listed = await listResponse.json() as Array<{
     id: number;
@@ -111,7 +201,7 @@ test('POST /api/agents persists an agent config in SQLite metadata', async () =>
 test('POST /api/agents/:id/generate writes a standalone agent project', async () => {
   const createResponse = await fetch(`${baseUrl}/api/agents`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: jsonAuthHeaders(),
     body: JSON.stringify({
       name: 'Standalone Agent',
       description: 'Standalone demo',
@@ -124,6 +214,7 @@ test('POST /api/agents/:id/generate writes a standalone agent project', async ()
 
   const generateResponse = await fetch(`${baseUrl}/api/agents/${created.id}/generate`, {
     method: 'POST',
+    headers: authHeaders,
   });
 
   assert.equal(generateResponse.status, 200);
@@ -149,7 +240,9 @@ test('POST /api/agents/:id/generate writes a standalone agent project', async ()
 });
 
 test('discovery APIs expose typed providers tools and skills', async () => {
-  const providersResponse = await fetch(`${baseUrl}/api/providers`);
+  const providersResponse = await fetch(`${baseUrl}/api/providers`, {
+    headers: authHeaders,
+  });
   assert.equal(providersResponse.status, 200);
   const providers = await providersResponse.json() as {
     llm: Array<{ name: string; status: string; description: string }>;
@@ -163,7 +256,9 @@ test('discovery APIs expose typed providers tools and skills', async () => {
   assert.ok(providers.rag.some((provider) => provider.name === 'in-memory' && provider.status === 'available'));
   assert.ok(providers.rag.some((provider) => provider.name === 'chroma' && provider.status === 'planned'));
 
-  const toolsResponse = await fetch(`${baseUrl}/api/tools`);
+  const toolsResponse = await fetch(`${baseUrl}/api/tools`, {
+    headers: authHeaders,
+  });
   assert.equal(toolsResponse.status, 200);
   const tools = await toolsResponse.json() as Array<{
     name: string;
@@ -180,7 +275,9 @@ test('discovery APIs expose typed providers tools and skills', async () => {
     dangerous: false,
   });
 
-  const skillsResponse = await fetch(`${baseUrl}/api/skills`);
+  const skillsResponse = await fetch(`${baseUrl}/api/skills`, {
+    headers: authHeaders,
+  });
   assert.equal(skillsResponse.status, 200);
   const skills = await skillsResponse.json() as Array<{
     name: string;
@@ -203,7 +300,7 @@ test('discovery APIs expose typed providers tools and skills', async () => {
 test('POST /api/runs creates a pending run for an existing agent', async () => {
   const createAgentResponse = await fetch(`${baseUrl}/api/agents`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: jsonAuthHeaders(),
     body: JSON.stringify({
       name: 'Run Agent',
       description: 'Run API demo',
@@ -213,7 +310,7 @@ test('POST /api/runs creates a pending run for an existing agent', async () => {
 
   const createRunResponse = await fetch(`${baseUrl}/api/runs`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: jsonAuthHeaders(),
     body: JSON.stringify({
       agentId: agent.id,
       input: 'Research the product requirements',
@@ -238,7 +335,9 @@ test('POST /api/runs creates a pending run for an existing agent', async () => {
   assert.ok(run.startedAt);
   assert.equal(run.endedAt, null);
 
-  const getRunResponse = await fetch(`${baseUrl}/api/runs/${run.id}`);
+  const getRunResponse = await fetch(`${baseUrl}/api/runs/${run.id}`, {
+    headers: authHeaders,
+  });
   assert.equal(getRunResponse.status, 200);
   const loaded = await getRunResponse.json() as {
     id: number;
@@ -253,7 +352,7 @@ test('POST /api/runs creates a pending run for an existing agent', async () => {
 test('POST /api/runs rejects unknown agents', async () => {
   const response = await fetch(`${baseUrl}/api/runs`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: jsonAuthHeaders(),
     body: JSON.stringify({
       agentId: 999999,
       input: 'This should fail',
@@ -266,7 +365,7 @@ test('POST /api/runs rejects unknown agents', async () => {
 test('document APIs register and list agent document metadata', async () => {
   const createAgentResponse = await fetch(`${baseUrl}/api/agents`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: jsonAuthHeaders(),
     body: JSON.stringify({
       name: 'Document Agent',
       description: 'Document registry demo',
@@ -278,7 +377,7 @@ test('document APIs register and list agent document metadata', async () => {
     `${baseUrl}/api/agents/${agent.id}/documents`,
     {
       method: 'POST',
-      headers: { 'content-type': 'application/json' },
+      headers: jsonAuthHeaders(),
       body: JSON.stringify({
         filename: 'guide.md',
         content: '# Guide\nUse this document for retrieval.',
@@ -305,14 +404,16 @@ test('document APIs register and list agent document metadata', async () => {
   assert.equal(document.indexStatus, 'registered');
   assert.equal(document.collection, 'research');
 
-  const listResponse = await fetch(`${baseUrl}/api/agents/${agent.id}/documents`);
+  const listResponse = await fetch(`${baseUrl}/api/agents/${agent.id}/documents`, {
+    headers: authHeaders,
+  });
   assert.equal(listResponse.status, 200);
   const documents = await listResponse.json() as Array<typeof document>;
   assert.deepEqual(documents, [document]);
 
   const indexResponse = await fetch(
     `${baseUrl}/api/agents/${agent.id}/documents/${document.id}/index`,
-    { method: 'POST' },
+    { method: 'POST', headers: authHeaders },
   );
   assert.equal(indexResponse.status, 200);
   const indexed = await indexResponse.json() as typeof document;
@@ -323,7 +424,7 @@ test('document APIs register and list agent document metadata', async () => {
 test('run stream events can be inserted and replayed', async () => {
   const createAgentResponse = await fetch(`${baseUrl}/api/agents`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: jsonAuthHeaders(),
     body: JSON.stringify({
       name: 'Event Agent',
       description: 'Event replay demo',
@@ -333,7 +434,7 @@ test('run stream events can be inserted and replayed', async () => {
 
   const createRunResponse = await fetch(`${baseUrl}/api/runs`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: jsonAuthHeaders(),
     body: JSON.stringify({
       agentId: agent.id,
       input: 'Replay stream events',
@@ -343,7 +444,7 @@ test('run stream events can be inserted and replayed', async () => {
 
   const createEventResponse = await fetch(`${baseUrl}/api/runs/${run.id}/events`, {
     method: 'POST',
-    headers: { 'content-type': 'application/json' },
+    headers: jsonAuthHeaders(),
     body: JSON.stringify({
       eventType: 'agent.node.completed',
       node: 'plan',
@@ -373,7 +474,9 @@ test('run stream events can be inserted and replayed', async () => {
   });
   assert.ok(event.createdAt);
 
-  const listEventsResponse = await fetch(`${baseUrl}/api/runs/${run.id}/events`);
+  const listEventsResponse = await fetch(`${baseUrl}/api/runs/${run.id}/events`, {
+    headers: authHeaders,
+  });
   assert.equal(listEventsResponse.status, 200);
   const events = await listEventsResponse.json() as Array<{ id: number; eventType: string }>;
   assert.deepEqual(events.map((item) => item.id), [event.id]);

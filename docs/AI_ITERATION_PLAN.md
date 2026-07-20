@@ -1261,7 +1261,7 @@ Field meanings:
 
 ### P8-02 Admin Bootstrap And Auth Sessions
 
-- Status: Todo
+- Status: Done
 - Goal: Add single-tenant admin login and session auth.
 - Dependencies: P8-01
 - Inputs: `server/src/app.ts`, `server/src/db/schema.ts`

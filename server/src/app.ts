@@ -7,11 +7,19 @@ import { SqliteDatabase } from './db/sqlite';
 import { generateAgentProject } from './generators/agentProjectGenerator';
 import { AgentRepository, type CreateAgentInput } from './services/agentRepository';
 import {
+  clearSessionCookie,
+  createAuthMiddleware,
+  extractSessionToken,
+  sessionCookie,
+} from './services/authMiddleware';
+import {
   DocumentRepository,
   type CreateDocumentInput,
 } from './services/documentRepository';
+import { hashPassword, verifyPassword } from './services/passwordHash';
 import { listProviders, listSkills, listTools } from './services/discoveryCatalog';
 import { RunRepository, type CreateRunInput } from './services/runRepository';
+import { SessionRepository } from './services/sessionRepository';
 import { pipeSseStream } from './services/sseRecorder';
 import {
   StreamEventRepository,
@@ -21,6 +29,11 @@ import {
   resolveStreamRequest,
   StreamRequestError,
 } from './services/streamRequestResolver';
+import {
+  normalizeEmail,
+  toPublicUserRecord,
+  UserRepository,
+} from './services/userRepository';
 
 export interface AppOptions {
   agentBaseUrl?: string;
@@ -36,6 +49,13 @@ function sse(event: string, payload: Record<string, unknown>): string {
   return `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
 }
 
+function normalizePassword(password: unknown): string {
+  if (typeof password !== 'string' || password.length < 12) {
+    throw new Error('password must be at least 12 characters');
+  }
+  return password;
+}
+
 export function createApp(options: AppOptions = {}): Koa {
   const app = new Koa();
   const router = new Router();
@@ -48,11 +68,16 @@ export function createApp(options: AppOptions = {}): Koa {
   const runRepository = new RunRepository(db);
   const streamEventRepository = new StreamEventRepository(db);
   const documentRepository = new DocumentRepository(db);
+  const userRepository = new UserRepository(db);
+  const sessionRepository = new SessionRepository(db);
 
   app.use(async (ctx, next) => {
-    ctx.set('Access-Control-Allow-Origin', '*');
-    ctx.set('Access-Control-Allow-Headers', 'Content-Type, Accept');
+    const origin = ctx.get('origin');
+    ctx.set('Access-Control-Allow-Origin', origin || '*');
+    ctx.set('Access-Control-Allow-Credentials', 'true');
+    ctx.set('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization');
     ctx.set('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+    ctx.set('Vary', 'Origin');
 
     if (ctx.method === 'OPTIONS') {
       ctx.status = 204;
@@ -62,6 +87,7 @@ export function createApp(options: AppOptions = {}): Koa {
     await next();
   });
   app.use(bodyParser());
+  app.use(createAuthMiddleware(sessionRepository));
 
   router.get('/health', (ctx) => {
     ctx.body = {
@@ -69,6 +95,84 @@ export function createApp(options: AppOptions = {}): Koa {
       service: 'server',
       agentBaseUrl,
     };
+  });
+
+  router.get('/api/setup/status', (ctx) => {
+    ctx.body = {
+      needsSetup: !userRepository.hasAdmin(),
+    };
+  });
+
+  router.post('/api/setup/admin', (ctx) => {
+    try {
+      if (userRepository.hasAdmin()) {
+        ctx.status = 409;
+        ctx.body = { error: 'admin user already exists' };
+        return;
+      }
+
+      const body = ctx.request.body as { email?: unknown; password?: unknown };
+      const email = normalizeEmail(body.email);
+      const password = normalizePassword(body.password);
+      const user = userRepository.createAdmin(email, hashPassword(password));
+      const session = sessionRepository.create(user);
+
+      ctx.set('Set-Cookie', sessionCookie(session.token, session.expiresAt));
+      ctx.status = 201;
+      ctx.body = { user, session };
+    } catch (error) {
+      ctx.status = 400;
+      ctx.body = {
+        error: error instanceof Error ? error.message : 'failed to create admin',
+      };
+    }
+  });
+
+  router.post('/api/auth/login', (ctx) => {
+    try {
+      const body = ctx.request.body as { email?: unknown; password?: unknown };
+      const email = normalizeEmail(body.email);
+      const password = normalizePassword(body.password);
+      const user = userRepository.findByEmail(email);
+
+      if (!user || !verifyPassword(password, user.passwordHash)) {
+        ctx.status = 401;
+        ctx.body = { error: 'invalid email or password' };
+        return;
+      }
+
+      const publicUser = toPublicUserRecord(user);
+      const session = sessionRepository.create(publicUser);
+      ctx.set('Set-Cookie', sessionCookie(session.token, session.expiresAt));
+      ctx.body = { user: publicUser, session };
+    } catch (error) {
+      ctx.status = 400;
+      ctx.body = {
+        error: error instanceof Error ? error.message : 'failed to login',
+      };
+    }
+  });
+
+  router.post('/api/auth/logout', (ctx) => {
+    const token = extractSessionToken(ctx);
+    if (token) {
+      sessionRepository.revokeToken(token);
+    }
+
+    ctx.set('Set-Cookie', clearSessionCookie());
+    ctx.status = 204;
+  });
+
+  router.get('/api/auth/session', (ctx) => {
+    const token = extractSessionToken(ctx);
+    const session = token ? sessionRepository.findByToken(token) : null;
+    if (!session) {
+      ctx.status = 401;
+      ctx.body = { error: 'authentication required' };
+      return;
+    }
+
+    ctx.body = session;
   });
 
   router.get('/api/agents', (ctx) => {
