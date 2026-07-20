@@ -1,0 +1,27 @@
+{
+  "name": "Demo Research Agent",
+  "description": "Commercial demo agent for launch-readiness research with memory, cache, tools, skills, and optional RAG.",
+  "memoryProvider": "sqlite",
+  "cacheProvider": "sqlite",
+  "ragProvider": "in-memory",
+  "enabledTools": [
+    "file_reader",
+    "planner",
+    "web_search"
+  ],
+  "enabledSkills": [
+    "research",
+    "summarize",
+    "launch_review"
+  ],
+  "modelConfig": {
+    "default": {
+      "provider": "mock",
+      "model": "mock-chat"
+    },
+    "embedding": {
+      "provider": "mock",
+      "model": "mock-embedding"
+    }
+  }
+}

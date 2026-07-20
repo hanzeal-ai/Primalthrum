@@ -117,3 +117,4 @@ web/     React + TypeScript + Vite 研发控制台
 - [Error Taxonomy](docs/ERROR_TAXONOMY.md): run、job、provider config、document API 的标准错误响应和结构化日志规则。
 - [Health And Metrics](docs/HEALTH_METRICS.md): 生产健康检查、readiness 探针和 Prometheus 指标导出。
 - [Operator Setup](docs/OPERATOR_SETUP.md): 首次运营者从创建管理员到完成首个 Agent 运行的检查清单。
+- [Demo Research Agent](docs/DEMO_RESEARCH_AGENT.md): 可用于演示的 Research Agent 配置、知识文档和 smoke 命令。

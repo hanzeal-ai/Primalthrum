@@ -1533,7 +1533,7 @@ Field meanings:
 
 ### P13-02 Demo Research Agent Package
 
-- Status: Todo
+- Status: Done
 - Goal: Provide a polished sample Research Agent demo package.
 - Dependencies: P7-01, P11-03
 - Inputs: generated project contract, docs
