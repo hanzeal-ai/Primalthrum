@@ -9,6 +9,7 @@ import { type Server } from 'node:http';
 import { promisify } from 'node:util';
 
 import { createApp } from '../src/app';
+import { MIGRATIONS } from '../src/db/migrations';
 import { SqliteDatabase, sqlValue } from '../src/db/sqlite';
 
 const execFileAsync = promisify(execFile);
@@ -71,6 +72,58 @@ test('schema bootstrap creates the default local workspace', () => {
       columns.some((column) => column.name === 'workspace_id'),
       `${tableName} should include workspace_id`,
     );
+  }
+});
+
+test('schema migrations are ordered and idempotent', () => {
+  const migrationRootDir = mkdtempSync(join(tmpdir(), 'primalthrum-migrations-'));
+  try {
+    const db = new SqliteDatabase(join(migrationRootDir, 'platform.sqlite'));
+
+    db.run(`
+      CREATE TABLE schema_migrations (
+        id TEXT PRIMARY KEY,
+        applied_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+      );
+    `);
+    db.run('DROP TABLE schema_migrations;');
+
+    const app = createApp({
+      dbPath: join(migrationRootDir, 'platform.sqlite'),
+      generatedAgentsDir: join(migrationRootDir, 'generated-agents'),
+    });
+    void app;
+    const afterFirstRun = db.query<{ id: string }>(`
+      SELECT id
+      FROM schema_migrations
+      ORDER BY id ASC;
+    `);
+
+    const secondApp = createApp({
+      dbPath: join(migrationRootDir, 'platform.sqlite'),
+      generatedAgentsDir: join(migrationRootDir, 'generated-agents-2'),
+    });
+    void secondApp;
+    const afterSecondRun = db.query<{ id: string }>(`
+      SELECT id
+      FROM schema_migrations
+      ORDER BY id ASC;
+    `);
+
+    assert.deepEqual(
+      afterFirstRun.map((migration) => migration.id),
+      MIGRATIONS.map((migration) => migration.id),
+    );
+    assert.deepEqual(afterSecondRun, afterFirstRun);
+
+    const workspaces = db.query<{ count: number }>(`
+      SELECT COUNT(*) AS count
+      FROM workspaces
+      WHERE slug = 'local';
+    `);
+    assert.equal(Number(workspaces[0]?.count ?? 0), 1);
+  } finally {
+    rmSync(migrationRootDir, { recursive: true, force: true });
   }
 });
 

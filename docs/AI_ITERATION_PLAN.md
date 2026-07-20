@@ -1352,7 +1352,7 @@ Field meanings:
 
 ### P10-01 Migration Runner
 
-- Status: Todo
+- Status: Done
 - Goal: Replace ad hoc schema initialization with versioned migrations.
 - Dependencies: P8-01
 - Inputs: `server/src/db/schema.ts`, `server/src/db/**`
