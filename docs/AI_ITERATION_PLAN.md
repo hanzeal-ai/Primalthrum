@@ -988,7 +988,7 @@ Field meanings:
 
 ### P3-03 Cache Hit And Miss Stream Events
 
-- Status: Todo
+- Status: Done
 - Goal: Emit cache hit/miss events when cache is used.
 - Dependencies: P3-02, P2-04
 - Inputs: `agent/main.py`, `agent/runtime/cache.py`, stream tests

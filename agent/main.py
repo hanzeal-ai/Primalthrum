@@ -1,4 +1,5 @@
 import asyncio
+import hashlib
 import json
 from collections.abc import AsyncIterator
 from typing import Any, TypedDict
@@ -19,6 +20,7 @@ class AgentRequest(BaseModel):
     skills: list[str] = Field(default_factory=list)
     memory_provider: str = "null"
     cache_provider: str = "memory"
+    cache_path: str | None = None
     rag_provider: str = "null"
 
 
@@ -31,6 +33,7 @@ class AgentState(TypedDict):
     plan: list[str]
     artifacts: list[str]
     checks: list[str]
+    cache_event: dict[str, str] | None
     message: str
     status: str
 
@@ -44,6 +47,11 @@ def normalize_skills(skills: list[str]) -> list[str]:
     return [skill.strip() for skill in skills if skill.strip()]
 
 
+def cache_key_for_goal(agent: str, goal: str) -> str:
+    digest = hashlib.sha256(f"{agent}:{goal}".encode("utf-8")).hexdigest()
+    return f"stream:{digest}"
+
+
 def intake(state: AgentState) -> dict[str, Any]:
     tools = normalize_tools(state["tools"])
     runtime = create_runtime(
@@ -53,17 +61,45 @@ def intake(state: AgentState) -> dict[str, Any]:
             enabled_skills=state["skills"],
             memory_provider=state["runtime"]["memory_provider"],
             cache_provider=state["runtime"]["cache_provider"],
+            cache_path=state["runtime"].get("cache_path"),
             rag_provider=state["runtime"]["rag_provider"],
         )
     )
+    cache_event = None
+    if runtime.cache.name != "null":
+        cache_key = cache_key_for_goal(state["agent"], state["goal"])
+        cached_value = runtime.cache.get(cache_key)
+        cache_status = "hit" if cached_value is not None else "miss"
+        if cached_value is None:
+            runtime.cache.set(
+                cache_key,
+                {
+                    "agent": state["agent"],
+                    "goal": state["goal"],
+                },
+            )
+        cache_event = {
+            "node": "intake",
+            "agent": state["agent"],
+            "provider": runtime.cache.name,
+            "key": cache_key,
+            "status": cache_status,
+            "message": f"Cache {cache_status} for intake",
+        }
+    runtime_metadata = {
+        key: value
+        for key, value in state["runtime"].items()
+        if key != "cache_path"
+    }
     return {
         "tools": tools,
         "runtime": {
-            **state["runtime"],
+            **runtime_metadata,
             "loaded_tools": runtime.tools.names(),
             "loaded_skills": runtime.skills.names(),
             "llm_provider": runtime.llm.name,
         },
+        "cache_event": cache_event,
         "message": f"Accepted goal for {state['agent']}: {state['goal']}",
         "status": "running",
     }
@@ -149,11 +185,13 @@ async def stream_graph(request: AgentRequest) -> AsyncIterator[str]:
         "runtime": {
             "memory_provider": request.memory_provider,
             "cache_provider": request.cache_provider,
+            "cache_path": request.cache_path,
             "rag_provider": request.rag_provider,
         },
         "plan": [],
         "artifacts": [],
         "checks": [],
+        "cache_event": None,
         "message": "",
         "status": "queued",
     }
@@ -170,6 +208,11 @@ async def stream_graph(request: AgentRequest) -> AsyncIterator[str]:
 
     async for update in compiled_graph.astream(initial_state, stream_mode="updates"):
         for node, patch in update.items():
+            cache_event = patch.get("cache_event")
+            if isinstance(cache_event, dict):
+                yield sse(f"agent.cache.{cache_event['status']}", cache_event)
+                await asyncio.sleep(0)
+
             payload = {
                 "node": node,
                 "agent": initial_state["agent"],

@@ -1,5 +1,7 @@
 import json
 import unittest
+from pathlib import Path
+from tempfile import TemporaryDirectory
 
 from fastapi.testclient import TestClient
 
@@ -20,6 +22,21 @@ def sse_event_names(body: str) -> list[str]:
         if line.startswith("event: "):
             events.append(line.removeprefix("event: "))
     return events
+
+
+def sse_messages(body: str) -> list[tuple[str, dict]]:
+    messages: list[tuple[str, dict]] = []
+    for block in body.strip().split("\n\n"):
+        event = ""
+        payload: dict | None = None
+        for line in block.splitlines():
+            if line.startswith("event: "):
+                event = line.removeprefix("event: ")
+            if line.startswith("data: "):
+                payload = json.loads(line.removeprefix("data: "))
+        if event and payload is not None:
+            messages.append((event, payload))
+    return messages
 
 
 class StreamContractTest(unittest.TestCase):
@@ -52,6 +69,40 @@ class StreamContractTest(unittest.TestCase):
         self.assertEqual(payloads[1]["node"], "intake")
         self.assertEqual(payloads[-1]["status"], "done")
         self.assertEqual(payloads[-1]["agent"], "ResearchAgent")
+
+    def test_stream_emits_cache_miss_then_hit_for_sqlite_cache(self) -> None:
+        client = TestClient(app)
+
+        with TemporaryDirectory() as temp_dir:
+            cache_path = str(Path(temp_dir) / "cache.sqlite3")
+            payload = {
+                "goal": "Cache this graph plan",
+                "agent": "ResearchAgent",
+                "cache_provider": "sqlite",
+                "cache_path": cache_path,
+            }
+
+            first_response = client.post("/stream", json=payload)
+            second_response = client.post("/stream", json=payload)
+
+        self.assertEqual(first_response.status_code, 200)
+        self.assertEqual(second_response.status_code, 200)
+
+        first_cache_events = [
+            message for message in sse_messages(first_response.text)
+            if message[0].startswith("agent.cache.")
+        ]
+        second_cache_events = [
+            message for message in sse_messages(second_response.text)
+            if message[0].startswith("agent.cache.")
+        ]
+
+        self.assertEqual(first_cache_events[0][0], "agent.cache.miss")
+        self.assertEqual(first_cache_events[0][1]["status"], "miss")
+        self.assertEqual(first_cache_events[0][1]["provider"], "sqlite")
+        self.assertEqual(second_cache_events[0][0], "agent.cache.hit")
+        self.assertEqual(second_cache_events[0][1]["status"], "hit")
+        self.assertEqual(second_cache_events[0][1]["provider"], "sqlite")
 
 
 if __name__ == "__main__":
