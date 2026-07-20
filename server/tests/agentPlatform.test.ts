@@ -1,12 +1,16 @@
 import assert from 'node:assert/strict';
+import { execFile } from 'node:child_process';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { readFile, stat } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
-import { join } from 'node:path';
+import { join, resolve } from 'node:path';
 import { after, before, test } from 'node:test';
 import { type Server } from 'node:http';
+import { promisify } from 'node:util';
 
 import { createApp } from '../src/app';
+
+const execFileAsync = promisify(execFile);
 
 let server: Server;
 let baseUrl = '';
@@ -91,6 +95,14 @@ test('POST /api/agents/:id/generate writes a standalone agent project', async ()
   assert.match(graph, /load_context/);
   assert.match(graph, /retrieve_optional_rag/);
   assert.match(graph, /update_memory/);
+
+  const python = resolve(process.cwd(), '..', 'agent', '.venv', 'bin', 'python');
+  const { stdout } = await execFileAsync(
+    python,
+    ['-m', 'src.main', 'Demo task'],
+    { cwd: generated.path },
+  );
+  assert.match(stdout, /Planned task: Demo task with file_reader\./);
 });
 
 test('discovery APIs expose typed providers tools and skills', async () => {

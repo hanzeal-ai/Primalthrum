@@ -937,7 +937,7 @@ Field meanings:
 
 ### P2-05 Generated Standalone Demo Execution Test
 
-- Status: Todo
+- Status: Done
 - Goal: Prove generated agent project can run a standalone demo command.
 - Dependencies: P1-03, P2-04
 - Inputs: `server/src/generators/agentProjectGenerator.ts`, `server/tests/agentPlatform.test.ts`
