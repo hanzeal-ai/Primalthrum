@@ -17,6 +17,8 @@ import {
   type CreateDocumentInput,
 } from './services/documentRepository';
 import { hashPassword, verifyPassword } from './services/passwordHash';
+import { InProcessJobWorker } from './services/inProcessJobWorker';
+import { JobRepository } from './services/jobRepository';
 import {
   ProviderConfigRepository,
   type CreateProviderConfigInput,
@@ -88,6 +90,8 @@ export function createApp(options: AppOptions = {}): Koa {
   const sessionRepository = new SessionRepository(db);
   const providerConfigRepository = new ProviderConfigRepository(db);
   const toolAuditRepository = new ToolAuditRepository(db);
+  const jobRepository = new JobRepository(db);
+  const jobWorker = new InProcessJobWorker(jobRepository);
 
   app.use(async (ctx, next) => {
     const origin = ctx.get('origin');
@@ -269,23 +273,44 @@ export function createApp(options: AppOptions = {}): Koa {
 
   router.post('/api/agents/:id/documents/:documentId/index', (ctx) => {
     const agentId = Number(ctx.params.id);
-    if (!agentRepository.findById(agentId)) {
+    const agent = agentRepository.findById(agentId);
+    if (!agent) {
       ctx.status = 404;
       ctx.body = { error: 'agent not found' };
       return;
     }
 
-    const indexed = documentRepository.markIndexed(
-      agentId,
-      Number(ctx.params.documentId),
-    );
-    if (!indexed) {
+    const documentId = Number(ctx.params.documentId);
+    if (!documentRepository.findByAgentDocument(agentId, documentId)) {
       ctx.status = 404;
       ctx.body = { error: 'document not found' };
       return;
     }
 
-    ctx.body = indexed;
+    let indexed = documentRepository.findByAgentDocument(agentId, documentId);
+    const job = jobRepository.create({
+      type: 'document.index',
+      workspaceId: agent.workspaceId,
+      payload: { agentId, documentId },
+    });
+    const completedJob = jobWorker.run(job.id, () => {
+      indexed = documentRepository.markIndexed(agentId, documentId);
+      if (!indexed) {
+        throw new Error('document not found');
+      }
+      return { document: indexed };
+    });
+
+    if (completedJob.status !== 'succeeded' || !indexed) {
+      ctx.status = 500;
+      ctx.body = { error: completedJob.error, job: completedJob };
+      return;
+    }
+
+    ctx.body = {
+      ...indexed,
+      job: completedJob,
+    };
   });
 
   router.get('/api/providers', (ctx) => {
@@ -379,6 +404,17 @@ export function createApp(options: AppOptions = {}): Koa {
       return;
     }
     ctx.body = run;
+  });
+
+  router.get('/api/jobs/:id', (ctx) => {
+    const job = jobRepository.findById(Number(ctx.params.id));
+    if (!job) {
+      ctx.status = 404;
+      ctx.body = { error: 'job not found' };
+      return;
+    }
+
+    ctx.body = job;
   });
 
   router.post('/api/runs/:id/events', (ctx) => {

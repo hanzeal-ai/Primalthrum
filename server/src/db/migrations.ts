@@ -27,6 +27,10 @@ export const MIGRATIONS: Migration[] = [
     id: '004_tool_audit_logs',
     up: applyToolAuditLogs,
   },
+  {
+    id: '005_background_jobs',
+    up: applyBackgroundJobs,
+  },
 ];
 
 export function runMigrations(db: SqliteDatabase): void {
@@ -213,6 +217,28 @@ function applyToolAuditLogs(db: SqliteDatabase): void {
       FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
       FOREIGN KEY(run_id) REFERENCES runs(id) ON DELETE CASCADE,
       FOREIGN KEY(event_id) REFERENCES stream_events(id) ON DELETE CASCADE
+    );
+  `);
+}
+
+function applyBackgroundJobs(db: SqliteDatabase): void {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS jobs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL DEFAULT ${DEFAULT_WORKSPACE_ID},
+      type TEXT NOT NULL,
+      status TEXT NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0,
+      max_attempts INTEGER NOT NULL DEFAULT 3,
+      payload_json TEXT NOT NULL,
+      result_json TEXT NOT NULL DEFAULT '{}',
+      error TEXT NOT NULL DEFAULT '',
+      run_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      started_at TEXT,
+      completed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
     );
   `);
 }

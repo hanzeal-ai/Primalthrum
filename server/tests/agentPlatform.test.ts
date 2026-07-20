@@ -11,6 +11,8 @@ import { promisify } from 'node:util';
 import { createApp } from '../src/app';
 import { MIGRATIONS } from '../src/db/migrations';
 import { SqliteDatabase, sqlValue } from '../src/db/sqlite';
+import { InProcessJobWorker } from '../src/services/inProcessJobWorker';
+import { JobRepository } from '../src/services/jobRepository';
 
 const execFileAsync = promisify(execFile);
 
@@ -124,6 +126,36 @@ test('schema migrations are ordered and idempotent', () => {
     assert.equal(Number(workspaces[0]?.count ?? 0), 1);
   } finally {
     rmSync(migrationRootDir, { recursive: true, force: true });
+  }
+});
+
+test('in-process job worker records retry and failure states', () => {
+  const jobRootDir = mkdtempSync(join(tmpdir(), 'primalthrum-jobs-'));
+  try {
+    const db = new SqliteDatabase(join(jobRootDir, 'platform.sqlite'));
+    const jobs = new JobRepository(db);
+    const worker = new InProcessJobWorker(jobs);
+    const job = jobs.create({
+      type: 'demo.failure',
+      payload: { purpose: 'retry coverage' },
+      maxAttempts: 2,
+    });
+
+    const firstAttempt = worker.run(job.id, () => {
+      throw new Error('first failure');
+    });
+    assert.equal(firstAttempt.status, 'retrying');
+    assert.equal(firstAttempt.attempts, 1);
+    assert.equal(firstAttempt.error, 'first failure');
+
+    const secondAttempt = worker.run(job.id, () => {
+      throw new Error('final failure');
+    });
+    assert.equal(secondAttempt.status, 'failed');
+    assert.equal(secondAttempt.attempts, 2);
+    assert.equal(secondAttempt.error, 'final failure');
+  } finally {
+    rmSync(jobRootDir, { recursive: true, force: true });
   }
 });
 
@@ -548,9 +580,33 @@ test('document APIs register and list agent document metadata', async () => {
     { method: 'POST', headers: authHeaders },
   );
   assert.equal(indexResponse.status, 200);
-  const indexed = await indexResponse.json() as typeof document;
+  const indexed = await indexResponse.json() as typeof document & {
+    job: {
+      id: number;
+      type: string;
+      status: string;
+      attempts: number;
+      payload: Record<string, unknown>;
+    };
+  };
   assert.equal(indexed.id, document.id);
   assert.equal(indexed.indexStatus, 'indexed');
+  assert.ok(indexed.job.id > 0);
+  assert.equal(indexed.job.type, 'document.index');
+  assert.equal(indexed.job.status, 'succeeded');
+  assert.equal(indexed.job.attempts, 1);
+  assert.deepEqual(indexed.job.payload, {
+    agentId: agent.id,
+    documentId: document.id,
+  });
+
+  const jobResponse = await fetch(`${baseUrl}/api/jobs/${indexed.job.id}`, {
+    headers: authHeaders,
+  });
+  assert.equal(jobResponse.status, 200);
+  const loadedJob = await jobResponse.json() as { id: number; status: string };
+  assert.equal(loadedJob.id, indexed.job.id);
+  assert.equal(loadedJob.status, 'succeeded');
 });
 
 test('run stream events can be inserted and replayed', async () => {

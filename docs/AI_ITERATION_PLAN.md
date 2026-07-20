@@ -1370,7 +1370,7 @@ Field meanings:
 
 ### P10-02 Background Job Abstraction
 
-- Status: Todo
+- Status: Done
 - Goal: Add durable background jobs for long-running generation, indexing, and runs.
 - Dependencies: P10-01
 - Inputs: `server/src/services/**`, run/document APIs

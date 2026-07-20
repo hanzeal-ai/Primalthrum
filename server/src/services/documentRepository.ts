@@ -78,6 +78,16 @@ export class DocumentRepository {
     `).map(toDocumentRecord);
   }
 
+  findByAgentDocument(agentId: number, documentId: number): DocumentRecord | null {
+    const rows = this.db.query<DocumentRow>(`
+      SELECT id, agent_id, workspace_id, filename, hash, status, collection
+      FROM documents
+      WHERE agent_id = ${sqlValue(agentId)} AND id = ${sqlValue(documentId)}
+      LIMIT 1;
+    `);
+    return rows[0] ? toDocumentRecord(rows[0]) : null;
+  }
+
   markIndexed(agentId: number, documentId: number): DocumentRecord | null {
     this.db.run(`
       UPDATE documents
