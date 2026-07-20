@@ -6,6 +6,10 @@ import { join } from 'node:path';
 import { SqliteDatabase } from './db/sqlite';
 import { generateAgentProject } from './generators/agentProjectGenerator';
 import { AgentRepository, type CreateAgentInput } from './services/agentRepository';
+import {
+  DocumentRepository,
+  type CreateDocumentInput,
+} from './services/documentRepository';
 import { listProviders, listSkills, listTools } from './services/discoveryCatalog';
 import { RunRepository, type CreateRunInput } from './services/runRepository';
 import { pipeSseStream } from './services/sseRecorder';
@@ -43,6 +47,7 @@ export function createApp(options: AppOptions = {}): Koa {
   );
   const runRepository = new RunRepository(db);
   const streamEventRepository = new StreamEventRepository(db);
+  const documentRepository = new DocumentRepository(db);
 
   app.use(async (ctx, next) => {
     ctx.set('Access-Control-Allow-Origin', '*');
@@ -104,6 +109,40 @@ export function createApp(options: AppOptions = {}): Koa {
     const generated = await generateAgentProject(agent);
     agentRepository.markGenerated(agent.id);
     ctx.body = generated;
+  });
+
+  router.post('/api/agents/:id/documents', (ctx) => {
+    const agentId = Number(ctx.params.id);
+    if (!agentRepository.findById(agentId)) {
+      ctx.status = 404;
+      ctx.body = { error: 'agent not found' };
+      return;
+    }
+
+    try {
+      const created = documentRepository.create(
+        agentId,
+        ctx.request.body as CreateDocumentInput,
+      );
+      ctx.status = 201;
+      ctx.body = created;
+    } catch (error) {
+      ctx.status = 400;
+      ctx.body = {
+        error: error instanceof Error ? error.message : 'failed to register document',
+      };
+    }
+  });
+
+  router.get('/api/agents/:id/documents', (ctx) => {
+    const agentId = Number(ctx.params.id);
+    if (!agentRepository.findById(agentId)) {
+      ctx.status = 404;
+      ctx.body = { error: 'agent not found' };
+      return;
+    }
+
+    ctx.body = documentRepository.listByAgent(agentId);
   });
 
   router.get('/api/providers', (ctx) => {

@@ -1056,7 +1056,7 @@ Field meanings:
 
 ### P5-01 Document Metadata API
 
-- Status: Todo
+- Status: Done
 - Goal: Add APIs for registering and listing documents for an agent.
 - Dependencies: P4-03
 - Inputs: `server/src/db/schema.ts`, `server/src/app.ts`

@@ -213,6 +213,52 @@ test('POST /api/runs rejects unknown agents', async () => {
   assert.equal(response.status, 404);
 });
 
+test('document APIs register and list agent document metadata', async () => {
+  const createAgentResponse = await fetch(`${baseUrl}/api/agents`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      name: 'Document Agent',
+      description: 'Document registry demo',
+    }),
+  });
+  const agent = await createAgentResponse.json() as { id: number };
+
+  const createDocumentResponse = await fetch(
+    `${baseUrl}/api/agents/${agent.id}/documents`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        filename: 'guide.md',
+        content: '# Guide\nUse this document for retrieval.',
+        collection: 'research',
+      }),
+    },
+  );
+
+  assert.equal(createDocumentResponse.status, 201);
+  const document = await createDocumentResponse.json() as {
+    id: number;
+    agentId: number;
+    filename: string;
+    hash: string;
+    indexStatus: string;
+    collection: string;
+  };
+  assert.ok(document.id > 0);
+  assert.equal(document.agentId, agent.id);
+  assert.equal(document.filename, 'guide.md');
+  assert.match(document.hash, /^[a-f0-9]{64}$/);
+  assert.equal(document.indexStatus, 'registered');
+  assert.equal(document.collection, 'research');
+
+  const listResponse = await fetch(`${baseUrl}/api/agents/${agent.id}/documents`);
+  assert.equal(listResponse.status, 200);
+  const documents = await listResponse.json() as Array<typeof document>;
+  assert.deepEqual(documents, [document]);
+});
+
 test('run stream events can be inserted and replayed', async () => {
   const createAgentResponse = await fetch(`${baseUrl}/api/agents`, {
     method: 'POST',
