@@ -15,4 +15,5 @@ class AgentRuntimeConfig:
     rag_provider: str = "null"
     enabled_tools: list[str] | None = None
     enabled_skills: list[str] | None = None
+    file_reader_allowed_roots: list[str] | None = None
     model_config: dict[str, Any] = field(default_factory=dict)

@@ -48,6 +48,7 @@ class ToolDefinition(Protocol):
 @dataclass
 class FileReaderTool:
     name: str = "file_reader"
+    allowed_roots: list[str | Path] = field(default_factory=list)
     manifest: ToolManifest = field(
         default_factory=lambda: ToolManifest(
             name="file_reader",
@@ -67,9 +68,24 @@ class FileReaderTool:
             dangerous=False,
         )
     )
+    _resolved_roots: list[Path] = field(init=False, repr=False)
+
+    def __post_init__(self) -> None:
+        self._resolved_roots = [
+            Path(root).expanduser().resolve()
+            for root in self.allowed_roots
+        ]
 
     def call(self, payload: dict[str, Any]) -> dict[str, Any]:
-        path = Path(str(payload.get("path", ""))).expanduser()
+        path = Path(str(payload.get("path", ""))).expanduser().resolve()
+        if not self._is_allowed(path):
+            raise PermissionError(f"path is outside allowed roots: {path}")
         if not path.is_file():
             raise FileNotFoundError(str(path))
         return {"path": str(path), "content": path.read_text(encoding="utf-8")}
+
+    def _is_allowed(self, path: Path) -> bool:
+        return any(
+            path == root or root in path.parents
+            for root in self._resolved_roots
+        )

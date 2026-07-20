@@ -1022,7 +1022,7 @@ Field meanings:
 
 ### P4-02 File Reader Allowed Roots
 
-- Status: Todo
+- Status: Done
 - Goal: Restrict `file_reader` to configured allowed roots.
 - Dependencies: P4-01
 - Inputs: `agent/runtime/tools.py`

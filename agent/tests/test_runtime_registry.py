@@ -39,6 +39,40 @@ class RuntimeRegistryTest(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "permissions"):
             validate_tool_manifest(manifest)
 
+    def test_file_reader_allows_only_configured_roots(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            workspace = Path(temp_dir)
+            allowed_root = workspace / "allowed"
+            allowed_root.mkdir()
+            allowed_file = allowed_root / "notes.txt"
+            allowed_file.write_text("approved content", encoding="utf-8")
+            denied_file = workspace / "secret.txt"
+            denied_file.write_text("private content", encoding="utf-8")
+
+            runtime = create_runtime(
+                AgentRuntimeConfig(
+                    agent_name="ResearchAgent",
+                    file_reader_allowed_roots=[str(allowed_root)],
+                )
+            )
+            tool = runtime.tools.get("file_reader")
+
+            self.assertEqual(
+                tool.call({"path": str(allowed_file)})["content"],
+                "approved content",
+            )
+            with self.assertRaises(PermissionError):
+                tool.call({"path": str(allowed_root / ".." / "secret.txt")})
+
+    def test_file_reader_denies_reads_without_allowed_roots(self) -> None:
+        with TemporaryDirectory() as temp_dir:
+            file_path = Path(temp_dir) / "notes.txt"
+            file_path.write_text("content", encoding="utf-8")
+            runtime = create_runtime(AgentRuntimeConfig(agent_name="ResearchAgent"))
+
+            with self.assertRaises(PermissionError):
+                runtime.tools.get("file_reader").call({"path": str(file_path)})
+
     def test_runtime_respects_disabled_tools_skills_and_rag(self) -> None:
         runtime = create_runtime(
             AgentRuntimeConfig(

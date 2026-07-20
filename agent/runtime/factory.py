@@ -47,7 +47,9 @@ def create_runtime(config: AgentRuntimeConfig) -> AgentRuntime:
 
     tools = Registry[ToolDefinition]()
     available_tools = {
-        "file_reader": FileReaderTool(),
+        "file_reader": FileReaderTool(
+            allowed_roots=config.file_reader_allowed_roots or []
+        ),
     }
     enabled_tools = config.enabled_tools
     for name, tool in available_tools.items():
