@@ -1462,7 +1462,7 @@ Field meanings:
 
 ### P12-01 Structured Logs And Error Taxonomy
 
-- Status: Todo
+- Status: Done
 - Goal: Add structured logs and consistent run/job/provider error taxonomy.
 - Dependencies: P10-02
 - Inputs: server app and services

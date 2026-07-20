@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { SqliteDatabase } from './db/sqlite';
 import { generateAgentProject } from './generators/agentProjectGenerator';
 import { AgentRepository, type CreateAgentInput } from './services/agentRepository';
+import { sendApiError } from './services/apiErrors';
 import {
   clearSessionCookie,
   createAuthMiddleware,
@@ -18,6 +19,7 @@ import {
 } from './services/documentRepository';
 import { DocumentIndexRepository } from './services/documentIndexRepository';
 import { LocalDocumentStorage } from './services/fileStorage';
+import { JsonConsoleLogger, type StructuredLogger } from './services/logger';
 import { hashPassword, verifyPassword } from './services/passwordHash';
 import { InProcessJobWorker } from './services/inProcessJobWorker';
 import { JobRepository } from './services/jobRepository';
@@ -50,6 +52,7 @@ export interface AppOptions {
   dbPath?: string;
   documentStorageDir?: string;
   generatedAgentsDir?: string;
+  logger?: StructuredLogger;
 }
 
 const DEFAULT_AGENT_BASE_URL = 'http://127.0.0.1:8000';
@@ -82,6 +85,7 @@ export function createApp(options: AppOptions = {}): Koa {
   const app = new Koa();
   const router = new Router();
   const agentBaseUrl = options.agentBaseUrl ?? DEFAULT_AGENT_BASE_URL;
+  const logger = options.logger ?? new JsonConsoleLogger();
   const db = new SqliteDatabase(options.dbPath ?? DEFAULT_DB_PATH);
   const agentRepository = new AgentRepository(
     db,
@@ -248,8 +252,11 @@ export function createApp(options: AppOptions = {}): Koa {
   router.post('/api/agents/:id/documents', (ctx) => {
     const agentId = Number(ctx.params.id);
     if (!agentRepository.findById(agentId)) {
-      ctx.status = 404;
-      ctx.body = { error: 'agent not found' };
+      sendApiError(ctx, logger, {
+        status: 404,
+        code: 'DOCUMENT_AGENT_NOT_FOUND',
+        message: 'agent not found',
+      });
       return;
     }
 
@@ -274,18 +281,22 @@ export function createApp(options: AppOptions = {}): Koa {
       ctx.status = 201;
       ctx.body = withStorage ?? created;
     } catch (error) {
-      ctx.status = 400;
-      ctx.body = {
-        error: error instanceof Error ? error.message : 'failed to register document',
-      };
+      sendApiError(ctx, logger, {
+        status: 400,
+        code: 'DOCUMENT_INVALID',
+        message: error instanceof Error ? error.message : 'failed to register document',
+      });
     }
   });
 
   router.get('/api/agents/:id/documents', (ctx) => {
     const agentId = Number(ctx.params.id);
     if (!agentRepository.findById(agentId)) {
-      ctx.status = 404;
-      ctx.body = { error: 'agent not found' };
+      sendApiError(ctx, logger, {
+        status: 404,
+        code: 'DOCUMENT_AGENT_NOT_FOUND',
+        message: 'agent not found',
+      });
       return;
     }
 
@@ -296,15 +307,21 @@ export function createApp(options: AppOptions = {}): Koa {
     const agentId = Number(ctx.params.id);
     const agent = agentRepository.findById(agentId);
     if (!agent) {
-      ctx.status = 404;
-      ctx.body = { error: 'agent not found' };
+      sendApiError(ctx, logger, {
+        status: 404,
+        code: 'DOCUMENT_AGENT_NOT_FOUND',
+        message: 'agent not found',
+      });
       return;
     }
 
     const documentId = Number(ctx.params.documentId);
     if (!documentRepository.findByAgentDocument(agentId, documentId)) {
-      ctx.status = 404;
-      ctx.body = { error: 'document not found' };
+      sendApiError(ctx, logger, {
+        status: 404,
+        code: 'DOCUMENT_NOT_FOUND',
+        message: 'document not found',
+      });
       return;
     }
 
@@ -330,8 +347,12 @@ export function createApp(options: AppOptions = {}): Koa {
     });
 
     if (completedJob.status !== 'succeeded' || !indexed) {
-      ctx.status = 500;
-      ctx.body = { error: completedJob.error, job: completedJob };
+      sendApiError(ctx, logger, {
+        status: 500,
+        code: 'DOCUMENT_INDEX_FAILED',
+        message: completedJob.error || 'document index failed',
+        details: { job: completedJob },
+      });
       return;
     }
 
@@ -344,16 +365,22 @@ export function createApp(options: AppOptions = {}): Koa {
   router.delete('/api/agents/:id/documents/:documentId', (ctx) => {
     const agentId = Number(ctx.params.id);
     if (!agentRepository.findById(agentId)) {
-      ctx.status = 404;
-      ctx.body = { error: 'agent not found' };
+      sendApiError(ctx, logger, {
+        status: 404,
+        code: 'DOCUMENT_AGENT_NOT_FOUND',
+        message: 'agent not found',
+      });
       return;
     }
 
     const documentId = Number(ctx.params.documentId);
     const document = documentRepository.findByAgentDocument(agentId, documentId);
     if (!document) {
-      ctx.status = 404;
-      ctx.body = { error: 'document not found' };
+      sendApiError(ctx, logger, {
+        status: 404,
+        code: 'DOCUMENT_NOT_FOUND',
+        message: 'document not found',
+      });
       return;
     }
 
@@ -386,18 +413,22 @@ export function createApp(options: AppOptions = {}): Koa {
       ctx.status = 201;
       ctx.body = created;
     } catch (error) {
-      ctx.status = 400;
-      ctx.body = {
-        error: error instanceof Error ? error.message : 'failed to create provider config',
-      };
+      sendApiError(ctx, logger, {
+        status: 400,
+        code: 'PROVIDER_CONFIG_INVALID',
+        message: error instanceof Error ? error.message : 'failed to create provider config',
+      });
     }
   });
 
   router.get('/api/provider-configs/:id', (ctx) => {
     const config = providerConfigRepository.findById(Number(ctx.params.id));
     if (!config) {
-      ctx.status = 404;
-      ctx.body = { error: 'provider config not found' };
+      sendApiError(ctx, logger, {
+        status: 404,
+        code: 'PROVIDER_CONFIG_NOT_FOUND',
+        message: 'provider config not found',
+      });
       return;
     }
 
@@ -411,17 +442,21 @@ export function createApp(options: AppOptions = {}): Koa {
         ctx.request.body as UpdateProviderConfigInput,
       );
       if (!updated) {
-        ctx.status = 404;
-        ctx.body = { error: 'provider config not found' };
+        sendApiError(ctx, logger, {
+          status: 404,
+          code: 'PROVIDER_CONFIG_NOT_FOUND',
+          message: 'provider config not found',
+        });
         return;
       }
 
       ctx.body = updated;
     } catch (error) {
-      ctx.status = 400;
-      ctx.body = {
-        error: error instanceof Error ? error.message : 'failed to update provider config',
-      };
+      sendApiError(ctx, logger, {
+        status: 400,
+        code: 'PROVIDER_CONFIG_INVALID',
+        message: error instanceof Error ? error.message : 'failed to update provider config',
+      });
     }
   });
 
@@ -437,8 +472,11 @@ export function createApp(options: AppOptions = {}): Koa {
     try {
       const body = ctx.request.body as CreateRunInput;
       if (!agentRepository.findById(Number(body.agentId))) {
-        ctx.status = 404;
-        ctx.body = { error: 'agent not found' };
+        sendApiError(ctx, logger, {
+          status: 404,
+          code: 'RUN_AGENT_NOT_FOUND',
+          message: 'agent not found',
+        });
         return;
       }
 
@@ -446,18 +484,22 @@ export function createApp(options: AppOptions = {}): Koa {
       ctx.status = 201;
       ctx.body = created;
     } catch (error) {
-      ctx.status = 400;
-      ctx.body = {
-        error: error instanceof Error ? error.message : 'failed to create run',
-      };
+      sendApiError(ctx, logger, {
+        status: 400,
+        code: 'RUN_INVALID',
+        message: error instanceof Error ? error.message : 'failed to create run',
+      });
     }
   });
 
   router.get('/api/runs/:id', (ctx) => {
     const run = runRepository.findById(Number(ctx.params.id));
     if (!run) {
-      ctx.status = 404;
-      ctx.body = { error: 'run not found' };
+      sendApiError(ctx, logger, {
+        status: 404,
+        code: 'RUN_NOT_FOUND',
+        message: 'run not found',
+      });
       return;
     }
     ctx.body = run;
@@ -466,8 +508,11 @@ export function createApp(options: AppOptions = {}): Koa {
   router.get('/api/jobs/:id', (ctx) => {
     const job = jobRepository.findById(Number(ctx.params.id));
     if (!job) {
-      ctx.status = 404;
-      ctx.body = { error: 'job not found' };
+      sendApiError(ctx, logger, {
+        status: 404,
+        code: 'JOB_NOT_FOUND',
+        message: 'job not found',
+      });
       return;
     }
 
@@ -477,8 +522,11 @@ export function createApp(options: AppOptions = {}): Koa {
   router.post('/api/runs/:id/events', (ctx) => {
     const runId = Number(ctx.params.id);
     if (!runRepository.findById(runId)) {
-      ctx.status = 404;
-      ctx.body = { error: 'run not found' };
+      sendApiError(ctx, logger, {
+        status: 404,
+        code: 'RUN_NOT_FOUND',
+        message: 'run not found',
+      });
       return;
     }
 
@@ -494,18 +542,22 @@ export function createApp(options: AppOptions = {}): Koa {
       ctx.status = 201;
       ctx.body = created;
     } catch (error) {
-      ctx.status = 400;
-      ctx.body = {
-        error: error instanceof Error ? error.message : 'failed to create stream event',
-      };
+      sendApiError(ctx, logger, {
+        status: 400,
+        code: 'RUN_EVENT_INVALID',
+        message: error instanceof Error ? error.message : 'failed to create stream event',
+      });
     }
   });
 
   router.get('/api/runs/:id/events', (ctx) => {
     const runId = Number(ctx.params.id);
     if (!runRepository.findById(runId)) {
-      ctx.status = 404;
-      ctx.body = { error: 'run not found' };
+      sendApiError(ctx, logger, {
+        status: 404,
+        code: 'RUN_NOT_FOUND',
+        message: 'run not found',
+      });
       return;
     }
 
@@ -515,8 +567,11 @@ export function createApp(options: AppOptions = {}): Koa {
   router.get('/api/audit/tool-calls', (ctx) => {
     const runId = parseOptionalPositiveInteger(ctx.query.runId);
     if (runId === null) {
-      ctx.status = 400;
-      ctx.body = { error: 'runId must be a positive integer' };
+      sendApiError(ctx, logger, {
+        status: 400,
+        code: 'RUN_ID_INVALID',
+        message: 'runId must be a positive integer',
+      });
       return;
     }
 

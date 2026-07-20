@@ -34,6 +34,7 @@ before(async () => {
     dbPath,
     documentStorageDir,
     generatedAgentsDir: join(rootDir, 'generated-agents'),
+    logger: { log: () => undefined },
   });
   server = app.listen(0, '127.0.0.1');
   await new Promise<void>((resolve) => server.once('listening', resolve));
@@ -52,6 +53,25 @@ function jsonAuthHeaders(): Record<string, string> {
     ...authHeaders,
     'content-type': 'application/json',
   };
+}
+
+async function assertErrorPayload(
+  response: Response,
+  expected: {
+    status: number;
+    code: string;
+    message: string;
+  },
+): Promise<void> {
+  assert.equal(response.status, expected.status);
+  const body = await response.json() as {
+    error: {
+      code: string;
+      message: string;
+      status: number;
+    };
+  };
+  assert.deepEqual(body.error, expected);
 }
 
 test('schema bootstrap creates the default local workspace', () => {
@@ -103,6 +123,7 @@ test('schema migrations are ordered and idempotent', () => {
       dbPath: join(migrationRootDir, 'platform.sqlite'),
       documentStorageDir: join(migrationRootDir, 'documents'),
       generatedAgentsDir: join(migrationRootDir, 'generated-agents'),
+      logger: { log: () => undefined },
     });
     void app;
     const afterFirstRun = db.query<{ id: string }>(`
@@ -115,6 +136,7 @@ test('schema migrations are ordered and idempotent', () => {
       dbPath: join(migrationRootDir, 'platform.sqlite'),
       documentStorageDir: join(migrationRootDir, 'documents-2'),
       generatedAgentsDir: join(migrationRootDir, 'generated-agents-2'),
+      logger: { log: () => undefined },
     });
     void secondApp;
     const afterSecondRun = db.query<{ id: string }>(`
@@ -465,6 +487,20 @@ test('discovery APIs expose typed providers tools and skills', async () => {
 });
 
 test('provider config APIs store secrets as redacted references', async () => {
+  const invalidProviderResponse = await fetch(`${baseUrl}/api/provider-configs`, {
+    method: 'POST',
+    headers: jsonAuthHeaders(),
+    body: JSON.stringify({
+      type: 'llm',
+      config: { provider: 'openai' },
+    }),
+  });
+  await assertErrorPayload(invalidProviderResponse, {
+    status: 400,
+    code: 'PROVIDER_CONFIG_INVALID',
+    message: 'provider config name is required',
+  });
+
   const createResponse = await fetch(`${baseUrl}/api/provider-configs`, {
     method: 'POST',
     headers: jsonAuthHeaders(),
@@ -605,7 +641,11 @@ test('POST /api/runs rejects unknown agents', async () => {
     }),
   });
 
-  assert.equal(response.status, 404);
+  await assertErrorPayload(response, {
+    status: 404,
+    code: 'RUN_AGENT_NOT_FOUND',
+    message: 'agent not found',
+  });
 });
 
 test('document APIs register and list agent document metadata', async () => {
@@ -742,6 +782,28 @@ test('document APIs register and list agent document metadata', async () => {
     () => new LocalDocumentStorage(documentStorageDir).read(document.storageRef),
     /ENOENT/,
   );
+
+  const missingDocumentResponse = await fetch(
+    `${baseUrl}/api/agents/${agent.id}/documents/${document.id}/index`,
+    { method: 'POST', headers: authHeaders },
+  );
+  await assertErrorPayload(missingDocumentResponse, {
+    status: 404,
+    code: 'DOCUMENT_NOT_FOUND',
+    message: 'document not found',
+  });
+});
+
+test('job API returns standard error payload for missing jobs', async () => {
+  const response = await fetch(`${baseUrl}/api/jobs/999999`, {
+    headers: authHeaders,
+  });
+
+  await assertErrorPayload(response, {
+    status: 404,
+    code: 'JOB_NOT_FOUND',
+    message: 'job not found',
+  });
 });
 
 test('run stream events can be inserted and replayed', async () => {
