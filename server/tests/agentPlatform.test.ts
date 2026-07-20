@@ -257,6 +257,15 @@ test('document APIs register and list agent document metadata', async () => {
   assert.equal(listResponse.status, 200);
   const documents = await listResponse.json() as Array<typeof document>;
   assert.deepEqual(documents, [document]);
+
+  const indexResponse = await fetch(
+    `${baseUrl}/api/agents/${agent.id}/documents/${document.id}/index`,
+    { method: 'POST' },
+  );
+  assert.equal(indexResponse.status, 200);
+  const indexed = await indexResponse.json() as typeof document;
+  assert.equal(indexed.id, document.id);
+  assert.equal(indexed.indexStatus, 'indexed');
 });
 
 test('run stream events can be inserted and replayed', async () => {

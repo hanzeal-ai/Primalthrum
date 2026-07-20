@@ -145,6 +145,27 @@ export function createApp(options: AppOptions = {}): Koa {
     ctx.body = documentRepository.listByAgent(agentId);
   });
 
+  router.post('/api/agents/:id/documents/:documentId/index', (ctx) => {
+    const agentId = Number(ctx.params.id);
+    if (!agentRepository.findById(agentId)) {
+      ctx.status = 404;
+      ctx.body = { error: 'agent not found' };
+      return;
+    }
+
+    const indexed = documentRepository.markIndexed(
+      agentId,
+      Number(ctx.params.documentId),
+    );
+    if (!indexed) {
+      ctx.status = 404;
+      ctx.body = { error: 'document not found' };
+      return;
+    }
+
+    ctx.body = indexed;
+  });
+
   router.get('/api/providers', (ctx) => {
     ctx.body = listProviders();
   });

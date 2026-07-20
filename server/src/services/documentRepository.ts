@@ -70,6 +70,22 @@ export class DocumentRepository {
       ORDER BY id ASC;
     `).map(toDocumentRecord);
   }
+
+  markIndexed(agentId: number, documentId: number): DocumentRecord | null {
+    this.db.run(`
+      UPDATE documents
+      SET status = 'indexed'
+      WHERE agent_id = ${sqlValue(agentId)} AND id = ${sqlValue(documentId)};
+    `);
+
+    const rows = this.db.query<DocumentRow>(`
+      SELECT id, agent_id, filename, hash, status, collection
+      FROM documents
+      WHERE agent_id = ${sqlValue(agentId)} AND id = ${sqlValue(documentId)}
+      LIMIT 1;
+    `);
+    return rows[0] ? toDocumentRecord(rows[0]) : null;
+  }
 }
 
 function normalizeFilename(filename: unknown): string {
