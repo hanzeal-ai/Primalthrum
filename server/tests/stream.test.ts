@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import { mkdtempSync, rmSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 import { createServer, type Server } from 'node:http';
 
@@ -7,10 +10,20 @@ import { createApp } from '../src/app';
 let agentServer: Server;
 let appServer: Server;
 let appBaseUrl = '';
+let rootDir = '';
+const upstreamPayloads: unknown[] = [];
 
 before(async () => {
+  rootDir = mkdtempSync(join(tmpdir(), 'primalthrum-stream-'));
   agentServer = createServer((req, res) => {
     if (req.method === 'POST' && req.url === '/stream') {
+      let body = '';
+      req.on('data', (chunk) => {
+        body += chunk.toString();
+      });
+      req.on('end', () => {
+        upstreamPayloads.push(JSON.parse(body));
+      });
       res.writeHead(200, {
         'content-type': 'text/event-stream; charset=utf-8',
         'cache-control': 'no-cache',
@@ -31,6 +44,8 @@ before(async () => {
 
   const app = createApp({
     agentBaseUrl: `http://127.0.0.1:${agentAddress.port}`,
+    dbPath: join(rootDir, 'platform.sqlite'),
+    generatedAgentsDir: join(rootDir, 'generated-agents'),
   });
   appServer = app.listen(0);
   await new Promise<void>((resolve) => appServer.once('listening', resolve));
@@ -42,6 +57,7 @@ before(async () => {
 after(async () => {
   await new Promise<void>((resolve) => appServer.close(() => resolve()));
   await new Promise<void>((resolve) => agentServer.close(() => resolve()));
+  rmSync(rootDir, { recursive: true, force: true });
 });
 
 test('POST /api/stream proxies the agent SSE stream', async () => {
@@ -63,4 +79,65 @@ test('POST /api/stream proxies the agent SSE stream', async () => {
   assert.match(body, /"node":"intake"/);
   assert.match(body, /event: agent\.done/);
   assert.match(body, /"status":"done"/);
+});
+
+test('POST /api/stream can run by agentId and persist proxied events', async () => {
+  upstreamPayloads.length = 0;
+  const agentResponse = await fetch(`${appBaseUrl}/api/agents`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      name: 'Configured Stream Agent',
+      description: 'Uses stored config',
+      memoryProvider: 'sqlite',
+      cacheProvider: 'memory',
+      ragProvider: 'in-memory',
+      enabledTools: ['file_reader'],
+      enabledSkills: ['research'],
+    }),
+  });
+  assert.equal(agentResponse.status, 201);
+  const agent = await agentResponse.json() as { id: number };
+
+  const response = await fetch(`${appBaseUrl}/api/stream`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      agentId: agent.id,
+      input: 'Use the saved agent config',
+    }),
+  });
+
+  assert.equal(response.status, 200);
+  const runId = Number(response.headers.get('x-primalthrum-run-id'));
+  assert.ok(runId > 0);
+  const body = await response.text();
+  assert.match(body, /event: agent\.update/);
+  assert.equal(upstreamPayloads.length, 1);
+  assert.deepEqual(upstreamPayloads[0], {
+    goal: 'Use the saved agent config',
+    agent: 'Configured Stream Agent',
+    tools: ['file_reader'],
+    skills: ['research'],
+    memory_provider: 'sqlite',
+    cache_provider: 'memory',
+    rag_provider: 'in-memory',
+  });
+
+  const runResponse = await fetch(`${appBaseUrl}/api/runs/${runId}`);
+  assert.equal(runResponse.status, 200);
+  const run = await runResponse.json() as { agentId: number; input: string };
+  assert.equal(run.agentId, agent.id);
+  assert.equal(run.input, 'Use the saved agent config');
+
+  const eventsResponse = await fetch(`${appBaseUrl}/api/runs/${runId}/events`);
+  assert.equal(eventsResponse.status, 200);
+  const events = await eventsResponse.json() as Array<{
+    eventType: string;
+    node: string;
+    payload: Record<string, unknown>;
+  }>;
+  assert.deepEqual(events.map((event) => event.eventType), ['agent.update', 'agent.done']);
+  assert.equal(events[0]?.node, 'intake');
+  assert.equal(events[1]?.payload.status, 'done');
 });

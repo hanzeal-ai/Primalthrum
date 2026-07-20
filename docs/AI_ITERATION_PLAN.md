@@ -900,7 +900,7 @@ Field meanings:
 
 ### P2-03 Run Stream By `agentId`
 
-- Status: Todo
+- Status: Done
 - Goal: Let `/api/stream` accept `agentId`, load config from SQLite, create a run, proxy Agent runtime, and persist stream events.
 - Dependencies: P2-02
 - Inputs: `server/src/app.ts`, `agent/main.py`, `server/tests/stream.test.ts`
