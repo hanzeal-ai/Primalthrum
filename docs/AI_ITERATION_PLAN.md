@@ -1655,18 +1655,19 @@ complete. Follow the same dependency and verification protocol used above.
 
 ### P15-03 Hosted Agent Web Application
 
-- Status: In Progress
+- Status: Done
 - Goal: Make every ready Agent directly usable at `/a/:agentSlug`.
 - Dependencies: P15-02
 - Required behavior: conversations, text, voice, attachments, stream rendering,
   sources, tool activity, stop/retry, errors, and history.
 - Verification: direct URL refresh, authenticated and audience access, stream E2E.
-- Current evidence: authenticated direct URL, server-persisted conversations,
+- Evidence: authenticated direct URL, server-persisted conversations,
   text and attachment input, voice control, canonical stream rendering, RAG
   source references, activity, stop, retry, and error states are implemented.
   Browser E2E passed through indexed document retrieval, the Node proxy, and the
-  LangGraph runtime, including refresh restoration. Unauthenticated audience
-  access policy remains open.
+  LangGraph runtime, including refresh restoration. Anonymous browser acceptance
+  passed for explicitly public generated Agents; workspace-only Agents fall back
+  to authentication and public responses omit private config and source paths.
 
 ### P16-01 Workspace Membership And RBAC
 

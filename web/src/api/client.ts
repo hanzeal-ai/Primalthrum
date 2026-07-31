@@ -9,6 +9,7 @@ import type {
   CurrentSession,
   DocumentRecord,
   GeneratedProject,
+  HostedAgentRecord,
   ParsedSseEvent,
   ProviderCatalog,
   ProviderConfigRecord,
@@ -105,6 +106,10 @@ export async function listAgents(): Promise<AgentRecord[]> {
 
 export async function getAgentBySlug(slug: string): Promise<AgentRecord> {
   return apiFetch<AgentRecord>(`/api/agents/slug/${encodeURIComponent(slug)}`)
+}
+
+export async function getPublicAgentBySlug(slug: string): Promise<HostedAgentRecord> {
+  return apiFetch<HostedAgentRecord>(`/api/public/agents/${encodeURIComponent(slug)}`, { auth: false })
 }
 
 export async function listConversations(agentId: number): Promise<ConversationRecord[]> {
@@ -213,6 +218,39 @@ export async function streamAgentRun(
     throw await apiErrorFromResponse(response, 'Stream request failed')
   }
 
+  return consumeStreamResponse(response, options.onEvent)
+}
+
+export async function streamPublicAgentRun(
+  slug: string,
+  input: { input: string; conversationId?: number },
+  options: {
+    signal?: AbortSignal
+    onEvent: (event: ParsedSseEvent) => void
+  },
+): Promise<StreamResult> {
+  const response = await fetch(apiUrl(`/api/public/agents/${encodeURIComponent(slug)}/stream`), {
+    method: 'POST',
+    credentials: 'include',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(input),
+    signal: options.signal,
+  })
+
+  if (!response.ok || !response.body) {
+    throw await apiErrorFromResponse(response, 'Public stream request failed')
+  }
+
+  return consumeStreamResponse(response, options.onEvent)
+}
+
+async function consumeStreamResponse(
+  response: Response,
+  onEvent: (event: ParsedSseEvent) => void,
+): Promise<StreamResult> {
+  if (!response.body) {
+    throw new ApiError('Stream response body is unavailable', response.status)
+  }
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
   const result: StreamResult = {
     runId: positiveHeader(response.headers.get('x-primalthrum-run-id')),
@@ -231,7 +269,7 @@ export async function streamAgentRun(
     for (const block of blocks) {
       const parsed = parseSseBlock(block)
       if (parsed) {
-        options.onEvent(parsed)
+        onEvent(parsed)
       }
     }
   }

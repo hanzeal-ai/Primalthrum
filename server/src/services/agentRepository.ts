@@ -11,6 +11,7 @@ export interface AgentConfig {
   enabledTools: string[];
   enabledSkills: string[];
   modelConfig: Record<string, unknown>;
+  audience: 'workspace' | 'public';
 }
 
 export interface AgentRecord {
@@ -33,6 +34,7 @@ export interface CreateAgentInput {
   enabledTools?: string[];
   enabledSkills?: string[];
   modelConfig?: Record<string, unknown>;
+  audience?: 'workspace' | 'public';
 }
 
 interface AgentRow {
@@ -136,6 +138,21 @@ export class AgentRepository {
     return updated;
   }
 
+  updateAudience(id: number, audience: unknown): AgentRecord {
+    const agent = this.findById(id);
+    if (!agent) throw new Error(`agent ${id} not found`);
+    const normalizedAudience = normalizeAudience(audience);
+    const config: AgentConfig = { ...agent.config, audience: normalizedAudience };
+    this.db.run(`
+      UPDATE agent_configs
+      SET config_json = ${sqlValue(JSON.stringify(config))}, updated_at = CURRENT_TIMESTAMP
+      WHERE agent_id = ${sqlValue(id)};
+    `);
+    const updated = this.findById(id);
+    if (!updated) throw new Error(`agent ${id} not found`);
+    return updated;
+  }
+
   findBySlug(slug: string): AgentRecord | null {
     const rows = this.db.query<AgentRow>(`
       SELECT
@@ -186,7 +203,14 @@ function normalizeConfig(input: CreateAgentInput): AgentConfig {
       default: { provider: 'mock', model: 'mock-chat' },
       embedding: { provider: 'mock', model: 'mock-embedding' },
     },
+    audience: normalizeAudience(input.audience),
   };
+}
+
+function normalizeAudience(value: unknown): 'workspace' | 'public' {
+  if (typeof value === 'undefined' || value === 'workspace') return 'workspace';
+  if (value === 'public') return 'public';
+  throw new Error('audience must be workspace or public');
 }
 
 function normalizeList(values: string[] | undefined): string[] {
@@ -203,6 +227,9 @@ export function slugify(value: string): string {
 }
 
 function toAgentRecord(row: AgentRow): AgentRecord {
+  const storedConfig = JSON.parse(row.config_json) as Omit<AgentConfig, 'audience'> & {
+    audience?: AgentConfig['audience'];
+  };
   return {
     id: Number(row.id),
     workspaceId: Number(row.workspace_id),
@@ -211,6 +238,9 @@ function toAgentRecord(row: AgentRow): AgentRecord {
     description: row.description,
     path: row.path,
     status: row.status,
-    config: JSON.parse(row.config_json) as AgentConfig,
+    config: {
+      ...storedConfig,
+      audience: storedConfig.audience ?? 'workspace',
+    },
   };
 }

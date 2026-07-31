@@ -85,6 +85,10 @@ function isPublicRequest(ctx: Koa.Context): boolean {
     return true;
   }
 
+  if (ctx.path.startsWith('/api/public/agents/')) {
+    return true;
+  }
+
   return [
     '/api/setup/status',
     '/api/setup/admin',

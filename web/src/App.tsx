@@ -21,8 +21,8 @@ export default function App() {
     )
   }
 
-  if (auth.mode === 'setup' || auth.mode === 'login') {
-    return (
+  const authScreen = auth.mode === 'setup' || auth.mode === 'login'
+    ? (
       <AuthScreen
         credentials={auth.credentials}
         message={auth.message}
@@ -31,20 +31,37 @@ export default function App() {
         onSubmit={auth.authenticate}
       />
     )
+    : null
+
+  if (agentSlug) {
+    if (auth.user) {
+      return (
+        <HostedAgentPage
+          onBack={() => window.location.assign('/')}
+          slug={agentSlug}
+          user={auth.user}
+        />
+      )
+    }
+
+    if (authScreen) {
+      return (
+        <HostedAgentPage
+          access="public"
+          onBack={() => window.location.assign('/')}
+          slug={agentSlug}
+          unavailableFallback={authScreen}
+        />
+      )
+    }
+  }
+
+  if (authScreen) {
+    return authScreen
   }
 
   if (!auth.user) {
     return null
-  }
-
-  if (agentSlug) {
-    return (
-      <HostedAgentPage
-        onBack={() => window.location.assign('/')}
-        slug={agentSlug}
-        user={auth.user}
-      />
-    )
   }
 
   return <AgentBuilderPage user={auth.user} onLogout={auth.logout} />

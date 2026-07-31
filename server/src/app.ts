@@ -292,6 +292,28 @@ export function createApp(options: AppOptions = {}): Koa {
     ctx.body = generated;
   });
 
+  router.put('/api/agents/:id/audience', (ctx) => {
+    const agentId = Number(ctx.params.id);
+    if (!agentRepository.findById(agentId)) {
+      sendApiError(ctx, logger, {
+        status: 404,
+        code: 'AGENT_NOT_FOUND',
+        message: 'agent not found',
+      });
+      return;
+    }
+    try {
+      const body = ctx.request.body as { audience?: unknown };
+      ctx.body = agentRepository.updateAudience(agentId, body.audience);
+    } catch (error) {
+      sendApiError(ctx, logger, {
+        status: 400,
+        code: 'AGENT_AUDIENCE_INVALID',
+        message: error instanceof Error ? error.message : 'invalid audience',
+      });
+    }
+  });
+
   router.post('/api/agents/:id/documents', (ctx) => {
     const agentId = Number(ctx.params.id);
     if (!agentRepository.findById(agentId)) {
@@ -807,10 +829,50 @@ export function createApp(options: AppOptions = {}): Koa {
   router.post('/api/stream', handleStream);
   router.post('/api/stream/create-agent', handleStream);
 
+  router.get('/api/public/agents/:slug', (ctx) => {
+    const agent = agentRepository.findBySlug(ctx.params.slug);
+    if (!isPublicAgent(agent)) {
+      ctx.status = 404;
+      ctx.body = { error: 'agent not found' };
+      return;
+    }
+    ctx.body = {
+      id: agent.id,
+      name: agent.name,
+      slug: agent.slug,
+      description: agent.description,
+      status: agent.status,
+    };
+  });
+
+  router.post('/api/public/agents/:slug/stream', async (ctx) => {
+    const agent = agentRepository.findBySlug(ctx.params.slug);
+    if (!isPublicAgent(agent)) {
+      ctx.status = 404;
+      ctx.body = { error: 'agent not found' };
+      return;
+    }
+    const body = ctx.request.body as Record<string, unknown>;
+    ctx.request.body = {
+      agentId: agent.id,
+      input: body.input,
+      conversationId: body.conversationId,
+    };
+    await handleStream(ctx);
+  });
+
   app.use(router.routes());
   app.use(router.allowedMethods());
 
   return app;
+}
+
+function isPublicAgent(agent: ReturnType<AgentRepository['findBySlug']>): agent is NonNullable<typeof agent> {
+  return Boolean(
+    agent
+    && agent.status === 'generated'
+    && agent.config.audience === 'public',
+  );
 }
 
 function conversationSourcesFromPayload(value: unknown): ConversationSource[] {

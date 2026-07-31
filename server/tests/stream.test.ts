@@ -6,6 +6,7 @@ import { after, before, test } from 'node:test';
 import { createServer, type Server } from 'node:http';
 
 import { createApp } from '../src/app';
+import { SqliteDatabase, sqlValue } from '../src/db/sqlite';
 import { bootstrapAdminSession } from './authTestHelpers';
 
 let agentServer: Server;
@@ -114,7 +115,7 @@ test('POST /api/stream can run by agentId and persist proxied events', async () 
     }),
   });
   assert.equal(agentResponse.status, 201);
-  const agent = await agentResponse.json() as { id: number };
+  const agent = await agentResponse.json() as { id: number; slug: string };
 
   const response = await fetch(`${appBaseUrl}/api/stream`, {
     method: 'POST',
@@ -227,4 +228,25 @@ test('POST /api/stream can run by agentId and persist proxied events', async () 
       dangerous: false,
     },
   ]);
+
+  const db = new SqliteDatabase(join(rootDir, 'platform.sqlite'));
+  db.run(`UPDATE agents SET status = 'generated' WHERE id = ${sqlValue(agent.id)};`);
+  const publishResponse = await fetch(`${appBaseUrl}/api/agents/${agent.id}/audience`, {
+    method: 'PUT',
+    headers: jsonAuthHeaders(),
+    body: JSON.stringify({ audience: 'public' }),
+  });
+  assert.equal(publishResponse.status, 200);
+
+  const publicStreamResponse = await fetch(
+    `${appBaseUrl}/api/public/agents/${agent.slug}/stream`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ input: 'Run without an authenticated session' }),
+    },
+  );
+  assert.equal(publicStreamResponse.status, 200);
+  assert.match(await publicStreamResponse.text(), /event: message\.completed/);
+  assert.equal(upstreamPayloads.length, 2);
 });

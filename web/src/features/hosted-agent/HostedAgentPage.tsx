@@ -8,19 +8,22 @@ import {
   User,
   Wrench,
 } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { useEffect, useRef, useState } from 'react'
 
 import {
   createConversation,
   getAgentBySlug,
+  getPublicAgentBySlug,
   listConversationMessages,
   listConversations,
   streamAgentRun,
+  streamPublicAgentRun,
 } from '../../api/client'
 import type {
-  AgentRecord,
   AuthUser,
   ConversationMessageRecord,
+  HostedAgentRecord,
   SourceReference,
   StreamPayload,
 } from '../../api/types'
@@ -30,7 +33,9 @@ import { Button } from '../../components/ui/button'
 
 interface HostedAgentPageProps {
   slug: string
-  user: AuthUser
+  user?: AuthUser
+  access?: 'authenticated' | 'public'
+  unavailableFallback?: ReactNode
   onBack: () => void
 }
 
@@ -53,8 +58,14 @@ interface ActivityItem {
   payload: StreamPayload
 }
 
-export function HostedAgentPage({ slug, user, onBack }: HostedAgentPageProps) {
-  const [agent, setAgent] = useState<AgentRecord | null>(null)
+export function HostedAgentPage({
+  slug,
+  user,
+  access = 'authenticated',
+  unavailableFallback,
+  onBack,
+}: HostedAgentPageProps) {
+  const [agent, setAgent] = useState<HostedAgentRecord | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>(() => loadMessages(slug))
   const [conversationId, setConversationId] = useState<number | null>(null)
   const [activities, setActivities] = useState<ActivityItem[]>([])
@@ -71,9 +82,16 @@ export function HostedAgentPage({ slug, user, onBack }: HostedAgentPageProps) {
 
     async function loadAgent() {
       try {
-        const record = await getAgentBySlug(slug)
+        const record = access === 'public'
+          ? await getPublicAgentBySlug(slug)
+          : await getAgentBySlug(slug)
         if (!active) return
         setAgent(record)
+
+        if (access === 'public') {
+          setMessages((current) => current.length ? current : [welcomeMessage(record)])
+          return
+        }
 
         try {
           const conversations = await listConversations(record.id)
@@ -98,7 +116,7 @@ export function HostedAgentPage({ slug, user, onBack }: HostedAgentPageProps) {
     return () => {
       active = false
     }
-  }, [slug])
+  }, [access, slug])
 
   useEffect(() => {
     if (messages.length) {
@@ -139,15 +157,9 @@ export function HostedAgentPage({ slug, user, onBack }: HostedAgentPageProps) {
     ])
 
     try {
-      const result = await streamAgentRun(
-        {
-          agentId: agent.id,
-          input: `${prompt}${attachmentContext}`,
-          conversationId: conversationId ?? undefined,
-        },
-        {
-          signal: controller.signal,
-          onEvent: ({ event, data }) => {
+      const streamOptions: Parameters<typeof streamAgentRun>[1] = {
+        signal: controller.signal,
+        onEvent: ({ event, data }) => {
             if (event === 'message.delta' && data.delta) {
               setMessages((current) => current.map((item) => item.id === assistantId
                 ? { ...item, content: item.content + data.delta }
@@ -177,9 +189,19 @@ export function HostedAgentPage({ slug, user, onBack }: HostedAgentPageProps) {
               event,
               payload: data,
             }])
-          },
         },
-      )
+      }
+      const streamInput = `${prompt}${attachmentContext}`
+      const result = access === 'public'
+        ? await streamPublicAgentRun(
+            slug,
+            { input: streamInput, conversationId: conversationId ?? undefined },
+            streamOptions,
+          )
+        : await streamAgentRun(
+            { agentId: agent.id, input: streamInput, conversationId: conversationId ?? undefined },
+            streamOptions,
+          )
       if (result.conversationId) setConversationId(result.conversationId)
 
       if (streamError) throw new Error(streamError)
@@ -209,6 +231,14 @@ export function HostedAgentPage({ slug, user, onBack }: HostedAgentPageProps) {
 
   async function clearConversation() {
     if (!agent) return
+    if (access === 'public') {
+      setConversationId(null)
+      window.localStorage.removeItem(historyKey(slug))
+      setMessages([welcomeMessage(agent)])
+      setActivities([])
+      setError('')
+      return
+    }
     try {
       const conversation = await createConversation(agent.id)
       setConversationId(conversation.id)
@@ -226,6 +256,7 @@ export function HostedAgentPage({ slug, user, onBack }: HostedAgentPageProps) {
   }
 
   if (!agent) {
+    if (unavailableFallback) return unavailableFallback
     return (
       <main className="grid min-h-screen place-items-center bg-zinc-50 p-6">
         <div className="text-center">
@@ -249,7 +280,7 @@ export function HostedAgentPage({ slug, user, onBack }: HostedAgentPageProps) {
           </div>
           <p className="truncate text-xs text-zinc-500">{agent.description || 'Primalthrum Agent'}</p>
         </div>
-        <span className="hidden text-xs text-zinc-500 sm:block">{user.email}</span>
+        {user ? <span className="hidden text-xs text-zinc-500 sm:block">{user.email}</span> : null}
         <Button aria-label="新建对话" onClick={() => void clearConversation()} size="icon" title="新建对话" variant="ghost"><RotateCcw /></Button>
       </header>
 
@@ -332,7 +363,7 @@ export function HostedAgentPage({ slug, user, onBack }: HostedAgentPageProps) {
   )
 }
 
-function welcomeMessage(agent: AgentRecord): ChatMessage {
+function welcomeMessage(agent: HostedAgentRecord): ChatMessage {
   return {
     id: crypto.randomUUID(),
     role: 'assistant',

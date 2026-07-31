@@ -436,11 +436,15 @@ test('POST /api/agents persists an agent config in SQLite metadata', async () =>
     id: number;
     slug: string;
     workspaceId: number;
-    config: unknown;
+    config: { audience: string };
   };
   assert.equal(created.slug, 'research-agent');
   assert.ok(created.id > 0);
   assert.equal(created.workspaceId, 1);
+  assert.equal(created.config.audience, 'workspace');
+
+  const privatePublicResponse = await fetch(`${baseUrl}/api/public/agents/${created.slug}`);
+  assert.equal(privatePublicResponse.status, 404);
 
   const listResponse = await fetch(`${baseUrl}/api/agents`, {
     headers: authHeaders,
@@ -503,6 +507,23 @@ test('POST /api/agents/:id/generate writes a standalone agent project', async ()
     { cwd: generated.path },
   );
   assert.match(stdout, /Planned task: Demo task with file_reader\./);
+
+  const audienceResponse = await fetch(`${baseUrl}/api/agents/${created.id}/audience`, {
+    method: 'PUT',
+    headers: jsonAuthHeaders(),
+    body: JSON.stringify({ audience: 'public' }),
+  });
+  assert.equal(audienceResponse.status, 200);
+  const published = await audienceResponse.json() as { config: { audience: string } };
+  assert.equal(published.config.audience, 'public');
+
+  const publicResponse = await fetch(`${baseUrl}/api/public/agents/${created.slug}`);
+  assert.equal(publicResponse.status, 200);
+  const publicAgent = await publicResponse.json() as Record<string, unknown>;
+  assert.equal(publicAgent.slug, created.slug);
+  assert.equal(publicAgent.name, 'Standalone Agent');
+  assert.equal('config' in publicAgent, false);
+  assert.equal('path' in publicAgent, false);
 });
 
 test('discovery APIs expose typed providers tools and skills', async () => {

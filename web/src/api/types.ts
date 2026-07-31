@@ -7,6 +7,15 @@ export interface AgentConfig {
   enabledTools: string[]
   enabledSkills: string[]
   modelConfig: Record<string, unknown>
+  audience: 'workspace' | 'public'
+}
+
+export interface HostedAgentRecord {
+  id: number
+  name: string
+  slug: string
+  description: string
+  status: string
 }
 
 export interface AgentRecord {
@@ -50,6 +59,7 @@ export interface CreateAgentInput {
   enabledTools?: string[]
   enabledSkills?: string[]
   modelConfig?: Record<string, unknown>
+  audience?: 'workspace' | 'public'
 }
 
 export interface ProviderInfo {
