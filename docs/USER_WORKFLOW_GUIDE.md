@@ -8,7 +8,7 @@ Open the web console, create the first admin account, then sign in. Existing dep
 
 ## Provider Settings
 
-Open Security Settings and save provider configs for LLM or embedding usage. Secrets are stored server-side as redacted references.
+Open Provider Settings and save provider configs for LLM, embedding, STT, or TTS usage. Secrets are stored server-side as redacted references. Runtime Capabilities controls whether each configured capability may be used in the workspace.
 
 ## Agent Builder
 
@@ -33,6 +33,12 @@ The Builder obtains vector-store choices from the runtime capability catalog. Se
 ## Run Console
 
 Select an agent, enter a goal, and start a stream. The timeline shows run start, node updates, cache events, errors, and completion.
+
+## Voice Interaction
+
+Use the microphone button in the Builder or hosted Agent page. With an STT Provider configured, the browser records bounded audio and sends it through the authenticated platform transcription route. Without one, supported browsers use native speech recognition. Denied microphone permission is shown inline and text input remains available.
+
+Assistant messages expose a playback button. A configured TTS Provider uses the platform speech route; otherwise supported browsers use native speech synthesis. Starting another message stops the active playback.
 
 ## Generated Agent
 

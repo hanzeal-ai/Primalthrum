@@ -22,7 +22,7 @@ import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
 
-type ProviderType = 'llm' | 'embedding'
+type ProviderType = 'llm' | 'embedding' | 'stt' | 'tts'
 
 interface ProviderForm {
   name: string
@@ -106,9 +106,9 @@ export function ProviderSettingsPanel({
     setForm((current) => ({
       ...current,
       type,
-      provider: type === 'llm' ? 'openai' : 'openai',
-      temperature: type === 'embedding' ? '' : current.temperature,
-      maxTokens: type === 'embedding' ? '' : current.maxTokens,
+      provider: 'openai',
+      temperature: type === 'llm' ? current.temperature : '',
+      maxTokens: type === 'llm' ? current.maxTokens : '',
     }))
   }
 
@@ -156,8 +156,8 @@ export function ProviderSettingsPanel({
               </Button>
             ) : <Cpu className="size-4 shrink-0" />}
             <div className="min-w-0">
-              <h2 className="truncate text-sm font-semibold">{formOpen ? (editing ? '编辑 Provider' : '添加 Provider') : '模型 Provider'}</h2>
-              <p className="mt-1 truncate text-xs text-zinc-500">工作区级模型与密钥配置</p>
+              <h2 className="truncate text-sm font-semibold">{formOpen ? (editing ? '编辑 Provider' : '添加 Provider') : '模型与语音 Provider'}</h2>
+              <p className="mt-1 truncate text-xs text-zinc-500">工作区级模型、语音与密钥配置</p>
             </div>
           </div>
           <div className="flex gap-1">
@@ -225,7 +225,7 @@ function ProviderList({
               <div className="min-w-0">
                 <div className="flex flex-wrap items-center gap-2">
                   <h3 className="truncate text-sm font-semibold">{provider.name}</h3>
-                  <Badge variant="secondary">{provider.type === 'embedding' ? 'Embedding' : 'LLM'}</Badge>
+                  <Badge variant="secondary">{providerTypeLabel(provider.type)}</Badge>
                 </div>
                 <p className="mt-1 truncate text-xs text-zinc-500">
                   {textConfig(provider, 'provider')} / {textConfig(provider, 'model')}
@@ -267,8 +267,8 @@ function ProviderFormView({
     <div className="provider-form">
       <div>
         <span className="text-sm font-medium">能力类型</span>
-        <div className="mt-2 grid grid-cols-2 rounded-md border bg-zinc-50 p-1">
-          {(['llm', 'embedding'] as const).map((type) => (
+        <div className="mt-2 grid grid-cols-4 rounded-md border bg-zinc-50 p-1">
+          {(['llm', 'embedding', 'stt', 'tts'] as const).map((type) => (
             <button
               className={`provider-segment ${form.type === type ? 'provider-segment-active' : ''}`}
               disabled={Boolean(editing)}
@@ -276,7 +276,7 @@ function ProviderFormView({
               onClick={() => onChangeType(type)}
               type="button"
             >
-              {type === 'llm' ? 'LLM' : 'Embedding'}
+              {providerTypeLabel(type)}
             </button>
           ))}
         </div>
@@ -296,7 +296,7 @@ function ProviderFormView({
 
       <Label>
         模型
-        <Input placeholder={form.type === 'llm' ? '例如：gpt-4.1-mini' : '例如：text-embedding-3-small'} value={form.model} onChange={(event) => onChange('model', event.target.value)} />
+        <Input placeholder={providerModelPlaceholder(form.type)} value={form.model} onChange={(event) => onChange('model', event.target.value)} />
       </Label>
 
       <Label>
@@ -334,9 +334,10 @@ function ProviderFormView({
 }
 
 function formFromProvider(provider: ProviderConfigRecord): ProviderForm {
+  const type = isProviderType(provider.type) ? provider.type : 'llm'
   return {
     name: provider.name,
-    type: provider.type === 'embedding' ? 'embedding' : 'llm',
+    type,
     provider: textConfig(provider, 'provider') || 'openai',
     model: textConfig(provider, 'model'),
     baseUrl: textConfig(provider, 'baseUrl'),
@@ -344,6 +345,23 @@ function formFromProvider(provider: ProviderConfigRecord): ProviderForm {
     maxTokens: numberConfig(provider, 'maxTokens'),
     secret: '',
   }
+}
+
+function isProviderType(value: string): value is ProviderType {
+  return ['llm', 'embedding', 'stt', 'tts'].includes(value)
+}
+
+function providerTypeLabel(value: string): string {
+  return { llm: 'LLM', embedding: 'Embedding', stt: 'STT', tts: 'TTS' }[value] ?? value
+}
+
+function providerModelPlaceholder(type: ProviderType): string {
+  return {
+    llm: '例如：gpt-4.1-mini',
+    embedding: '例如：text-embedding-3-small',
+    stt: '例如：gpt-4o-mini-transcribe',
+    tts: '例如：gpt-4o-mini-tts',
+  }[type]
 }
 
 function providerConfigFromForm(form: ProviderForm): Record<string, unknown> {

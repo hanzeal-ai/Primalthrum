@@ -25,6 +25,7 @@ import { type AgentConfig } from '../src/services/agentRepository';
 import { LocalSecretVault } from '../src/services/localSecretVault';
 import { ProviderConfigRepository } from '../src/services/providerConfigRepository';
 import { RuntimeProviderResolver } from '../src/services/runtimeProviderResolver';
+import { CapabilitySettingsRepository } from '../src/services/capabilitySettingsRepository';
 
 const execFileAsync = promisify(execFile);
 
@@ -1082,6 +1083,27 @@ test('speech APIs resolve encrypted STT and TTS provider configs', async () => {
     mimeType: 'audio/mpeg',
     audioBase64: Buffer.from('speech-bytes').toString('base64'),
   });
+
+  const capabilitySettings = new CapabilitySettingsRepository(new SqliteDatabase(dbPath));
+  capabilitySettings.set(1, 'tts:openai-compatible', false, 1);
+  const disabledSynthesisResponse = await fetch(`${baseUrl}/api/speech/synthesis`, {
+    method: 'POST',
+    headers: jsonAuthHeaders(),
+    body: JSON.stringify({
+      providerConfigId: tts.id,
+      text: 'This request must be blocked.',
+    }),
+  });
+  assert.equal(disabledSynthesisResponse.status, 409);
+  assert.deepEqual(await disabledSynthesisResponse.json(), {
+    error: {
+      code: 'CAPABILITY_DISABLED',
+      message: 'runtime capabilities are disabled: tts:openai-compatible',
+      status: 409,
+      details: { capabilities: ['tts:openai-compatible'] },
+    },
+  });
+  capabilitySettings.set(1, 'tts:openai-compatible', true, 1);
 
   const invalidAudioResponse = await fetch(`${baseUrl}/api/speech/transcriptions`, {
     method: 'POST',

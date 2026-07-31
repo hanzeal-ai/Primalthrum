@@ -28,6 +28,33 @@
   padding: 12px 24px;
 }
 
+.hosted-agent-icon {
+  display: grid;
+  width: 36px;
+  height: 36px;
+  flex: 0 0 36px;
+  place-items: center;
+  border-radius: 6px;
+  background: #2563eb;
+  color: #fff;
+}
+
+.hosted-agent-identity {
+  min-width: 0;
+  flex: 1;
+}
+
+.hosted-workspace {
+  min-width: 0;
+}
+
+.hosted-header-actions {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 4px;
+}
+
 .hosted-chat {
   min-width: 0;
   overflow-y: auto;
@@ -533,6 +560,30 @@
   .hosted-composer-wrap {
     padding-left: 14px;
     padding-right: 14px;
+  }
+
+  .hosted-header {
+    display: grid;
+    grid-template-columns: 36px 36px minmax(0, 1fr) auto;
+    gap: 8px;
+  }
+
+  .hosted-agent-identity p {
+    display: none;
+  }
+
+  .hosted-workspace {
+    grid-column: 2 / -1;
+    grid-row: 2;
+  }
+
+  .hosted-header-actions {
+    grid-column: 4;
+    grid-row: 1;
+  }
+
+  .hosted-workspace .workspace-select {
+    width: min(220px, calc(100vw - 158px));
   }
 
   .hosted-message {

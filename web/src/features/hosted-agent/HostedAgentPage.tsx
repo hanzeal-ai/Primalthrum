@@ -6,7 +6,9 @@ import {
   RefreshCcw,
   RotateCcw,
   Settings,
+  Square,
   User,
+  Volume2,
   Wrench,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
@@ -30,6 +32,7 @@ import type {
   StreamPayload,
 } from '../../api/types'
 import { ChatComposer } from '../../components/chat/ChatComposer'
+import { useSpeechPlayback } from '../../hooks/useSpeechPlayback'
 import {
   prepareTextDocument,
   type PreparedTextDocument,
@@ -85,6 +88,7 @@ export function HostedAgentPage({
   const [versionsOpen, setVersionsOpen] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const messageEndRef = useRef<HTMLDivElement>(null)
+  const speechPlayback = useSpeechPlayback()
 
   useEffect(() => {
     let active = true
@@ -307,8 +311,8 @@ export function HostedAgentPage({
     <main className="hosted-shell">
       <header className="hosted-header">
         <Button aria-label="返回创建器" onClick={onBack} size="icon" title="返回创建器" variant="ghost"><ArrowLeft /></Button>
-        <div className="grid size-9 place-items-center rounded-md bg-blue-600 text-white"><Bot /></div>
-        <div className="min-w-0 flex-1">
+        <div className="hosted-agent-icon"><Bot /></div>
+        <div className="hosted-agent-identity">
           <div className="flex items-center gap-2">
             <h1 className="truncate text-sm font-semibold">{agent.name}</h1>
             <Badge variant="success">在线</Badge>
@@ -316,19 +320,21 @@ export function HostedAgentPage({
           </div>
           <p className="truncate text-xs text-zinc-500">{agent.description || 'Primalthrum Agent'}</p>
         </div>
-        {user ? <WorkspaceSwitcher user={user} /> : null}
-        {user ? (
-          <Button
-            aria-label="版本与部署"
-            onClick={() => setVersionsOpen(true)}
-            size="icon"
-            title="版本与部署"
-            variant="ghost"
-          >
-            <Settings />
-          </Button>
-        ) : null}
-        <Button aria-label="新建对话" onClick={() => void clearConversation()} size="icon" title="新建对话" variant="ghost"><RotateCcw /></Button>
+        {user ? <div className="hosted-workspace"><WorkspaceSwitcher user={user} /></div> : null}
+        <div className="hosted-header-actions">
+          {user ? (
+            <Button
+              aria-label="版本与部署"
+              onClick={() => setVersionsOpen(true)}
+              size="icon"
+              title="版本与部署"
+              variant="ghost"
+            >
+              <Settings />
+            </Button>
+          ) : null}
+          <Button aria-label="新建对话" onClick={() => void clearConversation()} size="icon" title="新建对话" variant="ghost"><RotateCcw /></Button>
+        </div>
       </header>
 
       {user && versionsOpen ? (
@@ -348,6 +354,20 @@ export function HostedAgentPage({
                 <div className="hosted-bubble">
                   {item.content || <span className="inline-flex items-center gap-2 text-zinc-500"><Loader2 className="size-3 animate-spin" />正在生成</span>}
                 </div>
+                {item.role === 'assistant' && item.content && item.status !== 'streaming' && speechPlayback.available ? (
+                  <Button
+                    aria-label={speechPlayback.activeId === item.id ? '停止朗读' : '朗读消息'}
+                    className="mt-1 size-7"
+                    onClick={() => speechPlayback.activeId === item.id
+                      ? speechPlayback.stop()
+                      : void speechPlayback.play(item.id, item.content)}
+                    size="icon"
+                    title={speechPlayback.activeId === item.id ? '停止朗读' : '朗读'}
+                    variant="ghost"
+                  >
+                    {speechPlayback.activeId === item.id ? <Square /> : <Volume2 />}
+                  </Button>
+                ) : null}
                 {item.status ? <p className="mt-1 text-xs text-zinc-400">{statusLabel(item.status)}</p> : null}
                 {item.sources?.length ? (
                   <div className="hosted-sources">
@@ -385,6 +405,11 @@ export function HostedAgentPage({
             <div className="flex items-center justify-between gap-3 rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
               <span>{error}</span>
               <Button disabled={running} onClick={retryLastMessage} size="sm" variant="outline"><RefreshCcw />重试</Button>
+            </div>
+          ) : null}
+          {speechPlayback.error ? (
+            <div className="rounded-md border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-700">
+              {speechPlayback.error}
             </div>
           ) : null}
           <div ref={messageEndRef} />

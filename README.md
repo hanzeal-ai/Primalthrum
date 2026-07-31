@@ -98,7 +98,9 @@ curl -N http://127.0.0.1:8000/stream \
 
 语音采用可控的链式管线。Web 录音由 Node 的认证接口受理，Node 解析工作区
 加密 STT/TTS 配置后调用 Agent 的 `/internal/speech/transcriptions` 与
-`/internal/speech/synthesis`；Agent 再访问 OpenAI-compatible Audio API。
+`/internal/speech/synthesis`；Agent 再访问 OpenAI-compatible Audio API。没有
+配置 STT/TTS 时，Web 会在浏览器支持的情况下回退到原生语音识别与朗读；工作区
+关闭对应能力后，服务端会拒绝语音请求。
 
 事件格式：
 

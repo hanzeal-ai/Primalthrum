@@ -1,6 +1,13 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { indexDocument, replayAgentRun, streamAgentRun, uploadDocument } from './client'
+import {
+  indexDocument,
+  replayAgentRun,
+  streamAgentRun,
+  synthesizeSpeech,
+  transcribeAudio,
+  uploadDocument,
+} from './client'
 
 function streamResponse(body: string, headers: Record<string, string>): Response {
   return new Response(body, {
@@ -142,5 +149,31 @@ describe('stream client', () => {
     expect(await indexDocument(3, 5)).toEqual(document)
     expect(fetchMock).toHaveBeenCalledTimes(2)
     expect(fetchMock.mock.calls[1]?.[0]).toContain('/api/jobs/8')
+  })
+
+  it('encodes recorded audio and returns speech results', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        provider: 'openai', model: 'stt-test', text: 'transcribed',
+      }), { status: 200, headers: { 'content-type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        provider: 'openai', model: 'tts-test', mimeType: 'audio/mpeg',
+        audioBase64: window.btoa('speech'),
+      }), { status: 200, headers: { 'content-type': 'application/json' } }))
+
+    const audio = new Blob([new Uint8Array([1, 2, 3])], { type: 'audio/webm;codecs=opus' })
+    expect(await transcribeAudio(audio, 7)).toMatchObject({ text: 'transcribed' })
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toMatchObject({
+      providerConfigId: 7,
+      filename: 'recording.webm',
+      mimeType: 'audio/webm',
+      audioBase64: 'AQID',
+    })
+    expect(await synthesizeSpeech('Read this', 8)).toMatchObject({ model: 'tts-test' })
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
+      providerConfigId: 8,
+      text: 'Read this',
+      voice: 'alloy',
+    })
   })
 })

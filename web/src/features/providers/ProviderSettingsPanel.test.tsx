@@ -79,4 +79,30 @@ describe('ProviderSettingsPanel', () => {
       },
     }))
   })
+
+  it('creates an STT provider configuration', async () => {
+    api.createProviderConfig.mockResolvedValue({
+      ...configuredProvider,
+      id: 9,
+      name: 'Voice Input',
+      type: 'stt',
+      config: { provider: 'openai', model: 'gpt-4o-mini-transcribe' },
+    })
+    render(<ProviderSettingsPanel onClose={vi.fn()} onOpenCapabilities={vi.fn()} onProvidersChange={vi.fn()} />)
+
+    await screen.findByText('还没有模型 Provider')
+    fireEvent.click(screen.getByRole('button', { name: '添加 Provider' }))
+    fireEvent.click(screen.getByRole('button', { name: 'STT' }))
+    fireEvent.change(screen.getByLabelText('配置名称'), { target: { value: 'Voice Input' } })
+    fireEvent.change(screen.getByLabelText('模型'), { target: { value: 'gpt-4o-mini-transcribe' } })
+    fireEvent.change(screen.getByLabelText('API Key'), { target: { value: 'sk-voice' } })
+    fireEvent.click(screen.getByRole('button', { name: '保存 Provider' }))
+
+    await waitFor(() => expect(api.createProviderConfig).toHaveBeenCalledWith({
+      name: 'Voice Input',
+      type: 'stt',
+      config: { provider: 'openai', model: 'gpt-4o-mini-transcribe' },
+      secret: 'sk-voice',
+    }))
+  })
 })

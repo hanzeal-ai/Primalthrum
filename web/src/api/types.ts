@@ -106,6 +106,19 @@ export interface JobRecord {
   error: string
 }
 
+export interface TranscriptionResult {
+  provider: string
+  model: string
+  text: string
+}
+
+export interface SpeechSynthesisResult {
+  provider: string
+  model: string
+  mimeType: string
+  audioBase64: string
+}
+
 export interface CreateAgentInput {
   name: string
   description?: string

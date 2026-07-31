@@ -18,6 +18,8 @@ import type {
   ParsedSseEvent,
   ProviderCatalog,
   ProviderConfigRecord,
+  SpeechSynthesisResult,
+  TranscriptionResult,
   RuntimeCapabilityCatalog,
   RuntimeCapabilityRecord,
   SaveProviderConfigInput,
@@ -253,6 +255,33 @@ export async function indexDocument(
 
 export async function getJob(jobId: number): Promise<JobRecord> {
   return apiFetch<JobRecord>(`/api/jobs/${jobId}`)
+}
+
+export async function transcribeAudio(
+  audio: Blob,
+  providerConfigId?: number,
+): Promise<TranscriptionResult> {
+  const bytes = new Uint8Array(await audio.arrayBuffer())
+  const mimeType = audio.type.split(';')[0] || 'audio/webm'
+  return apiFetch<TranscriptionResult>('/api/speech/transcriptions', {
+    method: 'POST',
+    body: JSON.stringify({
+      providerConfigId,
+      filename: `recording.${audioExtension(mimeType)}`,
+      mimeType,
+      audioBase64: bytesToBase64(bytes),
+    }),
+  })
+}
+
+export async function synthesizeSpeech(
+  text: string,
+  providerConfigId?: number,
+): Promise<SpeechSynthesisResult> {
+  return apiFetch<SpeechSynthesisResult>('/api/speech/synthesis', {
+    method: 'POST',
+    body: JSON.stringify({ providerConfigId, text, voice: 'alloy' }),
+  })
 }
 
 export async function listProviders(): Promise<ProviderCatalog> {
@@ -563,6 +592,16 @@ function bytesToBase64(bytes: Uint8Array): string {
     binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize))
   }
   return window.btoa(binary)
+}
+
+function audioExtension(mimeType: string): string {
+  return {
+    'audio/mp4': 'm4a',
+    'audio/mpeg': 'mp3',
+    'audio/ogg': 'ogg',
+    'audio/wav': 'wav',
+    'audio/webm': 'webm',
+  }[mimeType] ?? 'audio'
 }
 
 async function waitForJob(jobId: number): Promise<JobRecord> {

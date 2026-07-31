@@ -1001,8 +1001,23 @@ export function createApp(options: AppOptions = {}): Koa {
         currentWorkspaceId(ctx),
         providerConfigId,
       );
+      capabilitySettingsRepository.assertEnabled(
+        capabilitySettingsRepository.snapshot(
+          currentWorkspaceId(ctx),
+          [`stt:${provider.provider}`],
+        ),
+      );
       ctx.body = await speechClient.transcribe(provider, audio);
     } catch (error) {
+      if (error instanceof CapabilityDisabledError) {
+        sendApiError(ctx, logger, {
+          status: 409,
+          code: 'CAPABILITY_DISABLED',
+          message: error.message,
+          details: { capabilities: error.capabilityKeys },
+        });
+        return;
+      }
       const upstreamFailure = error instanceof Error
         && error.message.startsWith('speech service returned HTTP');
       sendApiError(ctx, logger, {
@@ -1024,12 +1039,27 @@ export function createApp(options: AppOptions = {}): Koa {
         currentWorkspaceId(ctx),
         providerConfigId,
       );
+      capabilitySettingsRepository.assertEnabled(
+        capabilitySettingsRepository.snapshot(
+          currentWorkspaceId(ctx),
+          [`tts:${provider.provider}`],
+        ),
+      );
       ctx.body = await speechClient.synthesize(
         provider,
         parseSpeechText(body.text),
         typeof body.voice === 'string' && body.voice.trim() ? body.voice.trim() : 'alloy',
       );
     } catch (error) {
+      if (error instanceof CapabilityDisabledError) {
+        sendApiError(ctx, logger, {
+          status: 409,
+          code: 'CAPABILITY_DISABLED',
+          message: error.message,
+          details: { capabilities: error.capabilityKeys },
+        });
+        return;
+      }
       const upstreamFailure = error instanceof Error
         && error.message.startsWith('speech service returned HTTP');
       sendApiError(ctx, logger, {

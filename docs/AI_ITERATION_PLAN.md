@@ -1802,9 +1802,15 @@ complete. Follow the same dependency and verification protocol used above.
   resolve workspace-encrypted speech configs, enforce MIME/Base64/8 MiB audio
   and 4000-character speech limits, and keep plaintext keys inside the trusted
   service request. Agent and Server suites cover provider payloads, secret
-  resolution, validation, and both speech directions. Provider management,
-  MediaRecorder input, playback controls, browser fallback, and media E2E remain
-  in P17-03D2.
+  resolution, validation, and both speech directions. P17-03D2 extends Provider
+  management to STT/TTS, records through MediaRecorder when an STT config exists,
+  falls back to browser recognition otherwise, and adds server-backed TTS with
+  browser speech-synthesis fallback. Workspace capability disablement is enforced
+  before either speech proxy executes. Hook and API tests cover recorded audio
+  upload and provider selection; desktop and 390x844 hosted-page acceptance
+  verified direct preview, microphone controls, playback state, and responsive
+  layout. Real browser permission/device capture and a combined upload-to-source
+  browser scenario remain before P17-03 can be marked Done.
 
 ### P18-01 Plans, Trials, Entitlements, And Credit Ledger
 

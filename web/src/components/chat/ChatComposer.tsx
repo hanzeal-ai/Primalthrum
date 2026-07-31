@@ -28,7 +28,9 @@ export function ChatComposer({
   onSubmit,
 }: ChatComposerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
-  const speech = useSpeechInput((transcript) => onChange(transcript))
+  const speech = useSpeechInput((transcript) => {
+    onChange([value.trim(), transcript].filter(Boolean).join(' '))
+  })
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -83,17 +85,17 @@ export function ChatComposer({
           <Button
             aria-label={speech.listening ? '停止语音输入' : '开始语音输入'}
             className={speech.listening ? 'bg-red-50 text-red-600 hover:bg-red-100' : ''}
-            disabled={disabled || !speech.available}
+            disabled={disabled || !speech.available || speech.processing}
             onClick={speech.listening ? speech.stop : speech.start}
             size="icon"
             title={speech.available ? '语音输入' : '当前浏览器不支持语音识别'}
             type="button"
             variant="ghost"
           >
-            {speech.listening ? <Square /> : <Mic />}
+            {speech.processing ? <Loader2 className="animate-spin" /> : speech.listening ? <Square /> : <Mic />}
           </Button>
           <span className="hidden text-xs text-zinc-500 sm:inline">
-            {speech.listening ? '正在聆听...' : '支持语音与文字'}
+            {speech.processing ? '正在转写...' : speech.listening ? '正在聆听...' : speech.error || '支持语音与文字'}
           </span>
         </div>
         {busy && onStop ? (
