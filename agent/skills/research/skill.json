@@ -1,6 +1,7 @@
 {
   "name": "research",
   "version": "0.1.0",
+  "description": "Plan, retrieve evidence, use approved tools, and summarize with sources.",
   "tools": ["file_reader"],
   "instructions_file": "instructions.md"
 }

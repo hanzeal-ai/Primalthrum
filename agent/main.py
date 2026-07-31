@@ -13,6 +13,7 @@ from langgraph.graph import END, StateGraph
 from pydantic import BaseModel, Field, SecretStr
 
 from runtime import AgentRuntimeConfig, ModelProviderConfig, create_runtime
+from runtime.capabilities import capability_health, capability_manifests
 from runtime.llm import ProviderRequestError
 
 
@@ -61,8 +62,7 @@ class AgentState(TypedDict):
 
 
 def normalize_tools(tools: list[str]) -> list[str]:
-    cleaned = [tool.strip() for tool in tools if tool.strip()]
-    return cleaned or ["planner", "memory", "executor"]
+    return [tool.strip() for tool in tools if tool.strip()]
 
 
 def normalize_skills(skills: list[str]) -> list[str]:
@@ -395,6 +395,16 @@ async def health() -> dict[str, str]:
     return {"status": "ok", "service": "agent"}
 
 
+@app.get("/capabilities")
+async def capabilities() -> dict[str, Any]:
+    manifests = capability_manifests()
+    return {
+        "schemaVersion": "1.0",
+        "capabilities": [manifest.to_dict() for manifest in manifests],
+        "health": capability_health(),
+    }
+
+
 @app.get("/ready")
 async def ready() -> JSONResponse:
     started_at = time.monotonic()
@@ -417,6 +427,7 @@ async def ready() -> JSONResponse:
                 "status": "ok",
                 "loaded_tools": runtime.tools.names(),
                 "loaded_skills": runtime.skills.names(),
+                "capability_count": len(capability_manifests()),
             }
         )
         checks.append({"name": "langgraph", "status": "ok"})

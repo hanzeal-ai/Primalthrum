@@ -1734,12 +1734,20 @@ complete. Follow the same dependency and verification protocol used above.
 
 ### P17-02 Hot-Pluggable Runtime Capabilities
 
-- Status: Todo
+- Status: In Progress
 - Goal: Productionize manifests and lifecycle for LLM, embedding, STT, TTS,
   skill, tool, memory, cache, and RAG providers.
 - Dependencies: P17-01
 - Verification: compatibility, dependency, permission, health, enable/disable,
   and between-run hot-plug tests.
+- Current evidence: P17-02A establishes an Agent-owned versioned manifest for
+  LLM, embedding, STT, TTS, tool, skill, memory, cache, and RAG capabilities.
+  Manifests expose status, config schema, permissions, dependencies, health,
+  and hot-plug policy through the internal `/capabilities` endpoint. Runtime
+  creation now rejects unknown names, planned providers, and missing skill/tool
+  dependencies instead of silently dropping them. Agent tests cover the unified
+  catalog and strict selection contract. Workspace enable/disable policy and
+  server-side Run snapshots remain in P17-02B.
 
 ### P17-03 Voice, Attachments, And Knowledge Ingestion
 

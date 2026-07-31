@@ -3,6 +3,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .cache import CacheProvider, MemoryCache, NullCache, SQLiteCache
+from .capabilities import capability_manifests
 from .config import AgentRuntimeConfig, ModelProviderConfig
 from .embeddings import EmbeddingProvider, create_embedding_provider
 from .llm import LLMProvider, create_llm_provider
@@ -32,6 +33,7 @@ class AgentRuntime:
 
 
 def create_runtime(config: AgentRuntimeConfig) -> AgentRuntime:
+    _validate_runtime_selection(config)
     llm_config = config.llm_config or ModelProviderConfig(
         provider=config.llm_provider,
         model="mock-chat",
@@ -94,3 +96,53 @@ def create_runtime(config: AgentRuntimeConfig) -> AgentRuntime:
         tools=tools,
         skills=skills,
     )
+
+
+def _validate_runtime_selection(config: AgentRuntimeConfig) -> None:
+    manifests = {manifest.key: manifest for manifest in capability_manifests()}
+    tool_names = config.enabled_tools
+    if tool_names is None:
+        tool_names = [
+            manifest.name for manifest in manifests.values() if manifest.kind == "tool"
+        ]
+    skill_names = config.enabled_skills
+    if skill_names is None:
+        skill_names = [
+            manifest.name for manifest in manifests.values() if manifest.kind == "skill"
+        ]
+    selected = {
+        _canonical_capability_key("memory", config.memory_provider),
+        _canonical_capability_key("cache", config.cache_provider),
+        _canonical_capability_key("rag", config.rag_provider),
+    }
+    selected.update(f"tool:{name}" for name in tool_names)
+    selected.update(f"skill:{name}" for name in skill_names)
+
+    for key in selected:
+        manifest = manifests.get(key)
+        if manifest is None:
+            raise ValueError(f"unknown runtime capability: {key}")
+        if manifest.status != "available":
+            raise ValueError(f"runtime capability is not available: {key}")
+
+    for key in selected:
+        manifest = manifests[key]
+        missing = [
+            dependency
+            for dependency in manifest.dependencies
+            if dependency not in selected
+        ]
+        if missing:
+            raise ValueError(
+                f"runtime capability {key} requires: {', '.join(missing)}"
+            )
+
+
+def _canonical_capability_key(kind: str, name: str) -> str:
+    aliases = {
+        "memory:none": "memory:null",
+        "cache:none": "cache:null",
+        "rag:null": "rag:none",
+    }
+    key = f"{kind}:{name}"
+    return aliases.get(key, key)

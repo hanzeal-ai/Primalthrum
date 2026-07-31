@@ -13,6 +13,7 @@ DEFAULT_SKILLS_DIR = Path(__file__).resolve().parents[1] / "skills"
 class SkillDefinition:
     name: str
     version: str
+    description: str
     tools: list[str] = field(default_factory=list)
     instructions: str = ""
 
@@ -22,6 +23,7 @@ def load_skill_package(package_dir: Path) -> SkillDefinition:
     manifest = json.loads(manifest_path.read_text(encoding="utf-8"))
     name = _required_text(manifest, "name")
     version = _required_text(manifest, "version")
+    description = _required_text(manifest, "description")
     instructions_file = _required_text(manifest, "instructions_file")
     tools = manifest.get("tools", [])
     if not isinstance(tools, list) or any(not isinstance(tool, str) for tool in tools):
@@ -35,6 +37,7 @@ def load_skill_package(package_dir: Path) -> SkillDefinition:
     return SkillDefinition(
         name=name,
         version=version,
+        description=description,
         tools=tools,
         instructions=instructions,
     )

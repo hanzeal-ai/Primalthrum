@@ -3,6 +3,7 @@ from pathlib import Path
 from tempfile import TemporaryDirectory
 
 from runtime import AgentRuntimeConfig, create_runtime
+from runtime.capabilities import capability_manifests
 from runtime.llm import MockLLMProvider
 from runtime.rag import InMemoryRagProvider, chunk_text
 from runtime.tools import (
@@ -102,8 +103,45 @@ class RuntimeRegistryTest(unittest.TestCase):
         skill = runtime.skills.get("research")
 
         self.assertEqual(skill.version, "0.1.0")
+        self.assertIn("evidence", skill.description)
         self.assertEqual(skill.tools, ["file_reader"])
         self.assertIn("Use retrieved evidence before acting.", skill.instructions)
+
+    def test_unified_manifests_cover_runtime_capability_kinds(self) -> None:
+        manifests = capability_manifests()
+        keys = {manifest.key for manifest in manifests}
+
+        self.assertTrue(
+            {
+                "llm:openai",
+                "embedding:openai-compatible",
+                "stt:openai",
+                "tts:openai",
+                "tool:file_reader",
+                "skill:research",
+                "memory:sqlite",
+                "cache:sqlite",
+                "rag:in-memory",
+            }.issubset(keys)
+        )
+        research = next(item for item in manifests if item.key == "skill:research")
+        self.assertEqual(research.dependencies, ["tool:file_reader"])
+
+    def test_runtime_rejects_unknown_unavailable_and_missing_dependencies(self) -> None:
+        with self.assertRaisesRegex(ValueError, "unknown runtime capability"):
+            create_runtime(
+                AgentRuntimeConfig(agent_name="Test", enabled_tools=["missing"])
+            )
+        with self.assertRaisesRegex(ValueError, "not available"):
+            create_runtime(AgentRuntimeConfig(agent_name="Test", rag_provider="chroma"))
+        with self.assertRaisesRegex(ValueError, "requires: tool:file_reader"):
+            create_runtime(
+                AgentRuntimeConfig(
+                    agent_name="Test",
+                    enabled_tools=[],
+                    enabled_skills=["research"],
+                )
+            )
 
     def test_chunk_text_is_deterministic_with_word_overlap(self) -> None:
         chunks = chunk_text(

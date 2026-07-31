@@ -57,6 +57,17 @@ class StreamContractTest(unittest.TestCase):
             any(check["name"] == "runtime_registry" for check in readiness["checks"])
         )
 
+        capabilities_response = client.get("/capabilities")
+        self.assertEqual(capabilities_response.status_code, 200)
+        catalog = capabilities_response.json()
+        self.assertEqual(catalog["schemaVersion"], "1.0")
+        self.assertTrue(
+            any(
+                item["kind"] == "tool" and item["name"] == "file_reader"
+                for item in catalog["capabilities"]
+            )
+        )
+
     def test_stream_endpoint_emits_canonical_agent_events(self) -> None:
         client = TestClient(app)
 
@@ -65,7 +76,7 @@ class StreamContractTest(unittest.TestCase):
             json={
                 "goal": "Create a research agent",
                 "agent": "ResearchAgent",
-                "tools": ["search", "files"],
+                "tools": ["file_reader"],
                 "context": "The launch guide requires source citations.",
                 "sources": [{"title": "launch-guide.md", "documentId": 7}],
             },
