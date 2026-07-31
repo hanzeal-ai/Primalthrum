@@ -27,6 +27,7 @@ import { ChatComposer } from '../../components/chat/ChatComposer'
 import { Badge } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
 import { Progress } from '../../components/ui/progress'
+import { WorkspaceSwitcher } from '../workspaces/WorkspaceSwitcher'
 
 type BuilderStage = 'describe' | 'model' | 'rag' | 'knowledge' | 'review' | 'creating' | 'created'
 
@@ -62,7 +63,7 @@ interface AgentBuilderPageProps {
   onLogout: () => Promise<void>
 }
 
-const STORAGE_KEY = 'primalthrum.builder-draft.v2'
+const STORAGE_KEY_PREFIX = 'primalthrum.builder-draft.v3'
 
 const INITIAL_DRAFT: BuilderDraft = {
   stage: 'describe',
@@ -81,16 +82,16 @@ const INITIAL_DRAFT: BuilderDraft = {
 }
 
 export function AgentBuilderPage({ user, onLogout }: AgentBuilderPageProps) {
-  const [draft, setDraft] = useState<BuilderDraft>(loadDraft)
+  const [draft, setDraft] = useState<BuilderDraft>(() => loadDraft(user.workspaceId))
   const [input, setInput] = useState('')
   const [providers, setProviders] = useState<ProviderConfigRecord[]>([])
   const [error, setError] = useState('')
   const messageEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(draft))
+    window.localStorage.setItem(storageKey(user.workspaceId), JSON.stringify(draft))
     messageEndRef.current?.scrollIntoView({ behavior: 'smooth' })
-  }, [draft])
+  }, [draft, user.workspaceId])
 
   useEffect(() => {
     void listProviderConfigs()
@@ -258,7 +259,7 @@ export function AgentBuilderPage({ user, onLogout }: AgentBuilderPageProps) {
   }
 
   function resetDraft() {
-    window.localStorage.removeItem(STORAGE_KEY)
+    window.localStorage.removeItem(storageKey(user.workspaceId))
     setDraft(INITIAL_DRAFT)
     setInput('')
     setError('')
@@ -277,9 +278,12 @@ export function AgentBuilderPage({ user, onLogout }: AgentBuilderPageProps) {
             </div>
             <p className="mt-1 text-xs text-zinc-500">通过对话完成配置，不需要填写复杂表单</p>
           </div>
-          <Button className="md:hidden" onClick={resetDraft} size="icon" variant="ghost" title="重新创建">
-            <RotateCcw />
-          </Button>
+          <div className="flex items-center gap-1">
+            <WorkspaceSwitcher user={user} />
+            <Button className="md:hidden" onClick={resetDraft} size="icon" variant="ghost" title="重新创建">
+              <RotateCcw />
+            </Button>
+          </div>
         </header>
 
         <div className="builder-message-list">
@@ -539,13 +543,17 @@ function configuredModels(providers: ProviderConfigRecord[]): ModelChoice[] {
   return choices.length ? choices : [{ label: 'Mock Chat（本地演示）', provider: 'mock', model: 'mock-chat' }]
 }
 
-function loadDraft(): BuilderDraft {
+function loadDraft(workspaceId: number): BuilderDraft {
   try {
-    const saved = window.localStorage.getItem(STORAGE_KEY)
+    const saved = window.localStorage.getItem(storageKey(workspaceId))
     return saved ? { ...INITIAL_DRAFT, ...JSON.parse(saved) as BuilderDraft } : INITIAL_DRAFT
   } catch {
     return INITIAL_DRAFT
   }
+}
+
+function storageKey(workspaceId: number): string {
+  return `${STORAGE_KEY_PREFIX}.${workspaceId}`
 }
 
 function message(role: BuilderMessage['role'], content: string): BuilderMessage {

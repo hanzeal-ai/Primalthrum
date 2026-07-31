@@ -95,6 +95,7 @@ function isPublicRequest(ctx: Koa.Context): boolean {
     '/api/auth/login',
     '/api/auth/logout',
     '/api/auth/session',
+    '/api/invitations/accept',
   ].includes(ctx.path);
 }
 

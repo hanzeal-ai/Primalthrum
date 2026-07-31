@@ -3,6 +3,7 @@ import Koa from 'koa';
 import { type StructuredLogger } from './logger';
 
 export type ErrorCode =
+  | 'AUTHORIZATION_FORBIDDEN'
   | 'CONVERSATION_AGENT_NOT_FOUND'
   | 'CONVERSATION_NOT_FOUND'
   | 'DOCUMENT_AGENT_NOT_FOUND'
@@ -18,7 +19,11 @@ export type ErrorCode =
   | 'RUN_EVENT_INVALID'
   | 'RUN_ID_INVALID'
   | 'RUN_INVALID'
-  | 'RUN_NOT_FOUND';
+  | 'RUN_NOT_FOUND'
+  | 'WORKSPACE_INVALID'
+  | 'WORKSPACE_INVITATION_INVALID'
+  | 'WORKSPACE_MEMBER_INVALID'
+  | 'WORKSPACE_NOT_FOUND';
 
 export interface ApiErrorPayload {
   error: {

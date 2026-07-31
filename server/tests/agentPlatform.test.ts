@@ -290,7 +290,7 @@ test('admin setup login session and logout enforce platform auth', async () => {
   };
   assert.ok(setup.user.id > 0);
   assert.equal(setup.user.email, 'admin@example.com');
-  assert.equal(setup.user.role, 'admin');
+  assert.equal(setup.user.role, 'owner');
   assert.ok(setup.session.token);
   assert.ok(setup.session.expiresAt);
   authHeaders = { authorization: `Bearer ${setup.session.token}` };
@@ -313,7 +313,7 @@ test('admin setup login session and logout enforce platform auth', async () => {
     user: { email: string; role: string };
   };
   assert.equal(session.user.email, 'admin@example.com');
-  assert.equal(session.user.role, 'admin');
+  assert.equal(session.user.role, 'owner');
 
   const logoutResponse = await fetch(`${baseUrl}/api/auth/logout`, {
     method: 'POST',
@@ -340,7 +340,7 @@ test('admin setup login session and logout enforce platform auth', async () => {
     session: { token: string };
   };
   assert.equal(login.user.email, 'admin@example.com');
-  assert.equal(login.user.role, 'admin');
+  assert.equal(login.user.role, 'owner');
   authHeaders = { authorization: `Bearer ${login.session.token}` };
 });
 

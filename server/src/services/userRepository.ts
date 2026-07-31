@@ -50,6 +50,18 @@ export class UserRepository {
         ${sqlValue(passwordHash)},
         'admin'
       );
+
+      INSERT INTO workspace_memberships (workspace_id, user_id, role, status)
+      VALUES (
+        ${DEFAULT_WORKSPACE_ID},
+        (SELECT id FROM users WHERE email = ${sqlValue(normalizedEmail)}),
+        'owner',
+        'active'
+      )
+      ON CONFLICT(workspace_id, user_id) DO UPDATE SET
+        role = 'owner',
+        status = 'active',
+        updated_at = CURRENT_TIMESTAMP;
     `);
 
     const created = this.findByEmail(normalizedEmail);
@@ -57,6 +69,22 @@ export class UserRepository {
       throw new Error('created admin user could not be loaded');
     }
     return toPublicUserRecord(created);
+  }
+
+  createUser(email: string, passwordHash: string): UserRecord {
+    const normalizedEmail = normalizeEmail(email);
+    this.db.run(`
+      INSERT INTO users (workspace_id, email, password_hash, role)
+      VALUES (
+        ${DEFAULT_WORKSPACE_ID},
+        ${sqlValue(normalizedEmail)},
+        ${sqlValue(passwordHash)},
+        'member'
+      );
+    `);
+    const created = this.findByEmail(normalizedEmail);
+    if (!created) throw new Error('created user could not be loaded');
+    return created;
   }
 
   findByEmail(email: string): UserRecord | null {

@@ -26,12 +26,15 @@ export function resolveStreamRequest(
   body: unknown,
   agentRepository: AgentRepository,
   runRepository: RunRepository,
+  workspaceId?: number,
 ): ResolvedStreamRequest {
   const candidate = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
   const agentId = Number(candidate.agentId);
 
   if (Number.isInteger(agentId) && agentId > 0) {
-    const agent = agentRepository.findById(agentId);
+    const agent = typeof workspaceId === 'number'
+      ? agentRepository.findByIdInWorkspace(agentId, workspaceId)
+      : agentRepository.findById(agentId);
     if (!agent) {
       throw new StreamRequestError(404, 'agent not found');
     }

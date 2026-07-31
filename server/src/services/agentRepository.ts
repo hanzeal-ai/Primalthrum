@@ -56,7 +56,7 @@ export class AgentRepository {
     initializeSchema(db);
   }
 
-  create(input: CreateAgentInput): AgentRecord {
+  create(input: CreateAgentInput, workspaceId: number): AgentRecord {
     const name = normalizeName(input.name);
     const slug = this.nextSlug(slugify(name));
     const config = normalizeConfig(input);
@@ -66,7 +66,7 @@ export class AgentRepository {
     this.db.run(`
       INSERT INTO agents (workspace_id, name, slug, description, path, status)
       VALUES (
-        ${DEFAULT_WORKSPACE_ID},
+        ${sqlValue(workspaceId)},
         ${sqlValue(name)},
         ${sqlValue(slug)},
         ${sqlValue(description)},
@@ -88,7 +88,7 @@ export class AgentRepository {
     return created;
   }
 
-  list(): AgentRecord[] {
+  list(workspaceId: number): AgentRecord[] {
     return this.db.query<AgentRow>(`
       SELECT
         a.id,
@@ -101,6 +101,7 @@ export class AgentRepository {
         c.config_json
       FROM agents a
       JOIN agent_configs c ON c.agent_id = a.id
+      WHERE a.workspace_id = ${sqlValue(workspaceId)}
       ORDER BY a.id ASC;
     `).map(toAgentRecord);
   }
@@ -124,6 +125,11 @@ export class AgentRepository {
     return rows[0] ? toAgentRecord(rows[0]) : null;
   }
 
+  findByIdInWorkspace(id: number, workspaceId: number): AgentRecord | null {
+    const agent = this.findById(id);
+    return agent?.workspaceId === workspaceId ? agent : null;
+  }
+
   markGenerated(id: number): AgentRecord {
     this.db.run(`
       UPDATE agents
@@ -138,8 +144,8 @@ export class AgentRepository {
     return updated;
   }
 
-  updateAudience(id: number, audience: unknown): AgentRecord {
-    const agent = this.findById(id);
+  updateAudience(id: number, audience: unknown, workspaceId: number): AgentRecord {
+    const agent = this.findByIdInWorkspace(id, workspaceId);
     if (!agent) throw new Error(`agent ${id} not found`);
     const normalizedAudience = normalizeAudience(audience);
     const config: AgentConfig = { ...agent.config, audience: normalizedAudience };

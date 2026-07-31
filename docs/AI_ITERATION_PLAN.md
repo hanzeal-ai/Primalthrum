@@ -1671,19 +1671,30 @@ complete. Follow the same dependency and verification protocol used above.
 
 ### P16-01 Workspace Membership And RBAC
 
-- Status: Todo
+- Status: Done
 - Goal: Implement workspace-scoped users, memberships, invitations, roles, and
   server-side resource authorization.
 - Dependencies: P15-01
 - Verification: repository scope tests and cross-tenant denial E2E.
+- Evidence: migration `009_workspace_memberships` adds memberships, invitations,
+  active session workspaces, and workspace-scoped provider uniqueness. Owner,
+  admin, member, and viewer permissions are enforced server-side across Agent,
+  Provider, Document, Conversation, Run, Job, audit, and stream routes. The
+  20-test server suite includes explicit repository scoping, invitation
+  acceptance, role changes, duplicate provider names across workspaces, denied
+  writes, denied workspace switching, and hidden cross-tenant IDs. Desktop and
+  390x844 browser acceptance passed for workspace creation and switching.
 
 ### P16-02 Conversations, Agent Versions, And Deployments
 
-- Status: Todo
+- Status: In Progress
 - Goal: Persist conversations/messages and implement immutable Agent versions,
   preview, publish, audience policy, and rollback.
 - Dependencies: P15-03, P16-01
 - Verification: migration, lifecycle, reconnect, replay, and rollback tests.
+- Current evidence: conversations/messages, reconnect, replay, audience policy,
+  and hosted deployment URLs are complete from P15-03. Immutable Agent versions,
+  deployment records, preview promotion, and rollback remain open.
 
 ### P17-01 Real Model And Canonical Stream Runtime
 

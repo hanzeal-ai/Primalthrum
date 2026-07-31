@@ -193,6 +193,20 @@ export interface CurrentSession {
   expiresAt: string
 }
 
+export interface WorkspaceRecord {
+  id: number
+  name: string
+  slug: string
+  role: 'owner' | 'admin' | 'member' | 'viewer'
+  createdAt: string
+  updatedAt: string
+}
+
+export interface CreateWorkspaceResponse {
+  workspace: Omit<WorkspaceRecord, 'role'>
+  session: CurrentSession
+}
+
 export interface SetupStatus {
   needsSetup: boolean
 }

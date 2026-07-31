@@ -69,6 +69,11 @@ export class RunRepository {
     return rows[0] ? toRunRecord(rows[0]) : null;
   }
 
+  findByIdInWorkspace(id: number, workspaceId: number): RunRecord | null {
+    const run = this.findById(id);
+    return run?.workspaceId === workspaceId ? run : null;
+  }
+
   updateStatus(id: number, status: string, endedAt: string | null = null): RunRecord {
     this.db.run(`
       UPDATE runs

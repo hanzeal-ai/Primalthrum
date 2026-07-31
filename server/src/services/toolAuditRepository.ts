@@ -79,9 +79,9 @@ export class ToolAuditRepository {
     return this.findByEventId(event.id);
   }
 
-  list(runId?: number): ToolAuditRecord[] {
-    const whereClause = typeof runId === 'number'
-      ? `WHERE run_id = ${sqlValue(runId)}`
+  list(workspaceId: number, runId?: number): ToolAuditRecord[] {
+    const runClause = typeof runId === 'number'
+      ? `AND run_id = ${sqlValue(runId)}`
       : '';
 
     return this.db.query<ToolAuditRow>(`
@@ -97,7 +97,8 @@ export class ToolAuditRepository {
         payload_json,
         created_at
       FROM tool_audit_logs
-      ${whereClause}
+      WHERE workspace_id = ${sqlValue(workspaceId)}
+      ${runClause}
       ORDER BY id ASC;
     `).map(toToolAuditRecord);
   }

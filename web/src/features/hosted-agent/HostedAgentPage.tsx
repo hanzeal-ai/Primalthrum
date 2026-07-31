@@ -30,6 +30,7 @@ import type {
 import { ChatComposer } from '../../components/chat/ChatComposer'
 import { Badge } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
+import { WorkspaceSwitcher } from '../workspaces/WorkspaceSwitcher'
 
 interface HostedAgentPageProps {
   slug: string
@@ -280,7 +281,7 @@ export function HostedAgentPage({
           </div>
           <p className="truncate text-xs text-zinc-500">{agent.description || 'Primalthrum Agent'}</p>
         </div>
-        {user ? <span className="hidden text-xs text-zinc-500 sm:block">{user.email}</span> : null}
+        {user ? <WorkspaceSwitcher user={user} /> : null}
         <Button aria-label="新建对话" onClick={() => void clearConversation()} size="icon" title="新建对话" variant="ghost"><RotateCcw /></Button>
       </header>
 

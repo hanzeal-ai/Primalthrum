@@ -94,6 +94,11 @@ export class JobRepository {
     return rows[0] ? toJobRecord(rows[0]) : null;
   }
 
+  findByIdInWorkspace(id: number, workspaceId: number): JobRecord | null {
+    const job = this.findById(id);
+    return job?.workspaceId === workspaceId ? job : null;
+  }
+
   markRunning(id: number): JobRecord {
     this.db.run(`
       UPDATE jobs

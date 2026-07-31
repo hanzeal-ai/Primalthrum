@@ -7,7 +7,6 @@ import {
 
 import { initializeSchema } from '../db/schema';
 import { SqliteDatabase, sqlValue } from '../db/sqlite';
-import { DEFAULT_WORKSPACE_ID } from '../db/workspaceDefaults';
 
 const SECRET_REF_PREFIX = 'secret://local/';
 
@@ -16,20 +15,20 @@ export class LocalSecretVault {
     initializeSchema(db);
   }
 
-  create(plaintext: string): string {
+  create(plaintext: string, workspaceId: number): string {
     const secretRef = `${SECRET_REF_PREFIX}${randomUUID()}`;
-    this.store(secretRef, plaintext);
+    this.store(secretRef, plaintext, workspaceId);
     return secretRef;
   }
 
-  update(secretRef: string, plaintext: string): void {
+  update(secretRef: string, plaintext: string, workspaceId: number): void {
     if (!secretRef.startsWith(SECRET_REF_PREFIX)) {
       throw new Error('only local secret refs can be updated');
     }
-    this.store(secretRef, plaintext);
+    this.store(secretRef, plaintext, workspaceId);
   }
 
-  private store(secretRef: string, plaintext: string): void {
+  private store(secretRef: string, plaintext: string, workspaceId: number): void {
     const encrypted = encryptSecret(normalizeSecret(plaintext));
 
     this.db.run(`
@@ -41,7 +40,7 @@ export class LocalSecretVault {
         auth_tag
       )
       VALUES (
-        ${DEFAULT_WORKSPACE_ID},
+        ${sqlValue(workspaceId)},
         ${sqlValue(secretRef)},
         ${sqlValue(encrypted.ciphertext)},
         ${sqlValue(encrypted.iv)},
@@ -51,7 +50,8 @@ export class LocalSecretVault {
         ciphertext = excluded.ciphertext,
         iv = excluded.iv,
         auth_tag = excluded.auth_tag,
-        updated_at = CURRENT_TIMESTAMP;
+        updated_at = CURRENT_TIMESTAMP
+      WHERE secrets.workspace_id = excluded.workspace_id;
     `);
   }
 }

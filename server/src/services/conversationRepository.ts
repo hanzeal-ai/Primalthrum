@@ -82,6 +82,11 @@ export class ConversationRepository {
     return rows[0] ? toConversation(rows[0]) : null;
   }
 
+  findByIdInWorkspace(id: number, workspaceId: number): ConversationRecord | null {
+    const conversation = this.findById(id);
+    return conversation?.workspaceId === workspaceId ? conversation : null;
+  }
+
   listByAgent(agentId: number): ConversationRecord[] {
     return this.db.query<ConversationRow>(`
       SELECT id, workspace_id, agent_id, title, created_at, updated_at

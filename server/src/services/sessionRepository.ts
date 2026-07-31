@@ -34,9 +34,16 @@ export class SessionRepository {
     const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
 
     this.db.run(`
-      INSERT INTO sessions (user_id, workspace_id, token_hash, expires_at)
+      INSERT INTO sessions (
+        user_id,
+        workspace_id,
+        active_workspace_id,
+        token_hash,
+        expires_at
+      )
       VALUES (
         ${sqlValue(user.id)},
+        ${sqlValue(user.workspaceId)},
         ${sqlValue(user.workspaceId)},
         ${sqlValue(hashToken(token))},
         ${sqlValue(expiresAt)}
@@ -54,12 +61,16 @@ export class SessionRepository {
     const rows = this.db.query<SessionUserRow>(`
       SELECT
         u.id AS user_id,
-        u.workspace_id,
+        s.active_workspace_id AS workspace_id,
         u.email,
-        u.role,
+        m.role,
         s.expires_at
       FROM sessions s
       JOIN users u ON u.id = s.user_id
+      JOIN workspace_memberships m
+        ON m.user_id = u.id
+        AND m.workspace_id = s.active_workspace_id
+        AND m.status = 'active'
       WHERE s.token_hash = ${sqlValue(hashToken(token))}
         AND s.revoked_at IS NULL
         AND s.expires_at > ${sqlValue(new Date().toISOString())}
@@ -79,6 +90,31 @@ export class SessionRepository {
       SET revoked_at = ${sqlValue(new Date().toISOString())}
       WHERE token_hash = ${sqlValue(hashToken(token))};
     `);
+  }
+
+  switchWorkspace(token: string, userId: number, workspaceId: number): void {
+    if (!token.trim()) throw new Error('session token is required');
+    this.db.run(`
+      UPDATE sessions
+      SET
+        active_workspace_id = ${sqlValue(workspaceId)},
+        workspace_id = ${sqlValue(workspaceId)}
+      WHERE token_hash = ${sqlValue(hashToken(token))}
+        AND user_id = ${sqlValue(userId)}
+        AND revoked_at IS NULL
+        AND EXISTS (
+          SELECT 1
+          FROM workspace_memberships m
+          WHERE m.workspace_id = ${sqlValue(workspaceId)}
+            AND m.user_id = ${sqlValue(userId)}
+            AND m.status = 'active'
+        );
+    `);
+
+    const selected = this.findByToken(token);
+    if (!selected || selected.user.workspaceId !== workspaceId) {
+      throw new Error('workspace membership is required');
+    }
   }
 }
 

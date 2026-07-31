@@ -44,6 +44,10 @@ export const MIGRATIONS: Migration[] = [
     id: '008_conversations',
     up: applyConversations,
   },
+  {
+    id: '009_workspace_memberships',
+    up: applyWorkspaceMemberships,
+  },
 ];
 
 export function runMigrations(db: DatabaseAdapter): void {
@@ -302,6 +306,100 @@ function applyConversations(db: DatabaseAdapter): void {
       FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
       FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
     );
+  `);
+}
+
+function applyWorkspaceMemberships(db: DatabaseAdapter): void {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS workspace_memberships (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      role TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(workspace_id, user_id),
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS workspace_invitations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      email TEXT NOT NULL,
+      role TEXT NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      invited_by_user_id INTEGER NOT NULL,
+      expires_at TEXT NOT NULL,
+      accepted_at TEXT,
+      revoked_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+      FOREIGN KEY(invited_by_user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    INSERT OR IGNORE INTO workspace_memberships (
+      workspace_id,
+      user_id,
+      role,
+      status
+    )
+    SELECT
+      workspace_id,
+      id,
+      CASE WHEN role = 'admin' THEN 'owner' ELSE 'member' END,
+      'active'
+    FROM users;
+  `);
+
+  db.run(`
+    ALTER TABLE provider_configs RENAME TO provider_configs_legacy;
+
+    CREATE TABLE provider_configs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL DEFAULT ${DEFAULT_WORKSPACE_ID},
+      name TEXT NOT NULL,
+      type TEXT NOT NULL,
+      config_json TEXT NOT NULL,
+      secret_ref TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(workspace_id, name),
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+    );
+
+    INSERT INTO provider_configs (
+      id,
+      workspace_id,
+      name,
+      type,
+      config_json,
+      secret_ref,
+      created_at
+    )
+    SELECT
+      id,
+      workspace_id,
+      name,
+      type,
+      config_json,
+      secret_ref,
+      created_at
+    FROM provider_configs_legacy;
+
+    DROP TABLE provider_configs_legacy;
+  `);
+
+  ensureColumn(
+    db,
+    'sessions',
+    'active_workspace_id',
+    `INTEGER NOT NULL DEFAULT ${DEFAULT_WORKSPACE_ID}`,
+  );
+  db.run(`
+    UPDATE sessions
+    SET active_workspace_id = workspace_id
+    WHERE active_workspace_id IS NULL;
   `);
 }
 

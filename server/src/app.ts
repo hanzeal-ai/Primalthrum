@@ -49,9 +49,10 @@ import {
 } from './services/streamRequestResolver';
 import {
   normalizeEmail,
-  toPublicUserRecord,
   UserRepository,
 } from './services/userRepository';
+import { hasWorkspacePermission, type WorkspacePermission } from './services/workspaceAuthorization';
+import { WorkspaceRepository } from './services/workspaceRepository';
 
 export interface AppOptions {
   agentBaseUrl?: string;
@@ -108,11 +109,57 @@ export function createApp(options: AppOptions = {}): Koa {
     options.documentStorageDir ?? DEFAULT_DOCUMENT_STORAGE_DIR,
   );
   const userRepository = new UserRepository(db);
+  const workspaceRepository = new WorkspaceRepository(db);
   const sessionRepository = new SessionRepository(db);
   const providerConfigRepository = new ProviderConfigRepository(db);
   const toolAuditRepository = new ToolAuditRepository(db);
   const jobRepository = new JobRepository(db);
   const jobWorker = new InProcessJobWorker(jobRepository);
+
+  function authorize(ctx: Koa.Context, permission: WorkspacePermission): boolean {
+    const role = ctx.state.authSession?.user.role;
+    if (typeof role === 'string' && hasWorkspacePermission(role, permission)) {
+      return true;
+    }
+    sendApiError(ctx, logger, {
+      status: 403,
+      code: 'AUTHORIZATION_FORBIDDEN',
+      message: `permission ${permission} is required`,
+    });
+    return false;
+  }
+
+  function currentWorkspaceId(ctx: Koa.Context): number {
+    return Number(ctx.state.authSession?.user.workspaceId);
+  }
+
+  function scopedAgent(
+    ctx: Koa.Context,
+    id: number,
+    permission: WorkspacePermission,
+  ) {
+    if (!authorize(ctx, permission)) return null;
+    const agent = agentRepository.findByIdInWorkspace(id, currentWorkspaceId(ctx));
+    if (!agent) {
+      sendApiError(ctx, logger, {
+        status: 404,
+        code: 'AGENT_NOT_FOUND',
+        message: 'agent not found',
+      });
+      return null;
+    }
+    return agent;
+  }
+
+  function requireCurrentWorkspace(ctx: Koa.Context, workspaceId: number): boolean {
+    if (workspaceId === currentWorkspaceId(ctx)) return true;
+    sendApiError(ctx, logger, {
+      status: 404,
+      code: 'WORKSPACE_NOT_FOUND',
+      message: 'workspace not found',
+    });
+    return false;
+  }
 
   app.use(async (ctx, next) => {
     const origin = ctx.get('origin');
@@ -181,7 +228,9 @@ export function createApp(options: AppOptions = {}): Koa {
       const body = ctx.request.body as { email?: unknown; password?: unknown };
       const email = normalizeEmail(body.email);
       const password = normalizePassword(body.password);
-      const user = userRepository.createAdmin(email, hashPassword(password));
+      const createdUser = userRepository.createAdmin(email, hashPassword(password));
+      const user = workspaceRepository.principalForUser(createdUser.id);
+      if (!user) throw new Error('admin workspace membership could not be loaded');
       const session = sessionRepository.create(user);
 
       ctx.set('Set-Cookie', sessionCookie(session.token, session.expiresAt));
@@ -208,7 +257,12 @@ export function createApp(options: AppOptions = {}): Koa {
         return;
       }
 
-      const publicUser = toPublicUserRecord(user);
+      const publicUser = workspaceRepository.principalForUser(user.id);
+      if (!publicUser) {
+        ctx.status = 403;
+        ctx.body = { error: 'workspace membership is required' };
+        return;
+      }
       const session = sessionRepository.create(publicUser);
       ctx.set('Set-Cookie', sessionCookie(session.token, session.expiresAt));
       ctx.body = { user: publicUser, session };
@@ -242,13 +296,169 @@ export function createApp(options: AppOptions = {}): Koa {
     ctx.body = session;
   });
 
+  router.post('/api/auth/workspace', (ctx) => {
+    const body = ctx.request.body as { workspaceId?: unknown };
+    const workspaceId = Number(body.workspaceId);
+    const authSession = ctx.state.authSession;
+    const token = ctx.state.sessionToken;
+    if (!authSession || !token || !Number.isInteger(workspaceId) || workspaceId <= 0) {
+      sendApiError(ctx, logger, {
+        status: 400,
+        code: 'WORKSPACE_INVALID',
+        message: 'workspaceId must be a positive integer',
+      });
+      return;
+    }
+    try {
+      sessionRepository.switchWorkspace(token, authSession.user.id, workspaceId);
+      const selected = sessionRepository.findByToken(token);
+      if (!selected) throw new Error('workspace session could not be loaded');
+      ctx.body = selected;
+    } catch (error) {
+      sendApiError(ctx, logger, {
+        status: 403,
+        code: 'AUTHORIZATION_FORBIDDEN',
+        message: error instanceof Error ? error.message : 'workspace membership is required',
+      });
+    }
+  });
+
+  router.get('/api/workspaces', (ctx) => {
+    if (!authorize(ctx, 'workspace.read')) return;
+    ctx.body = workspaceRepository.listForUser(ctx.state.authSession.user.id);
+  });
+
+  router.post('/api/workspaces', (ctx) => {
+    const authSession = ctx.state.authSession;
+    const token = ctx.state.sessionToken;
+    if (!authSession || !token) return;
+    try {
+      const body = ctx.request.body as { name?: unknown };
+      const workspace = workspaceRepository.create(authSession.user.id, body.name);
+      sessionRepository.switchWorkspace(token, authSession.user.id, workspace.id);
+      ctx.status = 201;
+      ctx.body = {
+        workspace,
+        session: sessionRepository.findByToken(token),
+      };
+    } catch (error) {
+      sendApiError(ctx, logger, {
+        status: 400,
+        code: 'WORKSPACE_INVALID',
+        message: error instanceof Error ? error.message : 'failed to create workspace',
+      });
+    }
+  });
+
+  router.get('/api/workspaces/:id/members', (ctx) => {
+    const workspaceId = Number(ctx.params.id);
+    if (!requireCurrentWorkspace(ctx, workspaceId) || !authorize(ctx, 'workspace.read')) return;
+    ctx.body = workspaceRepository.listMembers(workspaceId);
+  });
+
+  router.patch('/api/workspaces/:id/members/:userId', (ctx) => {
+    const workspaceId = Number(ctx.params.id);
+    if (!requireCurrentWorkspace(ctx, workspaceId) || !authorize(ctx, 'members.manage')) return;
+    try {
+      const body = ctx.request.body as { role?: unknown };
+      ctx.body = workspaceRepository.updateMemberRole(
+        workspaceId,
+        Number(ctx.params.userId),
+        body.role,
+      );
+    } catch (error) {
+      sendApiError(ctx, logger, {
+        status: 400,
+        code: 'WORKSPACE_MEMBER_INVALID',
+        message: error instanceof Error ? error.message : 'failed to update member',
+      });
+    }
+  });
+
+  router.delete('/api/workspaces/:id/members/:userId', (ctx) => {
+    const workspaceId = Number(ctx.params.id);
+    if (!requireCurrentWorkspace(ctx, workspaceId) || !authorize(ctx, 'members.manage')) return;
+    try {
+      workspaceRepository.removeMember(workspaceId, Number(ctx.params.userId));
+      ctx.status = 204;
+    } catch (error) {
+      sendApiError(ctx, logger, {
+        status: 400,
+        code: 'WORKSPACE_MEMBER_INVALID',
+        message: error instanceof Error ? error.message : 'failed to remove member',
+      });
+    }
+  });
+
+  router.get('/api/workspaces/:id/invitations', (ctx) => {
+    const workspaceId = Number(ctx.params.id);
+    if (!requireCurrentWorkspace(ctx, workspaceId) || !authorize(ctx, 'members.manage')) return;
+    ctx.body = workspaceRepository.listInvitations(workspaceId);
+  });
+
+  router.post('/api/workspaces/:id/invitations', (ctx) => {
+    const workspaceId = Number(ctx.params.id);
+    if (!requireCurrentWorkspace(ctx, workspaceId) || !authorize(ctx, 'members.manage')) return;
+    try {
+      const body = ctx.request.body as { email?: unknown; role?: unknown };
+      ctx.status = 201;
+      ctx.body = workspaceRepository.createInvitation({
+        workspaceId,
+        email: body.email,
+        role: body.role,
+        invitedByUserId: ctx.state.authSession.user.id,
+      });
+    } catch (error) {
+      sendApiError(ctx, logger, {
+        status: 400,
+        code: 'WORKSPACE_INVITATION_INVALID',
+        message: error instanceof Error ? error.message : 'failed to create invitation',
+      });
+    }
+  });
+
+  router.post('/api/invitations/accept', (ctx) => {
+    try {
+      const body = ctx.request.body as { token?: unknown; password?: unknown };
+      const token = typeof body.token === 'string' ? body.token : '';
+      const invitation = workspaceRepository.activeInvitationByToken(token);
+      if (!invitation) throw new Error('invitation is invalid or expired');
+      const password = normalizePassword(body.password);
+      let user = userRepository.findByEmail(invitation.email);
+      if (user && !verifyPassword(password, user.passwordHash)) {
+        ctx.status = 401;
+        ctx.body = { error: 'invalid email or password' };
+        return;
+      }
+      user ??= userRepository.createUser(invitation.email, hashPassword(password));
+      workspaceRepository.acceptInvitation(token, user.id, user.email);
+      const principal = workspaceRepository.principalForUser(user.id, invitation.workspaceId);
+      if (!principal) throw new Error('workspace membership could not be loaded');
+      const session = sessionRepository.create(principal);
+      ctx.set('Set-Cookie', sessionCookie(session.token, session.expiresAt));
+      ctx.status = 201;
+      ctx.body = { user: principal, session };
+    } catch (error) {
+      sendApiError(ctx, logger, {
+        status: 400,
+        code: 'WORKSPACE_INVITATION_INVALID',
+        message: error instanceof Error ? error.message : 'failed to accept invitation',
+      });
+    }
+  });
+
   router.get('/api/agents', (ctx) => {
-    ctx.body = agentRepository.list();
+    if (!authorize(ctx, 'agents.read')) return;
+    ctx.body = agentRepository.list(currentWorkspaceId(ctx));
   });
 
   router.post('/api/agents', (ctx) => {
+    if (!authorize(ctx, 'agents.write')) return;
     try {
-      const created = agentRepository.create(ctx.request.body as CreateAgentInput);
+      const created = agentRepository.create(
+        ctx.request.body as CreateAgentInput,
+        currentWorkspaceId(ctx),
+      );
       ctx.status = 201;
       ctx.body = created;
     } catch (error) {
@@ -261,7 +471,8 @@ export function createApp(options: AppOptions = {}): Koa {
 
   router.get('/api/agents/slug/:slug', (ctx) => {
     const agent = agentRepository.findBySlug(ctx.params.slug);
-    if (!agent) {
+    if (!authorize(ctx, 'agents.read')) return;
+    if (!agent || agent.workspaceId !== currentWorkspaceId(ctx)) {
       ctx.status = 404;
       ctx.body = { error: 'agent not found' };
       return;
@@ -270,22 +481,14 @@ export function createApp(options: AppOptions = {}): Koa {
   });
 
   router.get('/api/agents/:id', (ctx) => {
-    const agent = agentRepository.findById(Number(ctx.params.id));
-    if (!agent) {
-      ctx.status = 404;
-      ctx.body = { error: 'agent not found' };
-      return;
-    }
+    const agent = scopedAgent(ctx, Number(ctx.params.id), 'agents.read');
+    if (!agent) return;
     ctx.body = agent;
   });
 
   router.post('/api/agents/:id/generate', async (ctx) => {
-    const agent = agentRepository.findById(Number(ctx.params.id));
-    if (!agent) {
-      ctx.status = 404;
-      ctx.body = { error: 'agent not found' };
-      return;
-    }
+    const agent = scopedAgent(ctx, Number(ctx.params.id), 'agents.write');
+    if (!agent) return;
 
     const generated = await generateAgentProject(agent);
     agentRepository.markGenerated(agent.id);
@@ -294,17 +497,14 @@ export function createApp(options: AppOptions = {}): Koa {
 
   router.put('/api/agents/:id/audience', (ctx) => {
     const agentId = Number(ctx.params.id);
-    if (!agentRepository.findById(agentId)) {
-      sendApiError(ctx, logger, {
-        status: 404,
-        code: 'AGENT_NOT_FOUND',
-        message: 'agent not found',
-      });
-      return;
-    }
+    if (!scopedAgent(ctx, agentId, 'agents.publish')) return;
     try {
       const body = ctx.request.body as { audience?: unknown };
-      ctx.body = agentRepository.updateAudience(agentId, body.audience);
+      ctx.body = agentRepository.updateAudience(
+        agentId,
+        body.audience,
+        currentWorkspaceId(ctx),
+      );
     } catch (error) {
       sendApiError(ctx, logger, {
         status: 400,
@@ -316,14 +516,7 @@ export function createApp(options: AppOptions = {}): Koa {
 
   router.post('/api/agents/:id/documents', (ctx) => {
     const agentId = Number(ctx.params.id);
-    if (!agentRepository.findById(agentId)) {
-      sendApiError(ctx, logger, {
-        status: 404,
-        code: 'DOCUMENT_AGENT_NOT_FOUND',
-        message: 'agent not found',
-      });
-      return;
-    }
+    if (!scopedAgent(ctx, agentId, 'agents.write')) return;
 
     try {
       const input = ctx.request.body as CreateDocumentInput;
@@ -356,29 +549,15 @@ export function createApp(options: AppOptions = {}): Koa {
 
   router.get('/api/agents/:id/documents', (ctx) => {
     const agentId = Number(ctx.params.id);
-    if (!agentRepository.findById(agentId)) {
-      sendApiError(ctx, logger, {
-        status: 404,
-        code: 'DOCUMENT_AGENT_NOT_FOUND',
-        message: 'agent not found',
-      });
-      return;
-    }
+    if (!scopedAgent(ctx, agentId, 'agents.read')) return;
 
     ctx.body = documentRepository.listByAgent(agentId);
   });
 
   router.post('/api/agents/:id/documents/:documentId/index', (ctx) => {
     const agentId = Number(ctx.params.id);
-    const agent = agentRepository.findById(agentId);
-    if (!agent) {
-      sendApiError(ctx, logger, {
-        status: 404,
-        code: 'DOCUMENT_AGENT_NOT_FOUND',
-        message: 'agent not found',
-      });
-      return;
-    }
+    const agent = scopedAgent(ctx, agentId, 'agents.write');
+    if (!agent) return;
 
     const documentId = Number(ctx.params.documentId);
     if (!documentRepository.findByAgentDocument(agentId, documentId)) {
@@ -429,14 +608,7 @@ export function createApp(options: AppOptions = {}): Koa {
 
   router.delete('/api/agents/:id/documents/:documentId', (ctx) => {
     const agentId = Number(ctx.params.id);
-    if (!agentRepository.findById(agentId)) {
-      sendApiError(ctx, logger, {
-        status: 404,
-        code: 'DOCUMENT_AGENT_NOT_FOUND',
-        message: 'agent not found',
-      });
-      return;
-    }
+    if (!scopedAgent(ctx, agentId, 'agents.write')) return;
 
     const documentId = Number(ctx.params.documentId);
     const document = documentRepository.findByAgentDocument(agentId, documentId);
@@ -464,27 +636,13 @@ export function createApp(options: AppOptions = {}): Koa {
 
   router.get('/api/agents/:id/conversations', (ctx) => {
     const agentId = Number(ctx.params.id);
-    if (!agentRepository.findById(agentId)) {
-      sendApiError(ctx, logger, {
-        status: 404,
-        code: 'CONVERSATION_AGENT_NOT_FOUND',
-        message: 'agent not found',
-      });
-      return;
-    }
+    if (!scopedAgent(ctx, agentId, 'agents.read')) return;
     ctx.body = conversationRepository.listByAgent(agentId);
   });
 
   router.post('/api/agents/:id/conversations', (ctx) => {
     const agentId = Number(ctx.params.id);
-    if (!agentRepository.findById(agentId)) {
-      sendApiError(ctx, logger, {
-        status: 404,
-        code: 'CONVERSATION_AGENT_NOT_FOUND',
-        message: 'agent not found',
-      });
-      return;
-    }
+    if (!scopedAgent(ctx, agentId, 'agents.run')) return;
     const body = ctx.request.body as { title?: unknown };
     const title = typeof body.title === 'string' ? body.title : '新对话';
     ctx.status = 201;
@@ -493,7 +651,8 @@ export function createApp(options: AppOptions = {}): Koa {
 
   router.get('/api/conversations/:id/messages', (ctx) => {
     const conversationId = Number(ctx.params.id);
-    if (!conversationRepository.findById(conversationId)) {
+    if (!authorize(ctx, 'agents.read')) return;
+    if (!conversationRepository.findByIdInWorkspace(conversationId, currentWorkspaceId(ctx))) {
       sendApiError(ctx, logger, {
         status: 404,
         code: 'CONVERSATION_NOT_FOUND',
@@ -509,13 +668,16 @@ export function createApp(options: AppOptions = {}): Koa {
   });
 
   router.get('/api/provider-configs', (ctx) => {
-    ctx.body = providerConfigRepository.list();
+    if (!authorize(ctx, 'providers.manage')) return;
+    ctx.body = providerConfigRepository.list(currentWorkspaceId(ctx));
   });
 
   router.post('/api/provider-configs', (ctx) => {
+    if (!authorize(ctx, 'providers.manage')) return;
     try {
       const created = providerConfigRepository.create(
         ctx.request.body as CreateProviderConfigInput,
+        currentWorkspaceId(ctx),
       );
       ctx.status = 201;
       ctx.body = created;
@@ -529,7 +691,11 @@ export function createApp(options: AppOptions = {}): Koa {
   });
 
   router.get('/api/provider-configs/:id', (ctx) => {
-    const config = providerConfigRepository.findById(Number(ctx.params.id));
+    if (!authorize(ctx, 'providers.manage')) return;
+    const config = providerConfigRepository.findById(
+      Number(ctx.params.id),
+      currentWorkspaceId(ctx),
+    );
     if (!config) {
       sendApiError(ctx, logger, {
         status: 404,
@@ -543,10 +709,12 @@ export function createApp(options: AppOptions = {}): Koa {
   });
 
   router.put('/api/provider-configs/:id', (ctx) => {
+    if (!authorize(ctx, 'providers.manage')) return;
     try {
       const updated = providerConfigRepository.update(
         Number(ctx.params.id),
         ctx.request.body as UpdateProviderConfigInput,
+        currentWorkspaceId(ctx),
       );
       if (!updated) {
         sendApiError(ctx, logger, {
@@ -576,9 +744,13 @@ export function createApp(options: AppOptions = {}): Koa {
   });
 
   router.post('/api/runs', (ctx) => {
+    if (!authorize(ctx, 'agents.run')) return;
     try {
       const body = ctx.request.body as CreateRunInput;
-      if (!agentRepository.findById(Number(body.agentId))) {
+      if (!agentRepository.findByIdInWorkspace(
+        Number(body.agentId),
+        currentWorkspaceId(ctx),
+      )) {
         sendApiError(ctx, logger, {
           status: 404,
           code: 'RUN_AGENT_NOT_FOUND',
@@ -600,7 +772,11 @@ export function createApp(options: AppOptions = {}): Koa {
   });
 
   router.get('/api/runs/:id', (ctx) => {
-    const run = runRepository.findById(Number(ctx.params.id));
+    if (!authorize(ctx, 'agents.read')) return;
+    const run = runRepository.findByIdInWorkspace(
+      Number(ctx.params.id),
+      currentWorkspaceId(ctx),
+    );
     if (!run) {
       sendApiError(ctx, logger, {
         status: 404,
@@ -613,7 +789,11 @@ export function createApp(options: AppOptions = {}): Koa {
   });
 
   router.get('/api/jobs/:id', (ctx) => {
-    const job = jobRepository.findById(Number(ctx.params.id));
+    if (!authorize(ctx, 'agents.read')) return;
+    const job = jobRepository.findByIdInWorkspace(
+      Number(ctx.params.id),
+      currentWorkspaceId(ctx),
+    );
     if (!job) {
       sendApiError(ctx, logger, {
         status: 404,
@@ -628,7 +808,8 @@ export function createApp(options: AppOptions = {}): Koa {
 
   router.post('/api/runs/:id/events', (ctx) => {
     const runId = Number(ctx.params.id);
-    if (!runRepository.findById(runId)) {
+    if (!authorize(ctx, 'agents.run')) return;
+    if (!runRepository.findByIdInWorkspace(runId, currentWorkspaceId(ctx))) {
       sendApiError(ctx, logger, {
         status: 404,
         code: 'RUN_NOT_FOUND',
@@ -659,7 +840,8 @@ export function createApp(options: AppOptions = {}): Koa {
 
   router.get('/api/runs/:id/events', (ctx) => {
     const runId = Number(ctx.params.id);
-    if (!runRepository.findById(runId)) {
+    if (!authorize(ctx, 'agents.read')) return;
+    if (!runRepository.findByIdInWorkspace(runId, currentWorkspaceId(ctx))) {
       sendApiError(ctx, logger, {
         status: 404,
         code: 'RUN_NOT_FOUND',
@@ -672,6 +854,7 @@ export function createApp(options: AppOptions = {}): Koa {
   });
 
   router.get('/api/audit/tool-calls', (ctx) => {
+    if (!authorize(ctx, 'audit.read')) return;
     const runId = parseOptionalPositiveInteger(ctx.query.runId);
     if (runId === null) {
       sendApiError(ctx, logger, {
@@ -682,10 +865,26 @@ export function createApp(options: AppOptions = {}): Koa {
       return;
     }
 
-    ctx.body = toolAuditRepository.list(runId);
+    if (runId && !runRepository.findByIdInWorkspace(runId, currentWorkspaceId(ctx))) {
+      sendApiError(ctx, logger, {
+        status: 404,
+        code: 'RUN_NOT_FOUND',
+        message: 'run not found',
+      });
+      return;
+    }
+    ctx.body = toolAuditRepository.list(currentWorkspaceId(ctx), runId);
   });
 
-  async function handleStream(ctx: Koa.Context): Promise<void> {
+  async function handleStream(
+    ctx: Koa.Context,
+    publicAgentId?: number,
+  ): Promise<void> {
+    if (!publicAgentId && !authorize(ctx, 'agents.run')) return;
+    const publicAgent = publicAgentId
+      ? agentRepository.findById(publicAgentId)
+      : null;
+    const workspaceId = publicAgent?.workspaceId ?? currentWorkspaceId(ctx);
     ctx.respond = false;
     const streamHeaders: Record<string, string> = {
       'Content-Type': 'text/event-stream; charset=utf-8',
@@ -703,6 +902,7 @@ export function createApp(options: AppOptions = {}): Koa {
         body,
         agentRepository,
         runRepository,
+        workspaceId,
       );
       let conversationId: number | null = null;
       if (streamRequest.runId) {
@@ -713,7 +913,7 @@ export function createApp(options: AppOptions = {}): Koa {
         }
 
         let conversation = requestedConversationId
-          ? conversationRepository.findById(requestedConversationId)
+          ? conversationRepository.findByIdInWorkspace(requestedConversationId, workspaceId)
           : null;
         if (conversation && conversation.agentId !== agentId) {
           throw new StreamRequestError(404, 'conversation not found for agent');
@@ -731,7 +931,7 @@ export function createApp(options: AppOptions = {}): Koa {
           content: String(body.input ?? ''),
         });
 
-        const agent = agentRepository.findById(agentId);
+        const agent = agentRepository.findByIdInWorkspace(agentId, workspaceId);
         if (agent && !['none', 'null'].includes(agent.config.ragProvider)) {
           const matches = documentIndexRepository.searchByAgent(
             agentId,
@@ -826,8 +1026,8 @@ export function createApp(options: AppOptions = {}): Koa {
     }
   }
 
-  router.post('/api/stream', handleStream);
-  router.post('/api/stream/create-agent', handleStream);
+  router.post('/api/stream', async (ctx) => handleStream(ctx));
+  router.post('/api/stream/create-agent', async (ctx) => handleStream(ctx));
 
   router.get('/api/public/agents/:slug', (ctx) => {
     const agent = agentRepository.findBySlug(ctx.params.slug);
@@ -858,7 +1058,7 @@ export function createApp(options: AppOptions = {}): Koa {
       input: body.input,
       conversationId: body.conversationId,
     };
-    await handleStream(ctx);
+    await handleStream(ctx, agent.id);
   });
 
   app.use(router.routes());

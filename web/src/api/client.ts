@@ -6,6 +6,7 @@ import type {
   ConversationRecord,
   CreateAgentInput,
   CreateDocumentInput,
+  CreateWorkspaceResponse,
   CurrentSession,
   DocumentRecord,
   GeneratedProject,
@@ -20,6 +21,7 @@ import type {
   StreamPayload,
   StreamResult,
   ToolInfo,
+  WorkspaceRecord,
 } from './types'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
@@ -98,6 +100,24 @@ export async function logoutAdmin(): Promise<void> {
 
 export async function getCurrentSession(): Promise<CurrentSession> {
   return apiFetch<CurrentSession>('/api/auth/session')
+}
+
+export async function listWorkspaces(): Promise<WorkspaceRecord[]> {
+  return apiFetch<WorkspaceRecord[]>('/api/workspaces')
+}
+
+export async function createWorkspace(name: string): Promise<CreateWorkspaceResponse> {
+  return apiFetch<CreateWorkspaceResponse>('/api/workspaces', {
+    method: 'POST',
+    body: JSON.stringify({ name }),
+  })
+}
+
+export async function switchWorkspace(workspaceId: number): Promise<CurrentSession> {
+  return apiFetch<CurrentSession>('/api/auth/workspace', {
+    method: 'POST',
+    body: JSON.stringify({ workspaceId }),
+  })
 }
 
 export async function listAgents(): Promise<AgentRecord[]> {
