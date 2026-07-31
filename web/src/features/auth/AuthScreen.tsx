@@ -11,7 +11,7 @@ import type { AuthMode } from './useAuthSession'
 interface AuthScreenProps {
   credentials: AuthCredentials
   message: string
-  mode: Exclude<AuthMode, 'ready' | 'checking'>
+  mode: Extract<AuthMode, 'setup' | 'login'>
   onChange: (value: AuthCredentials) => void
   onSubmit: () => Promise<void>
 }

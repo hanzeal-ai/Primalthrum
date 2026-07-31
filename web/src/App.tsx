@@ -3,6 +3,7 @@ import { Loader2 } from 'lucide-react'
 import { AuthScreen } from './features/auth/AuthScreen'
 import { EmailVerificationPage } from './features/auth/EmailVerificationPage'
 import { ForgotPasswordPage } from './features/auth/ForgotPasswordPage'
+import { MfaChallengeScreen } from './features/auth/MfaChallengeScreen'
 import { ResetPasswordPage } from './features/auth/ResetPasswordPage'
 import { useAuthSession } from './features/auth/useAuthSession'
 import { WorkspaceAccessDeniedPage } from './features/app-shell/WorkspaceAccessDeniedPage'
@@ -47,6 +48,8 @@ export default function App() {
         onSubmit={auth.authenticate}
       />
     )
+    : auth.mode === 'mfa' && auth.mfaChallenge
+      ? <MfaChallengeScreen busy={auth.message.includes('正在')} error={auth.mfaError} onBack={auth.cancelMfa} onSubmit={auth.verifyMfa} />
     : null
 
   if (preview && auth.user) {

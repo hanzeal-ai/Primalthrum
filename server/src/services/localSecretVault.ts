@@ -48,6 +48,17 @@ export class LocalSecretVault {
     return decryptSecret(rows[0]);
   }
 
+  delete(secretRef: string, workspaceId: number): void {
+    if (!secretRef.startsWith(SECRET_REF_PREFIX)) {
+      throw new Error('only local secret refs can be deleted');
+    }
+    this.db.run(`
+      DELETE FROM secrets
+      WHERE secret_ref = ${sqlValue(secretRef)}
+        AND workspace_id = ${sqlValue(workspaceId)};
+    `);
+  }
+
   private store(secretRef: string, plaintext: string, workspaceId: number): void {
     const encrypted = encryptSecret(normalizeSecret(plaintext));
 

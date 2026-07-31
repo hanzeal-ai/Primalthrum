@@ -7,6 +7,11 @@ import type {
   AgentVersionRecord,
   AuthCredentials,
   AuthResponse,
+  MfaChallengeResponse,
+  MfaConfirmResponse,
+  MfaRecoveryCodesResponse,
+  MfaSetupResponse,
+  MfaStatus,
   BillingCheckoutRecord,
   BillingCostAlert,
   BillingCostControlInput,
@@ -115,8 +120,21 @@ export async function setupAdmin(input: AuthCredentials): Promise<AuthResponse> 
   return response
 }
 
-export async function loginAdmin(input: AuthCredentials): Promise<AuthResponse> {
-  const response = await apiFetch<AuthResponse>('/api/auth/login', {
+export async function loginAdmin(input: AuthCredentials): Promise<AuthResponse | MfaChallengeResponse> {
+  const response = await apiFetch<AuthResponse | MfaChallengeResponse>('/api/auth/login', {
+    auth: false,
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+  if (!isMfaChallengeResponse(response)) storeSessionToken(response.session.token)
+  return response
+}
+
+export async function verifyMfaChallenge(input: {
+  challengeToken: string
+  code: string
+}): Promise<AuthResponse> {
+  const response = await apiFetch<AuthResponse>('/api/auth/mfa/verify', {
     auth: false,
     method: 'POST',
     body: JSON.stringify(input),
@@ -339,14 +357,57 @@ export async function revokeWorkspaceInvitation(
 export async function acceptWorkspaceInvitation(
   token: string,
   password: string,
-): Promise<AuthResponse> {
-  const response = await apiFetch<AuthResponse>('/api/invitations/accept', {
+): Promise<AuthResponse | MfaChallengeResponse> {
+  const response = await apiFetch<AuthResponse | MfaChallengeResponse>('/api/invitations/accept', {
     auth: false,
     method: 'POST',
     body: JSON.stringify({ token, password }),
   })
-  storeSessionToken(response.session.token)
+  if (!isMfaChallengeResponse(response)) storeSessionToken(response.session.token)
   return response
+}
+
+
+export function getMfaStatus(): Promise<MfaStatus> {
+  return apiFetch<MfaStatus>('/api/settings/mfa')
+}
+
+export function beginMfaSetup(password: string): Promise<MfaSetupResponse> {
+  return apiFetch<MfaSetupResponse>('/api/settings/mfa/setup', {
+    method: 'POST',
+    body: JSON.stringify({ password }),
+  })
+}
+
+export function confirmMfaSetup(code: string): Promise<MfaConfirmResponse> {
+  return apiFetch<MfaConfirmResponse>('/api/settings/mfa/confirm', {
+    method: 'POST',
+    body: JSON.stringify({ code }),
+  })
+}
+
+export function regenerateMfaRecoveryCodes(input: {
+  password: string
+  code: string
+}): Promise<MfaRecoveryCodesResponse> {
+  return apiFetch<MfaRecoveryCodesResponse>('/api/settings/mfa/recovery-codes', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export function disableMfa(input: { password: string; code: string }): Promise<void> {
+  return apiFetch<void>('/api/settings/mfa', {
+    method: 'DELETE',
+    body: JSON.stringify(input),
+    parseJson: false,
+  })
+}
+
+export function isMfaChallengeResponse(
+  response: AuthResponse | MfaChallengeResponse,
+): response is MfaChallengeResponse {
+  return 'mfaRequired' in response && response.mfaRequired === true
 }
 
 export async function listWorkspaceApiKeys(): Promise<WorkspaceApiKeyRecord[]> {

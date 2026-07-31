@@ -36,5 +36,8 @@ Keys, immutable Key-use audit events, and Session last-seen metadata.
 Migration `024_workspace_retention` adds customer-configurable retention policy,
 immutable policy and enforcement evidence, durable file-deletion intent, and a
 preserved tool-audit archive for expired runs.
+Migration `025_account_mfa` adds encrypted account-level TOTP factors, hashed
+single-use recovery codes, expiring and attempt-bounded login or invitation
+challenges, immutable MFA events, and Session authentication assurance metadata.
 
 See [Postgres Persistence Path](POSTGRES_PERSISTENCE.md) before adding migrations that rely on SQLite-only SQL.

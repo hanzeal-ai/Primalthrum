@@ -5,14 +5,16 @@ import {
   getCurrentSession,
   getSetupStatus,
   isUnauthorizedError,
+  isMfaChallengeResponse,
   loginAdmin,
   logoutAdmin,
   registerAccount,
   setupAdmin,
+  verifyMfaChallenge,
 } from '../../api/client'
-import type { AuthCredentials, AuthUser, RegistrationInput } from '../../api/types'
+import type { AuthCredentials, AuthUser, MfaChallengeResponse, RegistrationInput } from '../../api/types'
 
-export type AuthMode = 'checking' | 'setup' | 'login' | 'ready'
+export type AuthMode = 'checking' | 'setup' | 'login' | 'mfa' | 'ready'
 
 const DEFAULT_CREDENTIALS: AuthCredentials = {
   email: 'admin@example.com',
@@ -28,6 +30,8 @@ export function useAuthSession() {
   const [emailPreviewUrl, setEmailPreviewUrl] = useState(() => (
     window.sessionStorage.getItem('primalthrum.email-preview-url') ?? ''
   ))
+  const [mfaChallenge, setMfaChallenge] = useState<MfaChallengeResponse | null>(null)
+  const [mfaError, setMfaError] = useState('')
 
   async function initialize() {
     setMode('checking')
@@ -76,12 +80,47 @@ export function useAuthSession() {
       const response = mode === 'setup'
         ? await setupAdmin({ email, password: credentials.password })
         : await loginAdmin({ email, password: credentials.password })
+      if (isMfaChallengeResponse(response)) {
+        setMfaChallenge(response)
+        setMfaError('')
+        setMode('mfa')
+        setMessage('请输入身份验证器验证码或恢复码。')
+        return
+      }
       setUser(response.user)
       setEmailVerified(response.emailVerified)
       setMode('ready')
     } catch (error) {
       setMessage(errorMessage(error))
     }
+  }
+
+  async function verifyMfa(code: string) {
+    if (!mfaChallenge) return
+    setMessage('正在验证...')
+    setMfaError('')
+    try {
+      const response = await verifyMfaChallenge({
+        challengeToken: mfaChallenge.challengeToken,
+        code,
+      })
+      setUser(response.user)
+      setEmailVerified(response.emailVerified)
+      setMfaChallenge(null)
+      setMode('ready')
+    } catch (error) {
+      setMessage(errorMessage(error))
+      setMfaError(errorMessage(error))
+      throw error
+    }
+  }
+
+  function cancelMfa() {
+    setMfaChallenge(null)
+    setMfaError('')
+    setCredentials((current) => ({ ...current, password: '' }))
+    setMode('login')
+    setMessage('请重新登录。')
   }
 
   async function logout() {
@@ -131,8 +170,12 @@ export function useAuthSession() {
     user,
     emailVerified,
     emailPreviewUrl,
+    mfaChallenge,
+    mfaError,
     setCredentials,
     authenticate,
+    verifyMfa,
+    cancelMfa,
     register,
     refreshSession,
     updateEmailPreview,

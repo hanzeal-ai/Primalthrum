@@ -1990,8 +1990,21 @@ complete. Follow the same dependency and verification protocol used above.
   plan and role gates, and immutable evidence. Desktop browser acceptance covers
   the plan gate, policy save, background execution, second confirmation, immediate
   cleanup, and execution history. The 390x844 acceptance has no horizontal
-  overflow or console warnings. MFA, complete role-matrix browser E2E, live Stripe
-  lifecycle evidence, and transactional invitation email remain open.
+  overflow or console warnings. The fifth slice adds account-level TOTP MFA for
+  every Workspace role through migration 025. RFC 6238 vectors, a 30-second
+  one-step verification window, atomic TOTP replay prevention, encrypted 160-bit
+  secrets, ten hashed single-use 120-bit recovery codes, five-minute one-use
+  challenges, five-attempt lockout, immutable minimized events, and Session
+  assurance metadata are enforced server-side. Password login and existing-user
+  invitation acceptance return 202 without issuing a Session or consuming the
+  invitation until MFA succeeds. Enrollment and disablement revoke other Sessions.
+  Server tests cover all six roles, encrypted storage, challenge and credential
+  replay, Session upgrade, recovery, disablement, and invitation non-bypass; Web
+  client and component tests cover challenge token handling, invitation verification,
+  enrollment, one-time recovery-code display, and disablement. The security and
+  user workflow contracts are documented in `docs/MFA_SECURITY.md`. Complete
+  role-matrix browser E2E, live Stripe lifecycle evidence, and transactional
+  invitation email remain open.
 
 ### P20-01 Operator Administration And Support
 

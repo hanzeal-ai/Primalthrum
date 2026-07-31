@@ -270,6 +270,26 @@ export class WorkspaceRepository {
 
   acceptInvitation(token: string, userId: number, userEmail: string): WorkspaceMembershipRecord {
     const invitation = this.findInvitationByToken(token);
+    if (!invitation) throw new Error('invitation is invalid or no longer active');
+    return this.acceptInvitationRecord(invitation, userId, userEmail);
+  }
+
+  acceptInvitationById(
+    workspaceId: number,
+    invitationId: number,
+    userId: number,
+    userEmail: string,
+  ): WorkspaceMembershipRecord {
+    const invitation = this.findInvitation(workspaceId, invitationId);
+    if (!invitation) throw new Error('invitation is invalid or no longer active');
+    return this.acceptInvitationRecord(invitation, userId, userEmail);
+  }
+
+  private acceptInvitationRecord(
+    invitation: WorkspaceInvitationRecord,
+    userId: number,
+    userEmail: string,
+  ): WorkspaceMembershipRecord {
     if (!invitation || invitation.revokedAt || invitation.acceptedAt) {
       throw new Error('invitation is invalid or no longer active');
     }

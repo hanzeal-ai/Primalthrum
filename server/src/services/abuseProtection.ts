@@ -30,6 +30,7 @@ const DAY = 24 * HOUR;
 export const DEFAULT_ABUSE_POLICIES: readonly AbusePolicy[] = [
   policy('setup_admin', 'setup_admin', 'POST', /^\/api\/setup\/admin$/, [ip(3, HOUR)]),
   policy('auth_login', 'auth_login', 'POST', /^\/api\/auth\/login$/, [ip(30, 10 * MINUTE), identity(10, 10 * MINUTE)]),
+  policy('auth_mfa_verify', 'auth_mfa_verify', 'POST', /^\/api\/auth\/mfa\/verify$/, [ip(30, 10 * MINUTE), token(5, 10 * MINUTE)]),
   policy('auth_register', 'auth_register', 'POST', /^\/api\/auth\/register$/, [ip(5, HOUR), identity(3, DAY)], true),
   policy('verify_email', 'verify_email', 'POST', /^\/api\/auth\/verify-email$/, [ip(20, 15 * MINUTE)]),
   policy('verification_resend', 'verification_resend', 'POST', /^\/api\/auth\/verification\/resend$/, [ip(10, HOUR), user(5, HOUR)]),
@@ -37,6 +38,10 @@ export const DEFAULT_ABUSE_POLICIES: readonly AbusePolicy[] = [
   policy('password_reset', 'password_reset', 'POST', /^\/api\/auth\/password\/reset$/, [ip(10, HOUR)]),
   policy('invitation_accept', 'invitation_accept', 'POST', /^\/api\/invitations\/accept$/, [ip(20, 15 * MINUTE), token(10, 15 * MINUTE)]),
   policy('api_key_create', 'api_key_create', 'POST', /^\/api\/settings\/api-keys$/, [user(10, HOUR)]),
+  policy('mfa_setup', 'mfa_setup', 'POST', /^\/api\/settings\/mfa\/setup$/, [user(5, HOUR)]),
+  policy('mfa_confirm', 'mfa_confirm', 'POST', /^\/api\/settings\/mfa\/confirm$/, [user(10, HOUR)]),
+  policy('mfa_recovery_codes', 'mfa_recovery_codes', 'POST', /^\/api\/settings\/mfa\/recovery-codes$/, [user(5, HOUR)]),
+  policy('mfa_disable', 'mfa_disable', 'DELETE', /^\/api\/settings\/mfa$/, [user(5, HOUR)]),
   policy('privacy_consent', 'privacy_consent', 'POST', /^\/api\/public\/privacy\/consents$/, [ip(30, MINUTE)]),
   policy('analytics_event', 'analytics_event', 'POST', /^\/api\/public\/analytics\/events$/, [ip(120, MINUTE)]),
   policy('public_agent_read', 'public_agent_read', 'GET', /^\/api\/public\/agents\/[^/]+$/, [ip(120, MINUTE)]),
@@ -155,7 +160,8 @@ function subjectFor(ctx: Koa.Context, clientIp: string, scope: SubjectScope): st
   if (scope === 'resource') return `resource:${clientIp}:${ctx.path.toLowerCase()}`;
   if (scope === 'token') {
     const body = ctx.request.body as Record<string, unknown> | undefined;
-    const value = typeof body?.token === 'string' ? body.token.slice(0, 512) : 'missing';
+    const candidate = typeof body?.token === 'string' ? body.token : body?.challengeToken;
+    const value = typeof candidate === 'string' ? candidate.slice(0, 512) : 'missing';
     return `token:${createHash('sha256').update(value || 'missing').digest('hex')}`;
   }
   const apiKeyId = Number(ctx.state.apiKey?.id);

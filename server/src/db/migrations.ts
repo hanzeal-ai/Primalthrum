@@ -108,6 +108,10 @@ export const MIGRATIONS: Migration[] = [
     id: '024_workspace_retention',
     up: applyWorkspaceRetention,
   },
+  {
+    id: '025_account_mfa',
+    up: applyAccountMfa,
+  },
 ];
 
 export function runMigrations(db: DatabaseAdapter): void {
@@ -1499,6 +1503,83 @@ function applyWorkspaceRetention(db: DatabaseAdapter): void {
     BEFORE DELETE ON retained_tool_audit_logs
     BEGIN
       SELECT RAISE(ABORT, 'retained tool audit logs are immutable');
+    END;
+  `);
+}
+
+function applyAccountMfa(db: DatabaseAdapter): void {
+  ensureColumn(db, 'sessions', 'authentication_method', "TEXT NOT NULL DEFAULT 'password'");
+  ensureColumn(db, 'sessions', 'mfa_authenticated_at', 'TEXT');
+  db.run(`
+    CREATE TABLE IF NOT EXISTS user_mfa_factors (
+      user_id INTEGER PRIMARY KEY,
+      secret_workspace_id INTEGER NOT NULL,
+      secret_ref TEXT NOT NULL UNIQUE,
+      state TEXT NOT NULL CHECK(state IN ('pending', 'enabled')),
+      last_used_step INTEGER NOT NULL DEFAULT -1,
+      enabled_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE,
+      FOREIGN KEY(secret_workspace_id) REFERENCES workspaces(id) ON DELETE RESTRICT
+    );
+
+    CREATE TABLE IF NOT EXISTS user_mfa_recovery_codes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      code_hash TEXT NOT NULL UNIQUE,
+      used_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS user_mfa_challenges (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      purpose TEXT NOT NULL CHECK(purpose IN ('login', 'invitation')),
+      context_json TEXT NOT NULL DEFAULT '{}',
+      expires_at TEXT NOT NULL,
+      attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts >= 0),
+      consumed_at TEXT,
+      revoked_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS user_mfa_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      event_type TEXT NOT NULL CHECK(event_type IN (
+        'setup_started',
+        'enabled',
+        'disabled',
+        'recovery_codes_regenerated',
+        'recovery_code_used',
+        'challenge_failed'
+      )),
+      metadata_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS user_mfa_challenges_active_idx
+      ON user_mfa_challenges(token_hash, expires_at, consumed_at, revoked_at);
+    CREATE INDEX IF NOT EXISTS user_mfa_recovery_codes_active_idx
+      ON user_mfa_recovery_codes(user_id, used_at);
+    CREATE INDEX IF NOT EXISTS user_mfa_events_user_time_idx
+      ON user_mfa_events(user_id, created_at DESC);
+
+    CREATE TRIGGER IF NOT EXISTS user_mfa_events_no_update
+    BEFORE UPDATE ON user_mfa_events
+    BEGIN
+      SELECT RAISE(ABORT, 'MFA events are immutable');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS user_mfa_events_no_delete
+    BEFORE DELETE ON user_mfa_events
+    BEGIN
+      SELECT RAISE(ABORT, 'MFA events are immutable');
     END;
   `);
 }

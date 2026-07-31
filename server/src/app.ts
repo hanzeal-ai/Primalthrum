@@ -109,7 +109,10 @@ import { type BotChallengeVerifier } from './services/botChallengeVerifier';
 import { registerAbuseRoutes } from './routes/abuseRoutes';
 import { registerSecuritySettingsRoutes } from './routes/securitySettingsRoutes';
 import { registerRetentionSettingsRoutes } from './routes/retentionSettingsRoutes';
+import { registerMfaRoutes } from './routes/mfaRoutes';
 import { ApiKeyRepository } from './services/apiKeyRepository';
+import { MfaRepository } from './services/mfaRepository';
+import { MfaService } from './services/mfaService';
 import { RetentionPolicyRepository } from './services/retentionPolicyRepository';
 import { RetentionScheduler } from './services/retentionScheduler';
 import { RetentionService } from './services/retentionService';
@@ -244,6 +247,8 @@ export function createApp(options: AppOptions = {}): Koa {
   const userRepository = new UserRepository(db);
   const workspaceRepository = new WorkspaceRepository(db);
   const sessionRepository = new SessionRepository(db);
+  const localSecretVault = new LocalSecretVault(db);
+  const mfaService = new MfaService(new MfaRepository(db, localSecretVault));
   const apiKeyRepository = new ApiKeyRepository(db);
   const providerConfigRepository = new ProviderConfigRepository(db);
   const runtimeProviderResolver = new RuntimeProviderResolver(
@@ -590,6 +595,46 @@ export function createApp(options: AppOptions = {}): Koa {
     schedule: (workspaceId) => retentionScheduler.trigger(workspaceId),
     users: userRepository,
   });
+  registerMfaRoutes(router, {
+    currentUserId,
+    logger,
+    mfa: mfaService,
+    sessions: sessionRepository,
+    users: userRepository,
+    completeChallenge: (verified) => {
+      const user = userRepository.findById(verified.userId);
+      if (!user) throw new Error('MFA user could not be loaded');
+      if (verified.purpose === 'invitation') {
+        const workspaceId = Number(verified.context.workspaceId);
+        const invitationId = Number(verified.context.invitationId);
+        if (!Number.isSafeInteger(workspaceId) || !Number.isSafeInteger(invitationId)) {
+          throw new Error('invitation challenge context is invalid');
+        }
+        billingRepository.assertEntitled(
+          workspaceId,
+          'seats',
+          workspaceRepository.listMembers(workspaceId).length,
+          1,
+        );
+        workspaceRepository.acceptInvitationById(
+          workspaceId,
+          invitationId,
+          user.id,
+          user.email,
+        );
+        const invitedPrincipal = workspaceRepository.principalForUser(user.id, workspaceId);
+        if (!invitedPrincipal) throw new Error('workspace membership could not be loaded');
+        return {
+          user: invitedPrincipal,
+          emailVerified: Boolean(user.emailVerifiedAt),
+          status: 201,
+        };
+      }
+      const principal = workspaceRepository.principalForUser(user.id);
+      if (!principal) throw new Error('workspace membership is required');
+      return { user: principal, emailVerified: Boolean(user.emailVerifiedAt) };
+    },
+  });
 
   app.use(async (ctx, next) => {
     const origin = ctx.get('origin');
@@ -702,6 +747,11 @@ export function createApp(options: AppOptions = {}): Koa {
       if (!publicUser) {
         ctx.status = 403;
         ctx.body = { error: 'workspace membership is required' };
+        return;
+      }
+      if (mfaService.isEnabled(user.id)) {
+        ctx.status = 202;
+        ctx.body = mfaService.createChallenge(user.id, 'login');
         return;
       }
       const session = sessionRepository.create(publicUser);
@@ -1038,6 +1088,14 @@ export function createApp(options: AppOptions = {}): Koa {
         workspaceRepository.listMembers(invitation.workspaceId).length,
         1,
       );
+      if (user && mfaService.isEnabled(user.id)) {
+        ctx.status = 202;
+        ctx.body = mfaService.createChallenge(user.id, 'invitation', {
+          invitationId: invitation.id,
+          workspaceId: invitation.workspaceId,
+        });
+        return;
+      }
       user ??= userRepository.createUser(invitation.email, hashPassword(password), true);
       workspaceRepository.acceptInvitation(token, user.id, user.email);
       const principal = workspaceRepository.principalForUser(user.id, invitation.workspaceId);

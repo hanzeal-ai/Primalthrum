@@ -6,6 +6,10 @@ Use this checklist before tagging or deploying a commercial Primalthrum build.
 
 - Admin setup is complete and no default password is used.
 - Browser sessions are protected by `HttpOnly` cookies or bearer tokens.
+- Every Workspace role can enroll account-level MFA; login and invitation paths
+  issue no Session before the bounded second-factor challenge succeeds.
+- TOTP replay, recovery-code replay, challenge expiry, five-attempt lockout, and
+  other-Session revocation have passing automated evidence.
 - Provider secrets are stored only as server-side secret references.
 - Workspace API Keys are scoped, expiring, hashed at rest, and returned in
   plaintext only once after password reauthentication.
@@ -25,6 +29,8 @@ Use this checklist before tagging or deploying a commercial Primalthrum build.
 - Provider config API responses redact `secretRef` and never return secret values.
 - Transactional email credentials and Webhook secrets are server-only and rotated
   after any suspected exposure.
+- `PRIMALTHRUM_SECRET_KEY` is supplied by the production secret manager, backed
+  up under dual control, and differs from the development fallback.
 - Backup archives are stored in an operator-controlled location.
 - Restore access is limited to trusted operators.
 
@@ -51,6 +57,7 @@ Use this checklist before tagging or deploying a commercial Primalthrum build.
 - `docs/TROUBLESHOOTING.md` exists.
 - `docs/API_KEYS_AND_SESSIONS.md` exists.
 - `docs/DATA_RETENTION.md` exists.
+- `docs/MFA_SECURITY.md` exists.
 - `docs/DEMO_RESEARCH_AGENT.md` exists.
 
 ## Operator Preflight
@@ -85,6 +92,8 @@ Confirm:
 - Rate-limit and challenge-outage alerts are active with no raw identity labels.
 - A least-privilege API Key passes its allowed Agent call, fails a missing-scope
   call, cannot access settings, and fails every call after revocation.
+- An MFA test identity completes authenticator login and one recovery-code login;
+  reused values fail, and an invitation remains pending until MFA succeeds.
 - A Business or Enterprise test Workspace saves and enforces a finite retention
   policy while a second Workspace and active runs remain unchanged.
 

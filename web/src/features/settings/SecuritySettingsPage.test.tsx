@@ -4,15 +4,20 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { SecuritySettingsPage } from './SecuritySettingsPage'
 
 const api = vi.hoisted(() => ({
+  beginMfaSetup: vi.fn(),
+  confirmMfaSetup: vi.fn(),
   createWorkspaceApiKey: vi.fn(),
+  disableMfa: vi.fn(),
   enforceRetentionSettings: vi.fn(),
   getRetentionSettings: vi.fn(),
+  getMfaStatus: vi.fn(),
   listSecuritySessions: vi.fn(),
   listWorkspaceApiKeys: vi.fn(),
   listWorkspaces: vi.fn(),
   revokeOtherSecuritySessions: vi.fn(),
   revokeSecuritySession: vi.fn(),
   revokeWorkspaceApiKey: vi.fn(),
+  regenerateMfaRecoveryCodes: vi.fn(),
   updateRetentionSettings: vi.fn(),
 }))
 
@@ -28,6 +33,7 @@ describe('SecuritySettingsPage', () => {
     api.listWorkspaces.mockResolvedValue([{ id: 1, name: 'Acme', slug: 'acme', role: 'owner' }])
     api.listSecuritySessions.mockResolvedValue(sessions)
     api.listWorkspaceApiKeys.mockResolvedValue([])
+    api.getMfaStatus.mockResolvedValue({ enabled: false, recoveryCodesRemaining: 0, enabledAt: null })
     api.getRetentionSettings.mockResolvedValue({
       policy: {
         workspaceId: 1, conversationDays: null, runDays: null, documentDays: null,

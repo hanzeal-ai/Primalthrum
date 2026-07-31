@@ -20,6 +20,8 @@ export interface AuthenticatedSession {
 export interface SessionSecurityRecord {
   id: number;
   current: boolean;
+  authenticationMethod: string;
+  mfaAuthenticatedAt: string | null;
   expiresAt: string;
   lastSeenAt: string;
   createdAt: string;
@@ -37,6 +39,8 @@ interface SessionUserRow {
 interface SessionSecurityRow {
   id: number;
   current: number;
+  authentication_method: string;
+  mfa_authenticated_at: string | null;
   expires_at: string;
   last_seen_at: string | null;
   created_at: string;
@@ -47,7 +51,7 @@ export class SessionRepository {
     initializeSchema(db);
   }
 
-  create(user: PublicUserRecord): CreatedSession {
+  create(user: PublicUserRecord, authenticationMethod = 'password'): CreatedSession {
     const token = randomBytes(32).toString('base64url');
     const expiresAt = new Date(Date.now() + SESSION_TTL_MS).toISOString();
 
@@ -57,14 +61,18 @@ export class SessionRepository {
         workspace_id,
         active_workspace_id,
         token_hash,
-        expires_at
+        expires_at,
+        authentication_method,
+        mfa_authenticated_at
       )
       VALUES (
         ${sqlValue(user.id)},
         ${sqlValue(user.workspaceId)},
         ${sqlValue(user.workspaceId)},
         ${sqlValue(hashToken(token))},
-        ${sqlValue(expiresAt)}
+        ${sqlValue(expiresAt)},
+        ${sqlValue(authenticationMethod)},
+        ${authenticationMethod === 'password' ? 'NULL' : 'CURRENT_TIMESTAMP'}
       );
     `);
 
@@ -128,6 +136,7 @@ export class SessionRepository {
     return this.db.query<SessionSecurityRow>(`
       SELECT id,
         CASE WHEN token_hash = ${sqlValue(currentHash)} THEN 1 ELSE 0 END AS current,
+        authentication_method, mfa_authenticated_at,
         expires_at, last_seen_at, created_at
       FROM sessions
       WHERE user_id = ${sqlValue(userId)}
@@ -137,6 +146,8 @@ export class SessionRepository {
     `).map((row) => ({
       id: Number(row.id),
       current: Boolean(row.current),
+      authenticationMethod: row.authentication_method,
+      mfaAuthenticatedAt: row.mfa_authenticated_at,
       expiresAt: row.expires_at,
       lastSeenAt: row.last_seen_at ?? row.created_at,
       createdAt: row.created_at,
@@ -177,6 +188,30 @@ export class SessionRepository {
         AND revoked_at IS NULL;
     `);
     return count;
+  }
+
+  markMfaAuthenticated(token: string, userId: number, authenticationMethod = 'totp'): void {
+    this.db.run(`
+      UPDATE sessions SET
+        authentication_method = ${sqlValue(authenticationMethod)},
+        mfa_authenticated_at = CURRENT_TIMESTAMP,
+        last_seen_at = CURRENT_TIMESTAMP
+      WHERE token_hash = ${sqlValue(hashToken(token))}
+        AND user_id = ${sqlValue(userId)}
+        AND revoked_at IS NULL;
+    `);
+  }
+
+  markPasswordAuthenticated(token: string, userId: number): void {
+    this.db.run(`
+      UPDATE sessions SET
+        authentication_method = 'password',
+        mfa_authenticated_at = NULL,
+        last_seen_at = CURRENT_TIMESTAMP
+      WHERE token_hash = ${sqlValue(hashToken(token))}
+        AND user_id = ${sqlValue(userId)}
+        AND revoked_at IS NULL;
+    `);
   }
 
   switchWorkspace(token: string, userId: number, workspaceId: number): void {

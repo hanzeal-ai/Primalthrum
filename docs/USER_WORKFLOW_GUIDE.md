@@ -88,6 +88,19 @@ API Keys are for server integrations and can authenticate only Agent, run,
 conversation, job, and stream routes. They cannot access billing, members,
 Providers, account, Workspace, or settings APIs.
 
+## Multi-Factor Authentication
+
+Every Workspace role can protect its own account from `/app/settings`. Enter the
+current password, open the authenticator link or enter the manual key, and confirm
+the six-digit code. Save the ten recovery codes immediately; they are displayed
+only once and each can complete one login.
+
+After enrollment, password login and invitation acceptance pause at a second
+verification screen. Enter the current authenticator code or one unused recovery
+code. The platform does not create a Session or consume an invitation before this
+step succeeds. The settings page also shows how many recovery codes remain and
+can replace the set or disable MFA after reauthentication.
+
 ## Data Retention
 
 Open `/app/settings` to inspect the Workspace retention policy and the number of

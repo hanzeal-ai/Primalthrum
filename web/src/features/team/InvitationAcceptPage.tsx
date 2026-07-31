@@ -1,10 +1,16 @@
 import { ArrowLeft, Loader2, Users } from 'lucide-react'
 import { useState, type FormEvent } from 'react'
 
-import { acceptWorkspaceInvitation } from '../../api/client'
+import {
+  acceptWorkspaceInvitation,
+  isMfaChallengeResponse,
+  verifyMfaChallenge,
+} from '../../api/client'
+import type { MfaChallengeResponse } from '../../api/types'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
+import { MfaChallengeForm } from '../auth/MfaChallengeForm'
 
 interface InvitationAcceptPageProps {
   navigate?: (url: string) => void
@@ -18,6 +24,7 @@ export function InvitationAcceptPage({
   const [password, setPassword] = useState('')
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState(token ? '' : '邀请链接缺少令牌。')
+  const [mfaChallenge, setMfaChallenge] = useState<MfaChallengeResponse | null>(null)
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -28,10 +35,28 @@ export function InvitationAcceptPage({
     setSubmitting(true)
     setError('')
     try {
-      await acceptWorkspaceInvitation(token, password)
+      const response = await acceptWorkspaceInvitation(token, password)
+      if (isMfaChallengeResponse(response)) {
+        setMfaChallenge(response)
+        setSubmitting(false)
+        return
+      }
       navigate('/app')
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '无法接受邀请。')
+      setSubmitting(false)
+    }
+  }
+
+  async function verifyMfa(code: string) {
+    if (!mfaChallenge) return
+    setSubmitting(true)
+    setError('')
+    try {
+      await verifyMfaChallenge({ challengeToken: mfaChallenge.challengeToken, code })
+      navigate('/app')
+    } catch (reason) {
+      setError(reason instanceof Error ? reason.message : '无法验证身份。')
       setSubmitting(false)
     }
   }
@@ -46,9 +71,9 @@ export function InvitationAcceptPage({
         <div className="w-full max-w-sm">
           <a className="mb-10 inline-flex items-center gap-2 text-sm font-medium sm:hidden" href="/"><ArrowLeft className="size-4" />Primalthrum</a>
           <p className="text-sm font-medium text-blue-700">Workspace 邀请</p>
-          <h2 className="mt-3 text-3xl font-semibold">加入 Workspace</h2>
-          <p className="mt-3 text-sm leading-6 text-zinc-600">新用户请设置密码；已有账号请输入现有密码确认身份。</p>
-          <form className="mt-8 grid gap-5" onSubmit={submit}>
+          <h2 className="mt-3 text-3xl font-semibold">{mfaChallenge ? '完成安全验证' : '加入 Workspace'}</h2>
+          <p className="mt-3 text-sm leading-6 text-zinc-600">{mfaChallenge ? '密码已验证，请完成账号的第二重验证。' : '新用户请设置密码；已有账号请输入现有密码确认身份。'}</p>
+          {mfaChallenge ? <div className="mt-8"><MfaChallengeForm busy={submitting} error={error} onSubmit={verifyMfa} submitLabel="验证并加入" /></div> : <form className="mt-8 grid gap-5" onSubmit={submit}>
             <Label className="grid gap-2">账户密码
               <Input autoComplete="current-password" minLength={12} onChange={(event) => setPassword(event.target.value)} placeholder="至少 12 位" type="password" value={password} />
             </Label>
@@ -56,7 +81,7 @@ export function InvitationAcceptPage({
             <Button className="h-11" disabled={submitting || !token} type="submit">
               {submitting ? <Loader2 className="animate-spin" /> : null}{submitting ? '正在加入...' : '接受邀请'}
             </Button>
-          </form>
+          </form>}
           <p className="mt-6 text-xs leading-5 text-zinc-500">邀请链接只能使用一次，并在创建 7 天后失效。</p>
         </div>
       </section>

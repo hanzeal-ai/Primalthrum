@@ -160,6 +160,7 @@ function isPublicRequest(ctx: Koa.Context): boolean {
     '/api/setup/status',
     '/api/setup/admin',
     '/api/auth/login',
+    '/api/auth/mfa/verify',
     '/api/auth/register',
     '/api/auth/verify-email',
     '/api/auth/password/forgot',

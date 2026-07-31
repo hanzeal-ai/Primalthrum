@@ -290,6 +290,32 @@ export interface AuthResponse {
   emailVerified: boolean
 }
 
+export type MfaAuthenticationMethod = 'totp' | 'recovery_code'
+
+export interface MfaChallengeResponse {
+  mfaRequired: true
+  challengeToken: string
+  expiresAt: string
+  methods: MfaAuthenticationMethod[]
+}
+
+export interface MfaStatus {
+  enabled: boolean
+  recoveryCodesRemaining: number
+  enabledAt: string | null
+}
+
+export interface MfaSetupResponse {
+  secret: string
+  otpauthUri: string
+}
+
+export interface MfaRecoveryCodesResponse {
+  recoveryCodes: string[]
+}
+
+export interface MfaConfirmResponse extends MfaStatus, MfaRecoveryCodesResponse {}
+
 export type ApiKeyScope = 'agents:read' | 'agents:write' | 'agents:run' | 'agents:publish'
 
 export interface WorkspaceApiKeyRecord {
@@ -314,6 +340,8 @@ export interface CreatedWorkspaceApiKey extends WorkspaceApiKeyRecord {
 export interface SessionSecurityRecord {
   id: number
   current: boolean
+  authenticationMethod: string
+  mfaAuthenticatedAt: string | null
   expiresAt: string
   lastSeenAt: string
   createdAt: string

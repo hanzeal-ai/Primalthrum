@@ -33,6 +33,7 @@ import { Label } from '../../components/ui/label'
 import { canManageApiKeys } from '../../lib/workspacePermissions'
 import { WorkspaceAppShell } from '../app-shell/WorkspaceAppShell'
 import { RetentionSettingsSection } from './RetentionSettingsSection'
+import { MfaSettingsSection } from './MfaSettingsSection'
 
 const API_KEY_SCOPE_OPTIONS: Array<{ scope: ApiKeyScope; label: string; description: string }> = [
   { scope: 'agents:read', label: '读取', description: '读取 Agent、版本、对话和运行记录' },
@@ -162,11 +163,18 @@ export function SecuritySettingsPage({ onLogout, user }: SecuritySettingsPagePro
     }
   }
 
+  function refreshSessions() {
+    void listSecuritySessions().then(setSessions).catch((reason: unknown) => {
+      setError(errorMessage(reason, '无法刷新登录会话。'))
+    })
+  }
+
   return (
-    <WorkspaceAppShell active="settings" description="API Key、数据留存与登录会话" onLogout={onLogout} title="设置与安全" user={user}>
+    <WorkspaceAppShell active="settings" description="多因素认证、API Key、数据留存与登录会话" onLogout={onLogout} title="设置与安全" user={user}>
       {error ? <div className="mb-5 border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">{error}</div> : null}
       {notice ? <div className="mb-5 border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800" role="status">{notice}</div> : null}
       {loading ? <LoadingState /> : <div className="grid min-w-0 gap-10">
+        <MfaSettingsSection onSessionAssuranceChange={refreshSessions} />
         {canManageKeys ? <section className="min-w-0" aria-labelledby="api-keys-title">
           <div className="flex items-center gap-3"><span className="grid size-9 place-items-center rounded-md bg-blue-50 text-blue-700"><KeyRound className="size-4" /></span><div><h2 className="text-xl font-semibold" id="api-keys-title">API Keys</h2><p className="mt-1 text-sm text-zinc-500">用于服务端集成，只授予必要作用域。</p></div></div>
           <div className="mt-5 grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
@@ -190,7 +198,7 @@ export function SecuritySettingsPage({ onLogout, user }: SecuritySettingsPagePro
 
         <section className="min-w-0" aria-labelledby="sessions-title">
           <div className="flex flex-wrap items-end justify-between gap-4"><div className="flex items-center gap-3"><span className="grid size-9 place-items-center rounded-md bg-emerald-50 text-emerald-700"><ShieldCheck className="size-4" /></span><div><h2 className="text-xl font-semibold" id="sessions-title">登录会话</h2><p className="mt-1 text-sm text-zinc-500">检查当前账号仍处于登录状态的会话。</p></div></div><Button disabled={Boolean(busy) || sessions.every((session) => session.current)} onClick={() => void revokeOtherSessions()} variant="outline">{busy === 'sessions' ? <Loader2 className="animate-spin" /> : <LogOut />}退出其他会话</Button></div>
-          <div className="mt-5 overflow-hidden rounded-lg border bg-white">{sessions.map((session) => <div className="grid min-w-0 gap-3 border-b p-4 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center" key={session.id}><div className="flex min-w-0 items-start gap-3"><Monitor className="mt-1 size-4 shrink-0 text-zinc-500" /><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="text-sm font-medium">{session.current ? '当前会话' : '其他会话'}</p>{session.current ? <Badge variant="success">正在使用</Badge> : null}</div><p className="mt-1 text-xs text-zinc-500">最近活动 {formatDateTime(session.lastSeenAt)} · 到期 {formatDateTime(session.expiresAt)}</p></div></div>{session.current ? <span /> : <Button aria-label={`退出会话 ${session.id}`} disabled={Boolean(busy)} onClick={() => void revokeSession(session.id)} size="sm" variant="ghost"><LogOut />退出</Button>}</div>)}</div>
+          <div className="mt-5 overflow-hidden rounded-lg border bg-white">{sessions.map((session) => <div className="grid min-w-0 gap-3 border-b p-4 last:border-b-0 sm:grid-cols-[minmax(0,1fr)_auto] sm:items-center" key={session.id}><div className="flex min-w-0 items-start gap-3"><Monitor className="mt-1 size-4 shrink-0 text-zinc-500" /><div className="min-w-0"><div className="flex flex-wrap items-center gap-2"><p className="text-sm font-medium">{session.current ? '当前会话' : '其他会话'}</p>{session.current ? <Badge variant="success">正在使用</Badge> : null}</div><p className="mt-1 text-xs text-zinc-500">{authenticationLabel(session.authenticationMethod)} · 最近活动 {formatDateTime(session.lastSeenAt)} · 到期 {formatDateTime(session.expiresAt)}</p></div></div>{session.current ? <span /> : <Button aria-label={`退出会话 ${session.id}`} disabled={Boolean(busy)} onClick={() => void revokeSession(session.id)} size="sm" variant="ghost"><LogOut />退出</Button>}</div>)}</div>
         </section>
       </div>}
     </WorkspaceAppShell>
@@ -224,6 +232,12 @@ function scopeLabel(scope: ApiKeyScope): string {
 
 function formatDateTime(value: string): string {
   return new Intl.DateTimeFormat('zh-CN', { dateStyle: 'medium', timeStyle: 'short' }).format(new Date(value))
+}
+
+function authenticationLabel(method: string): string {
+  if (method === 'totp') return '身份验证器验证'
+  if (method === 'recovery_code') return '恢复码验证'
+  return '密码登录'
 }
 
 function errorMessage(error: unknown, fallback: string): string {

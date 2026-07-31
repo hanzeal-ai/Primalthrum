@@ -6,6 +6,7 @@ import {
   createWorkspaceApiKey,
   createWorkspaceInvitation,
   enforceRetentionSettings,
+  loginAdmin,
   indexDocument,
   replayAgentRun,
   registerAccount,
@@ -17,6 +18,7 @@ import {
   uploadDocument,
   updateRetentionSettings,
   updateBillingCostControls,
+  verifyMfaChallenge,
 } from './client'
 
 function streamResponse(body: string, headers: Record<string, string>): Response {
@@ -266,6 +268,31 @@ describe('stream client', () => {
       email: 'member@example.com', role: 'member',
     })
     expect(window.localStorage.getItem('primalthrum.sessionToken')).toBe('invited-session')
+  })
+
+  it('stores no session until the MFA login challenge succeeds', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        mfaRequired: true,
+        challengeToken: 'mfa-challenge',
+        expiresAt: '2026-08-01T10:05:00.000Z',
+        methods: ['totp', 'recovery_code'],
+      }), { status: 202, headers: { 'content-type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        user: { id: 1, workspaceId: 1, email: 'owner@example.com', role: 'owner' },
+        session: { token: 'mfa-session', expiresAt: '2026-08-08T00:00:00.000Z' },
+        emailVerified: true,
+      }), { status: 200, headers: { 'content-type': 'application/json' } }))
+
+    const challenge = await loginAdmin({
+      email: 'owner@example.com', password: 'correct horse battery staple',
+    })
+    expect(challenge).toMatchObject({ mfaRequired: true, challengeToken: 'mfa-challenge' })
+    expect(window.localStorage.getItem('primalthrum.sessionToken')).toBeNull()
+
+    await verifyMfaChallenge({ challengeToken: 'mfa-challenge', code: '123456' })
+    expect(window.localStorage.getItem('primalthrum.sessionToken')).toBe('mfa-session')
+    expect(fetchMock.mock.calls[1]?.[0]).toContain('/api/auth/mfa/verify')
   })
 
   it('creates scoped API keys and revokes other sessions through security settings', async () => {
