@@ -18,6 +18,7 @@ import type {
   CreateAgentInput,
   CreateDocumentInput,
   CreateWorkspaceResponse,
+  CreatedWorkspaceInvitation,
   CurrentSession,
   DocumentRecord,
   GeneratedProject,
@@ -44,6 +45,9 @@ import type {
   ToolInfo,
   UploadDocumentInput,
   WorkspaceRecord,
+  WorkspaceInvitationRecord,
+  WorkspaceMemberRecord,
+  WorkspaceRole,
   WorkspaceSubscriptionRecord,
   VerificationDispatchResponse,
 } from './types'
@@ -276,6 +280,67 @@ export async function switchWorkspace(workspaceId: number): Promise<CurrentSessi
     method: 'POST',
     body: JSON.stringify({ workspaceId }),
   })
+}
+
+export async function listWorkspaceMembers(workspaceId: number): Promise<WorkspaceMemberRecord[]> {
+  return apiFetch<WorkspaceMemberRecord[]>(`/api/workspaces/${workspaceId}/members`)
+}
+
+export async function updateWorkspaceMemberRole(
+  workspaceId: number,
+  userId: number,
+  role: Exclude<WorkspaceRole, 'owner'>,
+): Promise<WorkspaceMemberRecord> {
+  return apiFetch<WorkspaceMemberRecord>(`/api/workspaces/${workspaceId}/members/${userId}`, {
+    method: 'PATCH',
+    body: JSON.stringify({ role }),
+  })
+}
+
+export async function removeWorkspaceMember(workspaceId: number, userId: number): Promise<void> {
+  return apiFetch<void>(`/api/workspaces/${workspaceId}/members/${userId}`, {
+    method: 'DELETE',
+    parseJson: false,
+  })
+}
+
+export async function listWorkspaceInvitations(
+  workspaceId: number,
+): Promise<WorkspaceInvitationRecord[]> {
+  return apiFetch<WorkspaceInvitationRecord[]>(`/api/workspaces/${workspaceId}/invitations`)
+}
+
+export async function createWorkspaceInvitation(
+  workspaceId: number,
+  input: { email: string; role: Exclude<WorkspaceRole, 'owner'> },
+): Promise<CreatedWorkspaceInvitation> {
+  return apiFetch<CreatedWorkspaceInvitation>(`/api/workspaces/${workspaceId}/invitations`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function revokeWorkspaceInvitation(
+  workspaceId: number,
+  invitationId: number,
+): Promise<void> {
+  return apiFetch<void>(`/api/workspaces/${workspaceId}/invitations/${invitationId}`, {
+    method: 'DELETE',
+    parseJson: false,
+  })
+}
+
+export async function acceptWorkspaceInvitation(
+  token: string,
+  password: string,
+): Promise<AuthResponse> {
+  const response = await apiFetch<AuthResponse>('/api/invitations/accept', {
+    auth: false,
+    method: 'POST',
+    body: JSON.stringify({ token, password }),
+  })
+  storeSessionToken(response.session.token)
+  return response
 }
 
 export async function listAgents(): Promise<AgentRecord[]> {

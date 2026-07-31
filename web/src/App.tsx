@@ -14,6 +14,8 @@ import { PublicHomePage } from './features/marketing/PublicHomePage'
 import { PublicInfoPage } from './features/marketing/PublicInfoPage'
 import { PublicPricingPage } from './features/marketing/PublicPricingPage'
 import { SignupPage } from './features/onboarding/SignupPage'
+import { InvitationAcceptPage } from './features/team/InvitationAcceptPage'
+import { TeamPage } from './features/team/TeamPage'
 import { canReadBilling } from './lib/workspacePermissions'
 import './App.css'
 
@@ -99,6 +101,9 @@ export default function App() {
 
   if (pathname === '/forgot-password') return <ForgotPasswordPage />
   if (pathname === '/reset-password') return <ResetPasswordPage />
+  if (pathname === '/accept-invitation') {
+    return <InvitationAcceptPage token={new URLSearchParams(window.location.search).get('token') ?? ''} />
+  }
 
   const infoSlug = publicInfoSlug(pathname)
   if (infoSlug) {
@@ -139,6 +144,10 @@ export default function App() {
       return <WorkspaceAccessDeniedPage active="billing" user={auth.user} onLogout={auth.logout} />
     }
     return <BillingPage user={auth.user} onLogout={auth.logout} />
+  }
+
+  if (pathname === '/app/team') {
+    return <TeamPage user={auth.user} onLogout={auth.logout} />
   }
 
   if (pathname === '/app/usage') {

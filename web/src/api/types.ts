@@ -511,6 +511,33 @@ export interface WorkspaceRecord {
   updatedAt: string
 }
 
+export interface WorkspaceMemberRecord {
+  id: number
+  workspaceId: number
+  userId: number
+  email: string
+  role: WorkspaceRole
+  status: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface WorkspaceInvitationRecord {
+  id: number
+  workspaceId: number
+  email: string
+  role: WorkspaceRole
+  expiresAt: string
+  acceptedAt: string | null
+  revokedAt: string | null
+  createdAt: string
+}
+
+export interface CreatedWorkspaceInvitation extends WorkspaceInvitationRecord {
+  token: string
+  acceptUrl: string
+}
+
 export interface CreateWorkspaceResponse {
   workspace: Omit<WorkspaceRecord, 'role'>
   session: CurrentSession

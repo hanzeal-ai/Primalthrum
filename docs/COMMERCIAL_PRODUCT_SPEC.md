@@ -53,6 +53,7 @@ Required routes:
 - `/app/knowledge`: documents, collections, ingestion, and indexing operations.
 - `/app/usage`: usage, cost, credits, limits, and exports.
 - `/app/billing`: plan, subscription, invoices, payment method, and cancellation.
+- `/app/team`: members, role management, seat usage, and invitations.
 - `/app/team`: members, invitations, roles, and seat usage.
 - `/app/settings`: workspace, providers, API keys, retention, and security.
 - `/a/:agentSlug`: hosted Agent application.

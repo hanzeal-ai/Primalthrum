@@ -58,6 +58,22 @@ Provider Customer Portal, or confirm period-end cancellation. Payment card data
 stays on the hosted Provider surface. Paid invoice rows link to the Provider's
 hosted invoice when one is available.
 
+## Team And Invitations
+
+Open `/app/team` to inspect the active Workspace membership and seat usage. All
+roles can read the member list. Owner and Admin can invite a member, assign one
+of the Admin, Developer, Member, Billing, or Viewer roles, copy the one-time
+acceptance link, revoke a pending invitation, change another member's role, or
+remove a member. An active member and each non-expired pending invitation reserve
+one plan seat. The server rejects invitations that exceed the seat entitlement
+or target an existing member.
+
+The recipient opens `/accept-invitation?token=...`. New users set a password;
+existing users enter their current password. Successful acceptance signs the
+recipient into the invited Workspace. Invitation links expire after seven days,
+can be accepted once, and are rate-limited. Owners cannot be changed or removed,
+and administrators cannot change their own role or remove themselves.
+
 ## Generated Agent
 
 After creating an agent, generate the standalone project. The generated project includes a LangGraph skeleton, provider folders, and a demo test path.

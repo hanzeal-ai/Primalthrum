@@ -1,7 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  acceptWorkspaceInvitation,
   createBillingCheckout,
+  createWorkspaceInvitation,
   indexDocument,
   replayAgentRun,
   registerAccount,
@@ -239,5 +241,26 @@ describe('stream client', () => {
       monthlyCreditLimit: 20000,
       monthlyProviderCostMicrosLimit: 5000000,
     })
+  })
+
+  it('creates and accepts workspace invitations without leaking the session contract', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        id: 9, workspaceId: 3, email: 'member@example.com', role: 'member', token: 'invite-token',
+      }), { status: 201, headers: { 'content-type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        user: { id: 4, workspaceId: 3, email: 'member@example.com', role: 'member' },
+        session: { token: 'invited-session', expiresAt: '2026-08-07T00:00:00.000Z' },
+        emailVerified: true,
+      }), { status: 201, headers: { 'content-type': 'application/json' } }))
+
+    await createWorkspaceInvitation(3, { email: 'member@example.com', role: 'member' })
+    await acceptWorkspaceInvitation('invite-token', 'new member password')
+
+    expect(fetchMock.mock.calls[0]?.[0]).toContain('/api/workspaces/3/invitations')
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      email: 'member@example.com', role: 'member',
+    })
+    expect(window.localStorage.getItem('primalthrum.sessionToken')).toBe('invited-session')
   })
 })

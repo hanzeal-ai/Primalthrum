@@ -8,17 +8,20 @@ import { after, before, test } from 'node:test';
 import { createApp } from '../src/app';
 import { SqliteDatabase } from '../src/db/sqlite';
 import { AgentRepository } from '../src/services/agentRepository';
+import { BillingRepository } from '../src/services/billingRepository';
 import { UserRepository } from '../src/services/userRepository';
 import { WorkspaceRepository } from '../src/services/workspaceRepository';
 
 let server: Server;
 let baseUrl = '';
 let rootDir = '';
+let dbPath = '';
 
 before(async () => {
   rootDir = mkdtempSync(join(tmpdir(), 'primalthrum-workspace-rbac-'));
+  dbPath = join(rootDir, 'platform.sqlite');
   const app = createApp({
-    dbPath: join(rootDir, 'platform.sqlite'),
+    dbPath,
     documentStorageDir: join(rootDir, 'documents'),
     generatedAgentsDir: join(rootDir, 'generated-agents'),
     logger: { log: () => undefined },
@@ -139,6 +142,15 @@ test('workspace memberships scope resources and enforce role permissions', async
     body: JSON.stringify({ workspaceId: defaultWorkspaceId }),
   });
   assert.equal(switchDefaultResponse.status, 200);
+
+  new BillingRepository(new SqliteDatabase(dbPath)).grantEntitlement({
+    workspaceId: defaultWorkspaceId,
+    feature: 'seats',
+    enabled: true,
+    quantityLimit: 2,
+    sourceType: 'test',
+    sourceRef: 'workspace-rbac',
+  });
 
   const inviteResponse = await fetch(
     `${baseUrl}/api/workspaces/${defaultWorkspaceId}/invitations`,

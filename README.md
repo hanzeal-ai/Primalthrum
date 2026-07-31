@@ -142,6 +142,11 @@ scripts/commercial-smoke.sh
 - `GET /api/billing/usage`：读取周期用量、credits 与供应商成本。
 - `GET/PUT /api/billing/cost-controls`：读取或维护工作区成本上限。
 - `GET /api/billing/cost-alerts`：读取持久化阈值告警。
+- `GET /api/workspaces/:id/members`：读取当前工作区成员。
+- `PATCH/DELETE /api/workspaces/:id/members/:userId`：修改角色或移除成员。
+- `GET/POST /api/workspaces/:id/invitations`：读取或创建受席位限制的邀请。
+- `DELETE /api/workspaces/:id/invitations/:invitationId`：撤销待处理邀请。
+- `POST /api/invitations/accept`：接受一次性邀请并建立工作区会话。
 
 账本生命周期与不变量见 [Billing Entitlements And Credit Ledger](docs/BILLING_LEDGER.md)。
 Stripe 配置、Webhook 和沙箱发布门禁见 [Stripe Payments And Subscription Lifecycle](docs/STRIPE_PAYMENTS.md)。

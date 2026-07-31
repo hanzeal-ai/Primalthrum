@@ -1954,9 +1954,24 @@ complete. Follow the same dependency and verification protocol used above.
   period totals, meter evidence, Provider cost, credit progress, durable alerts,
   and Owner/Billing-only cost controls. Admin is read-only; roles without
   `billing.read` do not receive navigation or data.
+  The second slice adds authenticated `/app/team` and public
+  `/accept-invitation` experiences. Every Workspace role can inspect members;
+  Owner and Admin can create one-time seven-day invitation links, choose any
+  non-Owner role, change other members' roles, revoke pending invitations, and
+  remove members. Active members plus non-expired pending invitations consume
+  the canonical `seats` entitlement, existing members cannot be reinvited, and
+  accepting or removing membership updates session authority immediately.
+  Invitation acceptance is IP- and token-hash-rate-limited, and self-role or
+  self-removal mutations are rejected.
   Client and component tests cover idempotency headers, server-shaped data,
-  Checkout navigation, role restrictions, and integer/micro-unit conversion.
-  Team management, API key management, retention/security settings, complete
+  Checkout navigation, role restrictions, integer/micro-unit conversion,
+  invitation session storage, and read-only team access. Server tests cover
+  seat reservation, duplicate-member rejection, revocation, acceptance,
+  role assignment, and session invalidation. Desktop browser acceptance covers
+  seat display, invitation creation and revocation, and the public acceptance
+  surface. Chrome acceptance at 390x844 confirms the loaded team and acceptance
+  pages have no horizontal overflow or console warnings. Transactional
+  invitation email, API key management, retention/security settings, complete
   role-matrix browser E2E, and live Stripe lifecycle evidence remain open.
 
 ### P20-01 Operator Administration And Support

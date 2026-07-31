@@ -173,6 +173,27 @@ export class WorkspaceRepository {
     `).map(toMembership);
   }
 
+  pendingInvitationCount(workspaceId: number, excludeEmail = ''): number {
+    const now = new Date().toISOString();
+    return Number(this.db.query<{ count: number }>(`
+      SELECT COUNT(*) AS count
+      FROM workspace_invitations
+      WHERE workspace_id = ${sqlValue(workspaceId)}
+        AND accepted_at IS NULL
+        AND revoked_at IS NULL
+        AND expires_at > ${sqlValue(now)}
+        ${excludeEmail ? `AND email <> ${sqlValue(excludeEmail)}` : ''};
+    `)[0]?.count ?? 0);
+  }
+
+  validateInvitationTarget(workspaceId: number, value: unknown): string {
+    const email = normalizeEmail(value);
+    if (this.findMembershipByEmail(workspaceId, email)) {
+      throw new Error('email is already a workspace member');
+    }
+    return email;
+  }
+
   principalForUser(userId: number, workspaceId?: number): PublicUserRecord | null {
     const memberships = workspaceId
       ? [this.findMembership(workspaceId, userId)].filter(Boolean) as WorkspaceMembershipRecord[]
@@ -193,7 +214,7 @@ export class WorkspaceRepository {
     role: unknown;
     invitedByUserId: number;
   }): CreatedWorkspaceInvitation {
-    const email = normalizeEmail(input.email);
+    const email = this.validateInvitationTarget(input.workspaceId, input.email);
     const role = normalizeWorkspaceRole(input.role, false);
     const token = randomBytes(32).toString('base64url');
     const expiresAt = new Date(Date.now() + INVITATION_TTL_MS).toISOString();
@@ -235,6 +256,18 @@ export class WorkspaceRepository {
     `).map(toInvitation);
   }
 
+  revokeInvitation(workspaceId: number, invitationId: number): void {
+    const invitation = this.findInvitation(workspaceId, invitationId);
+    if (!invitation) throw new Error('workspace invitation not found');
+    if (invitation.acceptedAt) throw new Error('accepted invitation cannot be revoked');
+    if (invitation.revokedAt) return;
+    this.db.run(`
+      UPDATE workspace_invitations
+      SET revoked_at = CURRENT_TIMESTAMP
+      WHERE workspace_id = ${sqlValue(workspaceId)} AND id = ${sqlValue(invitationId)};
+    `);
+  }
+
   acceptInvitation(token: string, userId: number, userEmail: string): WorkspaceMembershipRecord {
     const invitation = this.findInvitationByToken(token);
     if (!invitation || invitation.revokedAt || invitation.acceptedAt) {
@@ -246,6 +279,9 @@ export class WorkspaceRepository {
     if (normalizeEmail(userEmail) !== invitation.email) {
       throw new Error('invitation email does not match the signed-in user');
     }
+    if (this.findMembership(invitation.workspaceId, userId)) {
+      throw new Error('user is already a workspace member');
+    }
     this.db.run(`
       INSERT INTO workspace_memberships (workspace_id, user_id, role, status)
       VALUES (
@@ -253,11 +289,7 @@ export class WorkspaceRepository {
         ${sqlValue(userId)},
         ${sqlValue(invitation.role)},
         'active'
-      )
-      ON CONFLICT(workspace_id, user_id) DO UPDATE SET
-        role = excluded.role,
-        status = 'active',
-        updated_at = CURRENT_TIMESTAMP;
+      );
 
       UPDATE workspace_invitations
       SET accepted_at = CURRENT_TIMESTAMP
@@ -326,6 +358,30 @@ export class WorkspaceRepository {
     `).map(toMembership);
   }
 
+  private findMembershipByEmail(workspaceId: number, email: string): WorkspaceMembershipRecord | null {
+    const row = this.db.query<MembershipRow>(`
+      SELECT m.id, m.workspace_id, m.user_id, u.email, m.role, m.status,
+        m.created_at, m.updated_at
+      FROM workspace_memberships m
+      JOIN users u ON u.id = m.user_id
+      WHERE m.workspace_id = ${sqlValue(workspaceId)}
+        AND u.email = ${sqlValue(email)}
+        AND m.status = 'active'
+      LIMIT 1;
+    `)[0];
+    return row ? toMembership(row) : null;
+  }
+
+  private findInvitation(workspaceId: number, invitationId: number): WorkspaceInvitationRecord | null {
+    const row = this.db.query<InvitationRow>(`
+      SELECT id, workspace_id, email, role, expires_at, accepted_at, revoked_at, created_at
+      FROM workspace_invitations
+      WHERE workspace_id = ${sqlValue(workspaceId)} AND id = ${sqlValue(invitationId)}
+      LIMIT 1;
+    `)[0];
+    return row ? toInvitation(row) : null;
+  }
+
   private findInvitationByToken(token: string): WorkspaceInvitationRecord | null {
     if (!token.trim()) return null;
     const rows = this.db.query<InvitationRow>(`
@@ -351,7 +407,8 @@ export class WorkspaceRepository {
 export function normalizeWorkspaceRole(value: unknown, allowOwner: boolean): WorkspaceRole {
   const role = typeof value === 'string' ? value.trim() : '';
   if (!WORKSPACE_ROLES.includes(role as WorkspaceRole) || (!allowOwner && role === 'owner')) {
-    throw new Error(`role must be ${allowOwner ? 'owner, admin, member, or viewer' : 'admin, member, or viewer'}`);
+    const roles = WORKSPACE_ROLES.filter((candidate) => allowOwner || candidate !== 'owner');
+    throw new Error(`role must be ${roles.join(', ')}`);
   }
   return role as WorkspaceRole;
 }

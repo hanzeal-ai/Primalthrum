@@ -7,3 +7,7 @@ export function canReadBilling(role: WorkspaceRole): boolean {
 export function canManageBilling(role: WorkspaceRole): boolean {
   return role === 'owner' || role === 'billing'
 }
+
+export function canManageMembers(role: WorkspaceRole): boolean {
+  return role === 'owner' || role === 'admin'
+}

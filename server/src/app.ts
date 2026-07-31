@@ -871,10 +871,14 @@ export function createApp(options: AppOptions = {}): Koa {
     const workspaceId = Number(ctx.params.id);
     if (!requireCurrentWorkspace(ctx, workspaceId) || !authorize(ctx, 'members.manage')) return;
     try {
+      const userId = Number(ctx.params.userId);
+      if (userId === ctx.state.authSession.user.id) {
+        throw new Error('you cannot change your own workspace role');
+      }
       const body = ctx.request.body as { role?: unknown };
       ctx.body = workspaceRepository.updateMemberRole(
         workspaceId,
-        Number(ctx.params.userId),
+        userId,
         body.role,
       );
     } catch (error) {
@@ -890,7 +894,11 @@ export function createApp(options: AppOptions = {}): Koa {
     const workspaceId = Number(ctx.params.id);
     if (!requireCurrentWorkspace(ctx, workspaceId) || !authorize(ctx, 'members.manage')) return;
     try {
-      workspaceRepository.removeMember(workspaceId, Number(ctx.params.userId));
+      const userId = Number(ctx.params.userId);
+      if (userId === ctx.state.authSession.user.id) {
+        throw new Error('you cannot remove yourself from the current workspace');
+      }
+      workspaceRepository.removeMember(workspaceId, userId);
       ctx.status = 204;
     } catch (error) {
       sendApiError(ctx, logger, {
@@ -912,18 +920,45 @@ export function createApp(options: AppOptions = {}): Koa {
     if (!requireCurrentWorkspace(ctx, workspaceId) || !authorize(ctx, 'members.manage')) return;
     try {
       const body = ctx.request.body as { email?: unknown; role?: unknown };
-      ctx.status = 201;
-      ctx.body = workspaceRepository.createInvitation({
+      const email = workspaceRepository.validateInvitationTarget(workspaceId, body.email);
+      billingRepository.assertEntitled(
         workspaceId,
-        email: body.email,
+        'seats',
+        workspaceRepository.listMembers(workspaceId).length
+          + workspaceRepository.pendingInvitationCount(workspaceId, email),
+        1,
+      );
+      ctx.status = 201;
+      const invitation = workspaceRepository.createInvitation({
+        workspaceId,
+        email,
         role: body.role,
         invitedByUserId: ctx.state.authSession.user.id,
       });
+      ctx.body = {
+        ...invitation,
+        acceptUrl: `${publicAppUrl}/accept-invitation?token=${encodeURIComponent(invitation.token)}`,
+      };
+    } catch (error) {
+      sendApiError(ctx, logger, {
+        status: teamEntitlementErrorCode(error) ? 403 : 400,
+        code: teamEntitlementErrorCode(error) ?? 'WORKSPACE_INVITATION_INVALID',
+        message: error instanceof Error ? error.message : 'failed to create invitation',
+      });
+    }
+  });
+
+  router.delete('/api/workspaces/:id/invitations/:invitationId', (ctx) => {
+    const workspaceId = Number(ctx.params.id);
+    if (!requireCurrentWorkspace(ctx, workspaceId) || !authorize(ctx, 'members.manage')) return;
+    try {
+      workspaceRepository.revokeInvitation(workspaceId, Number(ctx.params.invitationId));
+      ctx.status = 204;
     } catch (error) {
       sendApiError(ctx, logger, {
         status: 400,
         code: 'WORKSPACE_INVITATION_INVALID',
-        message: error instanceof Error ? error.message : 'failed to create invitation',
+        message: error instanceof Error ? error.message : 'failed to revoke invitation',
       });
     }
   });
@@ -941,6 +976,12 @@ export function createApp(options: AppOptions = {}): Koa {
         ctx.body = { error: 'invalid email or password' };
         return;
       }
+      billingRepository.assertEntitled(
+        invitation.workspaceId,
+        'seats',
+        workspaceRepository.listMembers(invitation.workspaceId).length,
+        1,
+      );
       user ??= userRepository.createUser(invitation.email, hashPassword(password), true);
       workspaceRepository.acceptInvitation(token, user.id, user.email);
       const principal = workspaceRepository.principalForUser(user.id, invitation.workspaceId);
@@ -951,8 +992,8 @@ export function createApp(options: AppOptions = {}): Koa {
       ctx.body = { user: principal, session, emailVerified: true };
     } catch (error) {
       sendApiError(ctx, logger, {
-        status: 400,
-        code: 'WORKSPACE_INVITATION_INVALID',
+        status: teamEntitlementErrorCode(error) ? 403 : 400,
+        code: teamEntitlementErrorCode(error) ?? 'WORKSPACE_INVITATION_INVALID',
         message: error instanceof Error ? error.message : 'failed to accept invitation',
       });
     }
@@ -2003,6 +2044,15 @@ export function createApp(options: AppOptions = {}): Koa {
   app.use(router.allowedMethods());
 
   return app;
+}
+
+function teamEntitlementErrorCode(
+  error: unknown,
+): 'ENTITLEMENT_REQUIRED' | 'ENTITLEMENT_LIMIT_EXCEEDED' | null {
+  if (!(error instanceof BillingError)) return null;
+  return error.code === 'ENTITLEMENT_REQUIRED' || error.code === 'ENTITLEMENT_LIMIT_EXCEEDED'
+    ? error.code
+    : null;
 }
 
 function isPublicAgent(agent: ReturnType<AgentRepository['findBySlug']>): agent is NonNullable<typeof agent> {
