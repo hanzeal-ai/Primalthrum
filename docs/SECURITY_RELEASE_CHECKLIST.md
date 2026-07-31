@@ -68,6 +68,11 @@ Confirm:
 - A signed Provider Webhook records delivered and test-bounce events exactly once.
 - `primalthrum_account_email_outbox{status="dead_lettered"}` is zero and bounce,
   complaint, retry backlog, and dead-letter alerts are active.
+- Production Turnstile hostname/action checks pass for registration and public
+  Agent streams, including SSE reconnect with the same idempotency key.
+- `TRUSTED_PROXY_HOPS` matches the deployed ingress chain and spoofed forwarding
+  headers cannot change the rate-limit subject.
+- Rate-limit and challenge-outage alerts are active with no raw identity labels.
 
 ## Known Limitations
 

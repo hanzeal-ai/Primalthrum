@@ -4,6 +4,7 @@ import { createApp } from './src/app';
 import { StripePaymentAdapter } from './src/services/stripePaymentAdapter';
 import { HttpUsageMeterExporter } from './src/services/usageMeterExporter';
 import { createAccountEmailIntegration } from './src/services/accountEmailConfiguration';
+import { createAbuseProtectionConfiguration } from './src/services/abuseProtectionConfiguration';
 
 const port = Number(process.env.PORT ?? 3000);
 const agentBaseUrl = process.env.AGENT_BASE_URL ?? 'http://127.0.0.1:8000';
@@ -33,6 +34,7 @@ const usageMeterExporter = usageMeterExportUrl
     )
   : undefined;
 const accountEmail = createAccountEmailIntegration(process.env);
+const abuseProtection = createAbuseProtectionConfiguration(process.env);
 
 const app = createApp({
   agentBaseUrl,
@@ -45,6 +47,10 @@ const app = createApp({
   accountEmailSender: accountEmail.sender,
   accountEmailWebhookVerifier: accountEmail.webhookVerifier,
   exposeAccountEmailPreview: accountEmail.exposePreview,
+  abuseHashSecret: abuseProtection.hashSecret,
+  botChallengeVerifier: abuseProtection.botChallengeVerifier,
+  botChallengeSiteKey: abuseProtection.botChallengeSiteKey,
+  trustedProxyHops: abuseProtection.trustedProxyHops,
 });
 
 app.listen(port, () => {

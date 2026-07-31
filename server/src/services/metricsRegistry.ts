@@ -27,6 +27,10 @@ export class MetricsRegistry {
     this.increment('primalthrum_account_email_events_total', { outcome });
   }
 
+  observeAbuse(rule: string, outcome: string): void {
+    this.increment('primalthrum_abuse_enforcement_total', { rule, outcome });
+  }
+
   toPrometheusText(accountEmail?: AccountEmailDeliverySummary): string {
     const lines = [
       '# HELP primalthrum_http_requests_total Total HTTP requests handled by the server.',
@@ -39,6 +43,8 @@ export class MetricsRegistry {
       '# TYPE primalthrum_account_email_events_total counter',
       '# HELP primalthrum_account_email_outbox Current transactional email outbox state.',
       '# TYPE primalthrum_account_email_outbox gauge',
+      '# HELP primalthrum_abuse_enforcement_total Requests blocked by abuse controls.',
+      '# TYPE primalthrum_abuse_enforcement_total counter',
       `primalthrum_process_uptime_seconds ${process.uptime().toFixed(3)}`,
     ];
 

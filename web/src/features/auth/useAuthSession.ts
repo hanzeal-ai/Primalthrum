@@ -92,10 +92,10 @@ export function useAuthSession() {
     setMessage('已安全退出。')
   }
 
-  async function register(input: RegistrationInput) {
+  async function register(input: RegistrationInput, challengeToken = '') {
     setMessage('正在创建工作区...')
     try {
-      const response = await registerAccount(input)
+      const response = await registerAccount(input, challengeToken)
       setUser(response.user)
       setEmailVerified(response.emailVerified)
       const previewUrl = response.emailPreviewUrl ?? ''

@@ -3,7 +3,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   indexDocument,
   replayAgentRun,
+  registerAccount,
   streamAgentRun,
+  streamPublicAgentRun,
   synthesizeSpeech,
   transcribeAudio,
   uploadDocument,
@@ -69,6 +71,34 @@ describe('stream client', () => {
     })
     const request = fetchMock.mock.calls[0]
     expect(new Headers(request[1]?.headers).get('Idempotency-Key')).toBe('request-1')
+  })
+
+  it('sends challenge tokens only on protected public conversion requests', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        session: { token: 'registered-session' },
+      }), { status: 201, headers: { 'content-type': 'application/json' } }))
+      .mockResolvedValueOnce(streamResponse(
+        'event: message.completed\ndata: {"message":"done"}\n\n',
+        {},
+      ))
+
+    await registerAccount({
+      email: 'owner@example.com',
+      password: 'correct horse battery staple',
+      workspaceName: 'Acme',
+      planKey: 'pro',
+    }, 'signup-challenge')
+    await streamPublicAgentRun('public-agent', { input: 'hello' }, {
+      idempotencyKey: 'public-run-1',
+      challengeToken: 'stream-challenge',
+      onEvent: () => undefined,
+    })
+
+    expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get('X-Bot-Challenge-Token'))
+      .toBe('signup-challenge')
+    expect(new Headers(fetchMock.mock.calls[1]?.[1]?.headers).get('X-Bot-Challenge-Token'))
+      .toBe('stream-challenge')
   })
 
   it('requests only events after the last received event', async () => {

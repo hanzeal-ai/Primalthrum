@@ -76,11 +76,19 @@ test('public registration requires email verification before starting the Pro tr
   assert.equal(blocked.status, 403);
   assert.equal((await blocked.json() as { error: { code: string } }).error.code, 'EMAIL_VERIFICATION_REQUIRED');
 
-  const verificationToken = new URL(registration.emailPreviewUrl).searchParams.get('token');
-  assert.ok(verificationToken);
+  const resendResponse = await fetch(`${baseUrl}/api/auth/verification/resend`, {
+    method: 'POST',
+    headers: { authorization: `Bearer ${registration.session.token}` },
+  });
+  assert.equal(resendResponse.status, 202);
+  const resentToken = new URL(
+    (await resendResponse.json() as { emailPreviewUrl: string }).emailPreviewUrl,
+  ).searchParams.get('token');
+  assert.ok(resentToken);
+
   const verifyResponse = await fetch(`${baseUrl}/api/auth/verify-email`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ token: verificationToken }),
+    body: JSON.stringify({ token: resentToken }),
   });
   assert.equal(verifyResponse.status, 200);
   const verified = await verifyResponse.json() as {
@@ -95,7 +103,7 @@ test('public registration requires email verification before starting the Pro tr
 
   const replay = await fetch(`${baseUrl}/api/auth/verify-email`, {
     method: 'POST', headers: { 'content-type': 'application/json' },
-    body: JSON.stringify({ token: verificationToken }),
+    body: JSON.stringify({ token: resentToken }),
   });
   assert.equal(replay.status, 400);
 

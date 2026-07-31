@@ -30,6 +30,9 @@ Tests inject a silent logger so payload assertions stay deterministic.
 
 | Code | Status | Workflow |
 | --- | --- | --- |
+| `RATE_LIMIT_EXCEEDED` | 429 | A source, identity, user, or public resource exceeded its bounded request window. |
+| `BOT_CHALLENGE_REQUIRED` | 403 | A protected public conversion request lacks a valid action-bound challenge. |
+| `BOT_CHALLENGE_UNAVAILABLE` | 503 | The configured challenge verifier timed out or failed closed. |
 | `PRIVACY_CONSENT_INVALID` | 400 | Privacy consent is malformed or targets an outdated policy version. |
 | `ANALYTICS_CONSENT_REQUIRED` | 403 | The supplied receipt is not the subject's latest analytics grant. |
 | `ANALYTICS_EVENT_INVALID` | 400/409 | The event violates the allowlist, time window, or idempotency contract. |

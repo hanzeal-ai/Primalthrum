@@ -44,7 +44,7 @@ import { LocalDocumentStorage } from './services/fileStorage';
 import { checkServerReadiness } from './services/healthReadiness';
 import { JsonConsoleLogger, type StructuredLogger } from './services/logger';
 import { MetricsRegistry } from './services/metricsRegistry';
-import { hashPassword, verifyPassword } from './services/passwordHash';
+import { hashPassword, verifyPassword, verifyPasswordOrDummy } from './services/passwordHash';
 import { JobRepository } from './services/jobRepository';
 import {
   ProviderConfigRepository,
@@ -104,6 +104,10 @@ import { PrivacyAnalyticsRepository } from './services/privacyAnalyticsRepositor
 import { registerPrivacyRoutes } from './routes/privacyRoutes';
 import { registerAccountEmailRoutes } from './routes/accountEmailRoutes';
 import { type AccountEmailWebhookVerifier } from './services/accountEmailWebhook';
+import { AbuseProtectionService } from './services/abuseProtection';
+import { AbuseProtectionRepository } from './services/abuseProtectionRepository';
+import { type BotChallengeVerifier } from './services/botChallengeVerifier';
+import { registerAbuseRoutes } from './routes/abuseRoutes';
 
 export interface AppOptions {
   agentBaseUrl?: string;
@@ -120,6 +124,11 @@ export interface AppOptions {
   accountEmailSender?: AccountEmailSender;
   accountEmailWebhookVerifier?: AccountEmailWebhookVerifier;
   exposeAccountEmailPreview?: boolean;
+  abuseProtection?: AbuseProtectionService;
+  abuseHashSecret?: string;
+  botChallengeVerifier?: BotChallengeVerifier;
+  botChallengeSiteKey?: string;
+  trustedProxyHops?: number;
 }
 
 const DEFAULT_AGENT_BASE_URL = 'http://127.0.0.1:8000';
@@ -127,6 +136,7 @@ const DEFAULT_DB_PATH = join(process.cwd(), '..', 'data', 'platform.sqlite');
 const DEFAULT_DOCUMENT_STORAGE_DIR = join(process.cwd(), '..', 'data', 'documents');
 const DEFAULT_GENERATED_AGENTS_DIR = join(process.cwd(), '..', 'generated-agents');
 const DEFAULT_PUBLIC_APP_URL = 'http://127.0.0.1:5173';
+const DEFAULT_ABUSE_HASH_SECRET = 'primalthrum-development-abuse-hash-secret';
 
 function sse(event: string, payload: Record<string, unknown>): string {
   return `event: ${event}\ndata: ${JSON.stringify(payload)}\n\n`;
@@ -203,6 +213,11 @@ export function createApp(options: AppOptions = {}): Koa {
   const logger = options.logger ?? new JsonConsoleLogger();
   const metrics = options.metrics ?? new MetricsRegistry();
   const db = new SqliteDatabase(options.dbPath ?? DEFAULT_DB_PATH);
+  const abuseProtection = options.abuseProtection ?? new AbuseProtectionService(
+    new AbuseProtectionRepository(db, options.abuseHashSecret ?? DEFAULT_ABUSE_HASH_SECRET),
+    options.botChallengeVerifier,
+    options.trustedProxyHops ?? 0,
+  );
   const agentRepository = new AgentRepository(
     db,
     options.generatedAgentsDir ?? DEFAULT_GENERATED_AGENTS_DIR,
@@ -518,6 +533,7 @@ export function createApp(options: AppOptions = {}): Koa {
     logger,
     metrics,
   });
+  registerAbuseRoutes(router, { turnstileSiteKey: options.botChallengeSiteKey });
 
   app.use(async (ctx, next) => {
     const origin = ctx.get('origin');
@@ -525,11 +541,11 @@ export function createApp(options: AppOptions = {}): Koa {
     ctx.set('Access-Control-Allow-Credentials', 'true');
     ctx.set(
       'Access-Control-Allow-Headers',
-      'Content-Type, Accept, Authorization, Idempotency-Key, Last-Event-ID',
+      'Content-Type, Accept, Authorization, Idempotency-Key, Last-Event-ID, X-Bot-Challenge-Token',
     );
     ctx.set(
       'Access-Control-Expose-Headers',
-      'X-Primalthrum-Run-Id, X-Primalthrum-Conversation-Id, X-Primalthrum-Idempotency-Key',
+      'X-Primalthrum-Run-Id, X-Primalthrum-Conversation-Id, X-Primalthrum-Idempotency-Key, Retry-After, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset',
     );
     ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     ctx.set('Vary', 'Origin');
@@ -556,6 +572,9 @@ export function createApp(options: AppOptions = {}): Koa {
     }
   });
   app.use(createAuthMiddleware(sessionRepository));
+  app.use(async (ctx, next) => {
+    if (await abuseProtection.enforce(ctx, logger, metrics)) await next();
+  });
 
   router.get('/health', (ctx) => {
     ctx.body = {
@@ -615,8 +634,9 @@ export function createApp(options: AppOptions = {}): Koa {
       const email = normalizeEmail(body.email);
       const password = normalizePassword(body.password);
       const user = userRepository.findByEmail(email);
+      const passwordMatches = verifyPasswordOrDummy(password, user?.passwordHash ?? null);
 
-      if (!user || !verifyPassword(password, user.passwordHash)) {
+      if (!user || !passwordMatches) {
         ctx.status = 401;
         ctx.body = { error: 'invalid email or password' };
         return;

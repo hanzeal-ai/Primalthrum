@@ -1,5 +1,11 @@
 export type RunStatus = 'idle' | 'running' | 'done' | 'error'
 
+export interface AbuseProtectionConfig {
+  provider: 'disabled' | 'turnstile'
+  siteKey: string
+  actions: Array<'auth_register' | 'public_agent_stream'>
+}
+
 export interface AgentConfig {
   memoryProvider: string
   cacheProvider: string

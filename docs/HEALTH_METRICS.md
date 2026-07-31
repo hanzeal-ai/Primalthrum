@@ -42,6 +42,8 @@ The server checks Agent readiness through `${AGENT_BASE_URL}/ready`.
 - `primalthrum_account_email_events_total`: unique signed Provider delivery events.
 - `primalthrum_account_email_outbox`: pending, retrying, dead-letter, bounce, and
   complaint state gauges.
+- `primalthrum_abuse_enforcement_total`: bounded rate-limit, challenge-failure,
+  and challenge-outage counters by rule and outcome.
 
 Numeric path segments are normalized to `/:id` to avoid unbounded metric labels.
 

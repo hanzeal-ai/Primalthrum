@@ -28,6 +28,8 @@ recovery, email delivery evidence, and pending onboarding state. Migration
 `020_privacy_consent_analytics` adds immutable privacy receipts and minimized
 first-party product analytics events. Migration `021_transactional_email_delivery`
 adds Provider delivery identifiers, dead-letter evidence, and immutable signed
-delivery event records.
+delivery event records. Migration `022_abuse_protection` adds atomic rate-limit
+buckets, short-lived challenge grants, and immutable HMAC-only enforcement
+evidence.
 
 See [Postgres Persistence Path](POSTGRES_PERSISTENCE.md) before adding migrations that rely on SQLite-only SQL.

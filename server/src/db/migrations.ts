@@ -96,6 +96,10 @@ export const MIGRATIONS: Migration[] = [
     id: '021_transactional_email_delivery',
     up: applyTransactionalEmailDelivery,
   },
+  {
+    id: '022_abuse_protection',
+    up: applyAbuseProtection,
+  },
 ];
 
 export function runMigrations(db: DatabaseAdapter): void {
@@ -1279,6 +1283,59 @@ function applyTransactionalEmailDelivery(db: DatabaseAdapter): void {
     BEFORE DELETE ON account_email_delivery_events
     BEGIN
       SELECT RAISE(ABORT, 'account email delivery events are immutable');
+    END;
+  `);
+}
+
+function applyAbuseProtection(db: DatabaseAdapter): void {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS abuse_rate_limit_buckets (
+      rule_key TEXT NOT NULL,
+      subject_hash TEXT NOT NULL,
+      window_started_at TEXT NOT NULL,
+      window_ends_at TEXT NOT NULL,
+      request_count INTEGER NOT NULL DEFAULT 0 CHECK(request_count >= 0),
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(rule_key, subject_hash, window_started_at)
+    );
+
+    CREATE TABLE IF NOT EXISTS abuse_enforcement_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_id TEXT NOT NULL UNIQUE,
+      rule_key TEXT NOT NULL,
+      action TEXT NOT NULL,
+      subject_hash TEXT NOT NULL,
+      outcome TEXT NOT NULL CHECK(outcome IN ('rate_limited', 'challenge_failed')),
+      retry_after_seconds INTEGER NOT NULL DEFAULT 0 CHECK(retry_after_seconds >= 0),
+      metadata_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS abuse_challenge_grants (
+      grant_hash TEXT PRIMARY KEY,
+      rule_key TEXT NOT NULL,
+      subject_hash TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS abuse_rate_limit_expiry_idx
+      ON abuse_rate_limit_buckets(window_ends_at);
+    CREATE INDEX IF NOT EXISTS abuse_enforcement_rule_time_idx
+      ON abuse_enforcement_events(rule_key, created_at);
+    CREATE INDEX IF NOT EXISTS abuse_challenge_grant_expiry_idx
+      ON abuse_challenge_grants(expires_at);
+
+    CREATE TRIGGER IF NOT EXISTS abuse_enforcement_events_no_update
+    BEFORE UPDATE ON abuse_enforcement_events
+    BEGIN
+      SELECT RAISE(ABORT, 'abuse enforcement events are immutable');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS abuse_enforcement_events_no_delete
+    BEFORE DELETE ON abuse_enforcement_events
+    BEGIN
+      SELECT RAISE(ABORT, 'abuse enforcement events are immutable');
     END;
   `);
 }

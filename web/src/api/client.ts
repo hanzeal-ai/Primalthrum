@@ -1,4 +1,5 @@
 import type {
+  AbuseProtectionConfig,
   AgentRecord,
   AnalyticsEventInput,
   AgentDeploymentRecord,
@@ -83,6 +84,10 @@ export async function getSetupStatus(): Promise<SetupStatus> {
   return apiFetch<SetupStatus>('/api/setup/status', { auth: false })
 }
 
+export async function getAbuseProtectionConfig(): Promise<AbuseProtectionConfig> {
+  return apiFetch<AbuseProtectionConfig>('/api/public/abuse/config', { auth: false })
+}
+
 export async function setupAdmin(input: AuthCredentials): Promise<AuthResponse> {
   const response = await apiFetch<AuthResponse>('/api/setup/admin', {
     auth: false,
@@ -103,10 +108,14 @@ export async function loginAdmin(input: AuthCredentials): Promise<AuthResponse> 
   return response
 }
 
-export async function registerAccount(input: RegistrationInput): Promise<RegistrationResponse> {
+export async function registerAccount(
+  input: RegistrationInput,
+  challengeToken = '',
+): Promise<RegistrationResponse> {
   const response = await apiFetch<RegistrationResponse>('/api/auth/register', {
     auth: false,
     method: 'POST',
+    headers: challengeToken ? { 'X-Bot-Challenge-Token': challengeToken } : undefined,
     body: JSON.stringify(input),
   })
   storeSessionToken(response.session.token)
@@ -465,6 +474,7 @@ export async function streamPublicAgentRun(
     signal?: AbortSignal
     afterEventId?: number
     idempotencyKey?: string
+    challengeToken?: string
     onEvent: (event: ParsedSseEvent) => void
   },
 ): Promise<StreamResult> {
@@ -475,6 +485,9 @@ export async function streamPublicAgentRun(
     headers: {
       'Content-Type': 'application/json',
       'Idempotency-Key': idempotencyKey,
+      ...(options.challengeToken
+        ? { 'X-Bot-Challenge-Token': options.challengeToken }
+        : {}),
       ...(options.afterEventId
         ? { 'Last-Event-ID': String(options.afterEventId) }
         : {}),

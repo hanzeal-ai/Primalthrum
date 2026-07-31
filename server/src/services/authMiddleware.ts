@@ -100,6 +100,10 @@ function isPublicRequest(ctx: Koa.Context): boolean {
     return true;
   }
 
+  if (ctx.method === 'GET' && ctx.path === '/api/public/abuse/config') {
+    return true;
+  }
+
   if (ctx.method === 'GET' && ctx.path === '/api/public/plans') {
     return true;
   }
@@ -122,7 +126,6 @@ function isPublicRequest(ctx: Koa.Context): boolean {
     '/api/auth/login',
     '/api/auth/register',
     '/api/auth/verify-email',
-    '/api/auth/verification/resend',
     '/api/auth/password/forgot',
     '/api/auth/password/reset',
     '/api/auth/logout',
@@ -134,6 +137,7 @@ function isPublicRequest(ctx: Koa.Context): boolean {
 function isPendingEmailRequest(ctx: Koa.Context): boolean {
   return [
     '/api/auth/logout',
+    '/api/auth/verification/resend',
   ].includes(ctx.path);
 }
 

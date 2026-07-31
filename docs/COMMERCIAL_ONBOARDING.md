@@ -27,7 +27,8 @@ adds the customer to the installation's default Workspace.
 
 - Transactional email credentials, sending-domain DNS, and live mailbox/bounce
   alert verification. The durable Resend/HTTP integration is implemented.
-- Abuse throttling, bot protection, and assisted account recovery.
+- Production Turnstile credentials, trusted-proxy topology verification, and
+  load/alert evidence. Durable throttling and Web challenge integration are implemented.
 - Final privacy and terms review by qualified legal counsel.
 
 ## Public Web Surfaces

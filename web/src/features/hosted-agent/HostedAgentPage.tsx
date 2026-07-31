@@ -12,7 +12,7 @@ import {
   Wrench,
 } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { useEffect, useRef, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 
 import {
   ApiError,
@@ -32,6 +32,11 @@ import type {
   StreamPayload,
 } from '../../api/types'
 import { ChatComposer } from '../../components/chat/ChatComposer'
+import {
+  BotChallenge,
+  type BotChallengeHandle,
+  type BotChallengeState,
+} from '../../components/security/BotChallenge'
 import { useSpeechPlayback } from '../../hooks/useSpeechPlayback'
 import {
   prepareTextDocument,
@@ -87,8 +92,15 @@ export function HostedAgentPage({
   const [error, setError] = useState('')
   const [versionsOpen, setVersionsOpen] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
+  const challengeRef = useRef<BotChallengeHandle>(null)
   const messageEndRef = useRef<HTMLDivElement>(null)
   const speechPlayback = useSpeechPlayback()
+  const [challenge, setChallenge] = useState<BotChallengeState>({
+    ready: access !== 'public',
+    required: false,
+    token: '',
+  })
+  const updateChallenge = useCallback((state: BotChallengeState) => setChallenge(state), [])
 
   useEffect(() => {
     let active = true
@@ -152,6 +164,10 @@ export function HostedAgentPage({
   async function submit(promptOverride?: string) {
     const prompt = (promptOverride ?? input).trim()
     if (!agent || !prompt || running) return
+    if (access === 'public' && (!challenge.ready || (challenge.required && !challenge.token))) {
+      setError('请先完成安全验证。')
+      return
+    }
 
     const attachmentContext = attachments.length
       ? `\n\n附件内容：\n${attachments.map((file) => `--- ${file.name} ---\n${file.content}`).join('\n')}`
@@ -210,9 +226,10 @@ export function HostedAgentPage({
       const streamInput = `${prompt}${attachmentContext}`
       let result: Awaited<ReturnType<typeof streamAgentRun>> | undefined
       for (let attempt = 0; attempt < 3; attempt += 1) {
-        const streamOptions: Parameters<typeof streamAgentRun>[1] = {
+        const streamOptions: Parameters<typeof streamPublicAgentRun>[2] = {
           signal: controller.signal,
           idempotencyKey,
+          challengeToken: access === 'public' ? challenge.token : undefined,
           afterEventId: lastEventId || undefined,
           onEvent,
         }
@@ -260,6 +277,7 @@ export function HostedAgentPage({
     } finally {
       abortRef.current = null
       setRunning(false)
+      if (access === 'public') challengeRef.current?.reset()
     }
   }
 
@@ -418,6 +436,15 @@ export function HostedAgentPage({
 
       <footer className="hosted-composer-wrap">
         <div className="mx-auto w-full max-w-3xl">
+          {access === 'public' ? (
+            <div className="mb-2">
+              <BotChallenge
+                action="public_agent_stream"
+                onChange={updateChallenge}
+                ref={challengeRef}
+              />
+            </div>
+          ) : null}
           {attachments.length ? (
             <div className="mb-2 flex flex-wrap gap-2">
               {attachments.map((file) => (
@@ -429,7 +456,8 @@ export function HostedAgentPage({
           ) : null}
           <ChatComposer
             busy={running}
-            disabled={running}
+            disabled={running || (access === 'public'
+              && (!challenge.ready || (challenge.required && !challenge.token)))}
             onChange={setInput}
             onFiles={(files) => void addAttachments(files)}
             onStop={() => abortRef.current?.abort()}

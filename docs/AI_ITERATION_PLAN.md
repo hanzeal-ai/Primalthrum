@@ -1929,7 +1929,14 @@ complete. Follow the same dependency and verification protocol used above.
   delivery/bounce/complaint Webhooks, immutable event evidence, and Prometheus
   gauges. Contract, replay, failure, and configuration tests pass. Qualified
   legal approval, sending-domain setup, and real mailbox delivery/bounce alert
-  verification remain open.
+  verification remain open. Migration 022 and the Web security component add
+  database-atomic IP/identity/user/resource throttles, explicit trusted-proxy
+  parsing, constant-cost missing-account login checks, production-fail-closed
+  Turnstile verification, action/hostname/timestamp binding, HMAC-only immutable
+  enforcement evidence, bounded metrics, and idempotency-bound public SSE retry
+  grants. Unit, HTTP, client, and component tests cover spoofing, 429 headers,
+  challenge rejection, token forwarding, and safe reconnect. Production keys,
+  ingress topology, and live challenge/load alert evidence remain open.
 
 ### P19-02 Billing, Usage, Team, And Settings UX
 

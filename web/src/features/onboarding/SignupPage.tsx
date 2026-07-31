@@ -1,15 +1,20 @@
 import { ArrowLeft, Check, Loader2 } from 'lucide-react'
-import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 
 import type { RegistrationInput, RegistrationResponse } from '../../api/types'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
+import {
+  BotChallenge,
+  type BotChallengeHandle,
+  type BotChallengeState,
+} from '../../components/security/BotChallenge'
 import { usePrivacyConsent } from '../privacy/usePrivacyConsent'
 
 interface SignupPageProps {
   message: string
-  onRegister: (input: RegistrationInput) => Promise<RegistrationResponse>
+  onRegister: (input: RegistrationInput, challengeToken?: string) => Promise<RegistrationResponse>
 }
 
 export function SignupPage({ message, onRegister }: SignupPageProps) {
@@ -21,6 +26,13 @@ export function SignupPage({ message, onRegister }: SignupPageProps) {
   const [error, setError] = useState('')
   const privacy = usePrivacyConsent()
   const viewed = useRef(false)
+  const challengeRef = useRef<BotChallengeHandle>(null)
+  const [challenge, setChallenge] = useState<BotChallengeState>({
+    ready: false,
+    required: false,
+    token: '',
+  })
+  const updateChallenge = useCallback((state: BotChallengeState) => setChallenge(state), [])
 
   useEffect(() => {
     if (viewed.current) return
@@ -34,14 +46,22 @@ export function SignupPage({ message, onRegister }: SignupPageProps) {
       setError('请填写工作区名称和有效邮箱，密码至少 12 位。')
       return
     }
+    if (!challenge.ready || (challenge.required && !challenge.token)) {
+      setError('请先完成安全验证。')
+      return
+    }
     setSubmitting(true)
     setError('')
     try {
       void privacy.track('signup_submitted', { planKey, source: 'signup' })
-      await onRegister({ ...form, workspaceName: form.workspaceName.trim(), planKey })
+      await onRegister(
+        { ...form, workspaceName: form.workspaceName.trim(), planKey },
+        challenge.token,
+      )
       await privacy.track('signup_completed', { planKey, source: 'signup' })
       window.location.assign('/app')
     } catch (reason) {
+      challengeRef.current?.reset()
       setError(reason instanceof Error ? reason.message : '注册失败，请稍后重试。')
       setSubmitting(false)
     }
@@ -78,8 +98,13 @@ export function SignupPage({ message, onRegister }: SignupPageProps) {
             <Label className="grid gap-2">密码
               <Input autoComplete="new-password" minLength={12} onChange={(event) => setForm({ ...form, password: event.target.value })} placeholder="至少 12 位" type="password" value={form.password} />
             </Label>
+            <BotChallenge action="auth_register" onChange={updateChallenge} ref={challengeRef} />
             {error ? <p className="border border-red-200 bg-red-50 p-3 text-sm text-red-700" role="alert">{error}</p> : null}
-            <Button className="h-11" disabled={submitting} type="submit">
+            <Button
+              className="h-11"
+              disabled={submitting || !challenge.ready || (challenge.required && !challenge.token)}
+              type="submit"
+            >
               {submitting ? <Loader2 className="animate-spin" /> : null}
               {submitting ? message : planKey === 'pro' ? '开始 7 天免费试用' : '创建免费工作区'}
             </Button>

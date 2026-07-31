@@ -14,6 +14,7 @@ import {
   type AccountEmailMessage,
 } from '../src/services/accountEmailSender';
 import { AccountTokenRepository } from '../src/services/accountTokenRepository';
+import { hashPassword, verifyPasswordOrDummy } from '../src/services/passwordHash';
 import { UserRepository } from '../src/services/userRepository';
 
 let rootDir = '';
@@ -39,6 +40,13 @@ test('account action tokens expire and can only be consumed once', () => {
   const expiring = tokens.create({ userId: user.id, purpose: 'reset_password', ttlMs: 1000 });
   now = new Date('2026-08-15T12:00:01.001Z');
   assert.equal(tokens.consume(expiring, 'reset_password'), null);
+});
+
+test('login password checks use the same verifier path for missing accounts', () => {
+  const encoded = hashPassword('correct horse battery staple');
+  assert.equal(verifyPasswordOrDummy('correct horse battery staple', encoded), true);
+  assert.equal(verifyPasswordOrDummy('a wrong long password', encoded), false);
+  assert.equal(verifyPasswordOrDummy('a wrong long password', null), false);
 });
 
 test('email outbox records successful delivery once', async () => {
