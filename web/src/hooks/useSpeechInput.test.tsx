@@ -91,4 +91,15 @@ describe('useSpeechInput', () => {
     expect(await screen.findByText('voice transcript')).toBeTruthy()
     expect(stopTrack).toHaveBeenCalled()
   })
+
+  it('surfaces a microphone permission failure without starting a recording', async () => {
+    vi.mocked(navigator.mediaDevices.getUserMedia).mockRejectedValueOnce(new Error('denied'))
+    render(<SpeechHarness />)
+    await waitFor(() => expect(api.listProviderConfigs).toHaveBeenCalledOnce())
+
+    fireEvent.click(screen.getByRole('button', { name: 'start' }))
+
+    expect(await screen.findByText('无法访问麦克风，请检查浏览器权限。')).toBeTruthy()
+    expect(api.transcribeAudio).not.toHaveBeenCalled()
+  })
 })

@@ -1761,7 +1761,7 @@ complete. Follow the same dependency and verification protocol used above.
 
 ### P17-03 Voice, Attachments, And Knowledge Ingestion
 
-- Status: In Progress
+- Status: Done
 - Goal: Deliver recording, transcription, optional speech playback, secure file
   upload, document parsing, indexing, retrieval, and source rendering.
 - Dependencies: P17-02
@@ -1809,8 +1809,12 @@ complete. Follow the same dependency and verification protocol used above.
   before either speech proxy executes. Hook and API tests cover recorded audio
   upload and provider selection; desktop and 390x844 hosted-page acceptance
   verified direct preview, microphone controls, playback state, and responsive
-  layout. Real browser permission/device capture and a combined upload-to-source
-  browser scenario remain before P17-03 can be marked Done.
+  layout. The final browser scenario uploaded a Markdown policy, created and
+  indexed the Agent, retrieved the matching SQLite vector, persisted message
+  `sources_json`, and rendered the source on desktop and 390x844 layouts with
+  zero console errors. Browser speech-recognition failure was also exercised and
+  now renders an actionable mobile error. A live STT/TTS Provider and physical
+  microphone round trip remains an environment-specific release gate.
 
 ### P18-01 Plans, Trials, Entitlements, And Credit Ledger
 

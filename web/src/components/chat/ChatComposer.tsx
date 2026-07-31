@@ -31,6 +31,11 @@ export function ChatComposer({
   const speech = useSpeechInput((transcript) => {
     onChange([value.trim(), transcript].filter(Boolean).join(' '))
   })
+  const speechStatus = speech.processing
+    ? '正在转写...'
+    : speech.listening
+      ? '正在聆听...'
+      : speech.error || '支持语音与文字'
 
   function handleKeyDown(event: KeyboardEvent<HTMLTextAreaElement>) {
     if (event.key === 'Enter' && !event.shiftKey) {
@@ -95,7 +100,7 @@ export function ChatComposer({
             {speech.processing ? <Loader2 className="animate-spin" /> : speech.listening ? <Square /> : <Mic />}
           </Button>
           <span className="hidden text-xs text-zinc-500 sm:inline">
-            {speech.processing ? '正在转写...' : speech.listening ? '正在聆听...' : speech.error || '支持语音与文字'}
+            {speechStatus}
           </span>
         </div>
         {busy && onStop ? (
@@ -121,6 +126,11 @@ export function ChatComposer({
           </Button>
         )}
       </div>
+      {speech.processing || speech.listening || speech.error ? (
+        <p className={`mt-2 text-xs sm:hidden ${speech.error ? 'text-red-600' : 'text-zinc-500'}`}>
+          {speechStatus}
+        </p>
+      ) : null}
     </div>
   )
 }

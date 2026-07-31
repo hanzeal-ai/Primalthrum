@@ -58,6 +58,9 @@ Confirm:
 - At least one demo agent can be created.
 - At least one document can be registered and indexed.
 - At least one stream run completes.
+- A browser upload-to-RAG run renders the indexed document as a message source.
+- If voice is enabled, real STT/TTS credentials complete one microphone and playback round trip on each supported browser family.
+- Denied microphone permission leaves text input usable and displays an actionable error.
 - `/metrics` returns Prometheus text.
 
 ## Known Limitations
