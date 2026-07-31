@@ -10,6 +10,14 @@ import { AgentRepository, type CreateAgentInput } from './services/agentReposito
 import { AgentVersionRepository } from './services/agentVersionRepository';
 import { sendApiError } from './services/apiErrors';
 import {
+  capabilityKey,
+  fetchCapabilityCatalog,
+} from './services/capabilityCatalogClient';
+import {
+  CapabilityDisabledError,
+  CapabilitySettingsRepository,
+} from './services/capabilitySettingsRepository';
+import {
   ConversationRepository,
   type ConversationSource,
 } from './services/conversationRepository';
@@ -50,6 +58,7 @@ import {
 } from './services/streamEventRepository';
 import { ToolAuditRepository } from './services/toolAuditRepository';
 import {
+  capabilityKeysForConfig,
   resolveStreamRequest,
   StreamRequestError,
 } from './services/streamRequestResolver';
@@ -172,6 +181,7 @@ export function createApp(options: AppOptions = {}): Koa {
     providerConfigRepository,
     new LocalSecretVault(db),
   );
+  const capabilitySettingsRepository = new CapabilitySettingsRepository(db);
   const toolAuditRepository = new ToolAuditRepository(db);
   const jobRepository = new JobRepository(db);
   const jobWorker = new InProcessJobWorker(jobRepository);
@@ -191,6 +201,10 @@ export function createApp(options: AppOptions = {}): Koa {
 
   function currentWorkspaceId(ctx: Koa.Context): number {
     return Number(ctx.state.authSession?.user.workspaceId);
+  }
+
+  function currentUserId(ctx: Koa.Context): number {
+    return Number(ctx.state.authSession?.user.id);
   }
 
   function scopedAgent(
@@ -899,6 +913,77 @@ export function createApp(options: AppOptions = {}): Koa {
     ctx.body = listSkills();
   });
 
+  router.get('/api/capabilities', async (ctx) => {
+    if (!authorize(ctx, 'workspace.read')) return;
+    try {
+      const catalog = await fetchCapabilityCatalog(agentBaseUrl);
+      const overrides = new Map(
+        capabilitySettingsRepository.list(currentWorkspaceId(ctx))
+          .map((setting) => [setting.capabilityKey, setting.enabled]),
+      );
+      ctx.body = {
+        ...catalog,
+        capabilities: catalog.capabilities.map((capability) => ({
+          ...capability,
+          enabled: overrides.get(capabilityKey(capability)) ?? capability.status === 'available',
+        })),
+      };
+    } catch (error) {
+      sendApiError(ctx, logger, {
+        status: 502,
+        code: 'CAPABILITY_CATALOG_UNAVAILABLE',
+        message: error instanceof Error ? error.message : 'capability catalog unavailable',
+      });
+    }
+  });
+
+  router.put('/api/capabilities/:kind/:name', async (ctx) => {
+    if (!authorize(ctx, 'providers.manage')) return;
+    const body = ctx.request.body as { enabled?: unknown };
+    if (typeof body.enabled !== 'boolean') {
+      sendApiError(ctx, logger, {
+        status: 400,
+        code: 'CAPABILITY_SETTING_INVALID',
+        message: 'enabled must be a boolean',
+      });
+      return;
+    }
+    try {
+      const catalog = await fetchCapabilityCatalog(agentBaseUrl);
+      const key = `${ctx.params.kind}:${ctx.params.name}`;
+      const capability = catalog.capabilities.find((item) => capabilityKey(item) === key);
+      if (!capability) {
+        sendApiError(ctx, logger, {
+          status: 404,
+          code: 'CAPABILITY_NOT_FOUND',
+          message: 'capability not found',
+        });
+        return;
+      }
+      if (body.enabled && capability.status !== 'available') {
+        sendApiError(ctx, logger, {
+          status: 409,
+          code: 'CAPABILITY_UNAVAILABLE',
+          message: 'planned capabilities cannot be enabled',
+        });
+        return;
+      }
+      const setting = capabilitySettingsRepository.set(
+        currentWorkspaceId(ctx),
+        key,
+        body.enabled,
+        currentUserId(ctx),
+      );
+      ctx.body = { ...capability, enabled: setting.enabled };
+    } catch (error) {
+      sendApiError(ctx, logger, {
+        status: 502,
+        code: 'CAPABILITY_CATALOG_UNAVAILABLE',
+        message: error instanceof Error ? error.message : 'capability catalog unavailable',
+      });
+    }
+  });
+
   router.post('/api/runs', (ctx) => {
     if (!authorize(ctx, 'agents.run')) return;
     try {
@@ -939,13 +1024,31 @@ export function createApp(options: AppOptions = {}): Koa {
         return;
       }
 
+      const config = version?.config ?? agent.config;
+      const providers = runtimeProviderResolver.resolve(config, agent.workspaceId);
+      const capabilitySnapshot = capabilitySettingsRepository.snapshot(
+        agent.workspaceId,
+        capabilityKeysForConfig(config, providers),
+      );
+      capabilitySettingsRepository.assertEnabled(capabilitySnapshot);
+
       const created = runRepository.create({
         ...body,
         agentVersionId: version?.id,
+        capabilitySnapshot,
       });
       ctx.status = 201;
       ctx.body = created;
     } catch (error) {
+      if (error instanceof CapabilityDisabledError) {
+        sendApiError(ctx, logger, {
+          status: 409,
+          code: 'CAPABILITY_DISABLED',
+          message: error.message,
+          details: { capabilities: error.capabilityKeys },
+        });
+        return;
+      }
       sendApiError(ctx, logger, {
         status: 400,
         code: 'RUN_INVALID',
@@ -1158,6 +1261,7 @@ export function createApp(options: AppOptions = {}): Koa {
         workspaceId,
         agentVersionRepository,
         runtimeProviderResolver,
+        capabilitySettingsRepository,
         runIdentity,
       );
       currentRunId = streamRequest.runId;

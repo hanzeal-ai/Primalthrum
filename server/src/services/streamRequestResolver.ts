@@ -1,5 +1,9 @@
 import type { AgentRepository } from './agentRepository';
 import type { AgentVersionRepository } from './agentVersionRepository';
+import {
+  CapabilityDisabledError,
+  type CapabilitySettingsRepository,
+} from './capabilitySettingsRepository';
 import type { RunRepository } from './runRepository';
 import type {
   RuntimeModelEndpoint,
@@ -41,6 +45,7 @@ export function resolveStreamRequest(
   workspaceId?: number,
   agentVersionRepository?: AgentVersionRepository,
   runtimeProviderResolver?: RuntimeProviderResolver,
+  capabilitySettings?: CapabilitySettingsRepository,
   runIdentity?: StreamRunIdentity,
 ): ResolvedStreamRequest {
   const candidate = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
@@ -65,6 +70,19 @@ export function resolveStreamRequest(
     const providers = typeof workspaceId === 'number' && runtimeProviderResolver
       ? runtimeProviderResolver.resolve(config, workspaceId)
       : mockRuntimeProviders();
+    const capabilitySnapshot = typeof workspaceId === 'number' && capabilitySettings
+      ? capabilitySettings.snapshot(workspaceId, capabilityKeysForConfig(config, providers))
+      : undefined;
+    if (capabilitySnapshot && capabilitySettings) {
+      try {
+        capabilitySettings.assertEnabled(capabilitySnapshot);
+      } catch (error) {
+        if (error instanceof CapabilityDisabledError) {
+          throw new StreamRequestError(409, error.message);
+        }
+        throw error;
+      }
+    }
 
     const input = toText(candidate.input ?? candidate.goal ?? candidate.task_desc, '');
     if (!input) {
@@ -76,6 +94,7 @@ export function resolveStreamRequest(
       agentVersionId: version?.id,
       idempotencyKey: runIdentity?.idempotencyKey,
       requestHash: runIdentity?.requestHash,
+      capabilitySnapshot,
       input,
     });
 
@@ -99,6 +118,27 @@ export function resolveStreamRequest(
     runId: null,
     payload: normalizeLegacyPayload(candidate),
   };
+}
+
+export function capabilityKeysForConfig(
+  config: {
+    memoryProvider: string;
+    cacheProvider: string;
+    ragProvider: string;
+    enabledTools: string[];
+    enabledSkills: string[];
+  },
+  providers: ReturnType<typeof mockRuntimeProviders>,
+): string[] {
+  return [
+    `llm:${providers.llm.provider}`,
+    `embedding:${providers.embedding.provider}`,
+    `memory:${config.memoryProvider}`,
+    `cache:${config.cacheProvider}`,
+    `rag:${config.ragProvider}`,
+    ...config.enabledTools.map((name) => `tool:${name}`),
+    ...config.enabledSkills.map((name) => `skill:${name}`),
+  ];
 }
 
 function optionalPositiveInteger(value: unknown, name: string): number | null {

@@ -1,4 +1,5 @@
 import { SqliteDatabase, sqlValue } from '../db/sqlite';
+import type { CapabilityRunSnapshot } from './capabilitySettingsRepository';
 
 export interface RunRecord {
   id: number;
@@ -7,6 +8,7 @@ export interface RunRecord {
   idempotencyKey: string | null;
   requestHash: string;
   conversationId: number | null;
+  capabilitySnapshot: CapabilityRunSnapshot | Record<string, never>;
   workspaceId: number;
   input: string;
   status: string;
@@ -20,6 +22,7 @@ export interface CreateRunInput {
   agentVersionId?: number | null;
   idempotencyKey?: string | null;
   requestHash?: string;
+  capabilitySnapshot?: CapabilityRunSnapshot;
 }
 
 interface RunRow {
@@ -29,6 +32,7 @@ interface RunRow {
   idempotency_key: string | null;
   request_hash: string;
   conversation_id: number | null;
+  capability_snapshot_json: string;
   workspace_id: number;
   input: string;
   status: string;
@@ -50,7 +54,8 @@ export class RunRepository {
         input,
         status,
         idempotency_key,
-        request_hash
+        request_hash,
+        capability_snapshot_json
       )
       VALUES (
         ${sqlValue(normalized.agentId)},
@@ -63,7 +68,8 @@ export class RunRepository {
         ${sqlValue(normalized.input)},
         'pending',
         ${sqlValue(normalized.idempotencyKey ?? null)},
-        ${sqlValue(normalized.requestHash ?? '')}
+        ${sqlValue(normalized.requestHash ?? '')},
+        ${sqlValue(JSON.stringify(normalized.capabilitySnapshot ?? {}))}
       );
     `);
 
@@ -159,6 +165,7 @@ function normalizeRunInput(input: CreateRunInput): CreateRunInput {
     agentVersionId: normalizeOptionalVersionId(input.agentVersionId),
     idempotencyKey: normalizeOptionalIdempotencyKey(input.idempotencyKey),
     requestHash: typeof input.requestHash === 'string' ? input.requestHash : '',
+    capabilitySnapshot: input.capabilitySnapshot,
   };
 }
 
@@ -187,6 +194,7 @@ function toRunRecord(row: RunRow): RunRecord {
     idempotencyKey: row.idempotency_key,
     requestHash: row.request_hash,
     conversationId: row.conversation_id === null ? null : Number(row.conversation_id),
+    capabilitySnapshot: JSON.parse(row.capability_snapshot_json) as CapabilityRunSnapshot,
     workspaceId: Number(row.workspace_id),
     input: row.input,
     status: row.status,
@@ -201,6 +209,7 @@ const RUN_COLUMNS = [
   'idempotency_key',
   'request_hash',
   'conversation_id',
+  'capability_snapshot_json',
   'workspace_id',
   'input',
   'status',

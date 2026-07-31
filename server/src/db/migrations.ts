@@ -56,6 +56,10 @@ export const MIGRATIONS: Migration[] = [
     id: '011_run_idempotency',
     up: applyRunIdempotency,
   },
+  {
+    id: '012_workspace_capabilities',
+    up: applyWorkspaceCapabilities,
+  },
 ];
 
 export function runMigrations(db: DatabaseAdapter): void {
@@ -522,6 +526,22 @@ function applyRunIdempotency(db: DatabaseAdapter): void {
     CREATE UNIQUE INDEX IF NOT EXISTS idx_runs_workspace_idempotency
     ON runs(workspace_id, idempotency_key)
     WHERE idempotency_key IS NOT NULL;
+  `);
+}
+
+function applyWorkspaceCapabilities(db: DatabaseAdapter): void {
+  ensureColumn(db, 'runs', 'capability_snapshot_json', `TEXT NOT NULL DEFAULT '{}'`);
+  db.run(`
+    CREATE TABLE IF NOT EXISTS workspace_capability_settings (
+      workspace_id INTEGER NOT NULL,
+      capability_key TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 1,
+      updated_by_user_id INTEGER,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(workspace_id, capability_key),
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+      FOREIGN KEY(updated_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+    );
   `);
 }
 

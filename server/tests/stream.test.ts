@@ -19,6 +19,35 @@ const upstreamPayloads: unknown[] = [];
 before(async () => {
   rootDir = mkdtempSync(join(tmpdir(), 'primalthrum-stream-'));
   agentServer = createServer((req, res) => {
+    if (req.method === 'GET' && req.url === '/capabilities') {
+      res.writeHead(200, { 'content-type': 'application/json' });
+      res.end(JSON.stringify({
+        schemaVersion: '1.0',
+        capabilities: [
+          {
+            kind: 'tool', name: 'file_reader', version: '1.0.0',
+            description: 'Read approved files.', status: 'available', hotPluggable: true,
+            configSchema: { type: 'object' }, permissions: ['fs:read'], dependencies: [],
+          },
+          {
+            kind: 'memory', name: 'sqlite', version: '1.0.0',
+            description: 'SQLite memory.', status: 'available', hotPluggable: true,
+            configSchema: { type: 'object' }, permissions: [], dependencies: [],
+          },
+          {
+            kind: 'stt', name: 'openai', version: '1.0.0',
+            description: 'Speech to text.', status: 'planned', hotPluggable: true,
+            configSchema: { type: 'object' }, permissions: [], dependencies: [],
+          },
+        ],
+        health: [
+          { key: 'tool:file_reader', status: 'ok' },
+          { key: 'memory:sqlite', status: 'ok' },
+          { key: 'stt:openai', status: 'planned' },
+        ],
+      }));
+      return;
+    }
     if (req.method === 'POST' && req.url === '/stream') {
       let body = '';
       req.on('data', (chunk) => {
@@ -97,6 +126,32 @@ test('POST /api/stream proxies the agent SSE stream', async () => {
   assert.match(body, /"node":"intake"/);
   assert.match(body, /event: agent\.run\.completed/);
   assert.match(body, /"status":"done"/);
+});
+
+test('capability catalog merges workspace settings and rejects planned enablement', async () => {
+  const catalogResponse = await fetch(`${appBaseUrl}/api/capabilities`, {
+    headers: authHeaders,
+  });
+  assert.equal(catalogResponse.status, 200);
+  const catalog = await catalogResponse.json() as {
+    capabilities: Array<{ kind: string; name: string; enabled: boolean }>;
+  };
+  assert.equal(
+    catalog.capabilities.find((item) => item.kind === 'memory' && item.name === 'sqlite')?.enabled,
+    true,
+  );
+  assert.equal(
+    catalog.capabilities.find((item) => item.kind === 'stt' && item.name === 'openai')?.enabled,
+    false,
+  );
+
+  const plannedResponse = await fetch(`${appBaseUrl}/api/capabilities/stt/openai`, {
+    method: 'PUT',
+    headers: jsonAuthHeaders(),
+    body: JSON.stringify({ enabled: true }),
+  });
+  assert.equal(plannedResponse.status, 409);
+  assert.equal((await plannedResponse.json() as { error: { code: string } }).error.code, 'CAPABILITY_UNAVAILABLE');
 });
 
 test('POST /api/stream can run by agentId and persist proxied events', async () => {
@@ -221,6 +276,11 @@ test('POST /api/stream can run by agentId and persist proxied events', async () 
     input: string;
     status: string;
     endedAt: string | null;
+    capabilitySnapshot: {
+      schemaVersion: string;
+      selected: string[];
+      settings: Record<string, boolean>;
+    };
   };
   assert.equal(run.agentId, agent.id);
   assert.equal(run.agentVersionId, preview.version.id);
@@ -229,6 +289,10 @@ test('POST /api/stream can run by agentId and persist proxied events', async () 
   assert.equal(run.input, 'Use the saved agent config');
   assert.equal(run.status, 'completed');
   assert.ok(run.endedAt);
+  assert.equal(run.capabilitySnapshot.schemaVersion, '1.0');
+  assert.ok(run.capabilitySnapshot.selected.includes('tool:file_reader'));
+  assert.ok(run.capabilitySnapshot.selected.includes('llm:openai-compatible'));
+  assert.equal(run.capabilitySnapshot.settings['tool:file_reader'], true);
 
   const eventsResponse = await fetch(`${appBaseUrl}/api/runs/${runId}/events`, {
     headers: authHeaders,
@@ -327,6 +391,36 @@ test('POST /api/stream can run by agentId and persist proxied events', async () 
   );
   assert.equal(await replayResponse.text(), body);
   assert.equal(upstreamPayloads.length, 1);
+
+  const disableResponse = await fetch(`${appBaseUrl}/api/capabilities/tool/file_reader`, {
+    method: 'PUT',
+    headers: jsonAuthHeaders(),
+    body: JSON.stringify({ enabled: false }),
+  });
+  assert.equal(disableResponse.status, 200);
+
+  const disabledRunResponse = await fetch(`${appBaseUrl}/api/stream`, {
+    method: 'POST',
+    headers: {
+      ...jsonAuthHeaders(),
+      'idempotency-key': 'configured-stream-run-disabled',
+    },
+    body: JSON.stringify({
+      agentId: agent.id,
+      versionId: preview.version.id,
+      input: 'Use the saved agent config again',
+    }),
+  });
+  assert.equal(disabledRunResponse.status, 409);
+  assert.match(await disabledRunResponse.text(), /tool:file_reader/);
+  assert.equal(upstreamPayloads.length, 1);
+
+  const enableResponse = await fetch(`${appBaseUrl}/api/capabilities/tool/file_reader`, {
+    method: 'PUT',
+    headers: jsonAuthHeaders(),
+    body: JSON.stringify({ enabled: true }),
+  });
+  assert.equal(enableResponse.status, 200);
 
   const reconnectResponse = await fetch(`${appBaseUrl}/api/runs/${runId}/stream`, {
     headers: {

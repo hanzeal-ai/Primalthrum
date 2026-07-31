@@ -1746,8 +1746,14 @@ complete. Follow the same dependency and verification protocol used above.
   and hot-plug policy through the internal `/capabilities` endpoint. Runtime
   creation now rejects unknown names, planned providers, and missing skill/tool
   dependencies instead of silently dropping them. Agent tests cover the unified
-  catalog and strict selection contract. Workspace enable/disable policy and
-  server-side Run snapshots remain in P17-02B.
+  catalog and strict selection contract. P17-02B adds workspace-scoped capability
+  settings, live Agent catalog aggregation, health passthrough, and owner/admin
+  enable/disable APIs. Planned capabilities cannot be enabled. Every Run stores
+  its selected capability/settings snapshot; disabling a capability blocks the
+  next Run without mutating completed or already-started Runs. The 21-test server
+  suite covers migration idempotency, catalog state, planned-provider rejection,
+  between-run disable/enable behavior, upstream call count, and replay. Web
+  capability controls remain in P17-02C.
 
 ### P17-03 Voice, Attachments, And Knowledge Ingestion
 
