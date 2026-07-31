@@ -33,6 +33,8 @@ Tests inject a silent logger so payload assertions stay deterministic.
 | `DOCUMENT_AGENT_NOT_FOUND` | 404 | Document operation references a missing agent. |
 | `DOCUMENT_INVALID` | 400 | Document registration payload is invalid. |
 | `DOCUMENT_INDEX_FAILED` | 500 | Document indexing job failed. |
+| `SPEECH_REQUEST_INVALID` | 400 | Audio, text, or speech provider selection is invalid. |
+| `SPEECH_PROVIDER_FAILED` | 502 | The configured STT/TTS provider failed. |
 | `DOCUMENT_NOT_FOUND` | 404 | Document operation references a missing document. |
 | `JOB_NOT_FOUND` | 404 | Job lookup references a missing job. |
 | `PROVIDER_CONFIG_INVALID` | 400 | Provider configuration payload is invalid. |

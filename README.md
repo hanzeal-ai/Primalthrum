@@ -96,6 +96,10 @@ curl -N http://127.0.0.1:8000/stream \
 `POST /internal/embeddings` 仅供 Node 服务端批量生成索引和查询向量，生产
 部署应将 Agent 服务放在受信任的内部网络，不直接暴露该接口。
 
+语音采用可控的链式管线。Web 录音由 Node 的认证接口受理，Node 解析工作区
+加密 STT/TTS 配置后调用 Agent 的 `/internal/speech/transcriptions` 与
+`/internal/speech/synthesis`；Agent 再访问 OpenAI-compatible Audio API。
+
 事件格式：
 
 ```text

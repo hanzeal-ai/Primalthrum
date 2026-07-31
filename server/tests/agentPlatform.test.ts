@@ -41,6 +41,45 @@ before(async () => {
   dbPath = join(rootDir, 'platform.sqlite');
   documentStorageDir = join(rootDir, 'documents');
   agentRuntimeServer = createServer((request, response) => {
+    if (
+      request.method === 'POST'
+      && request.url === '/internal/speech/transcriptions'
+    ) {
+      let body = '';
+      request.on('data', (chunk) => {
+        body += chunk.toString();
+      });
+      request.on('end', () => {
+        const payload = JSON.parse(body) as { provider: { model: string } };
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({
+          provider: 'openai-compatible',
+          model: payload.provider.model,
+          text: 'Create a support agent',
+        }));
+      });
+      return;
+    }
+    if (
+      request.method === 'POST'
+      && request.url === '/internal/speech/synthesis'
+    ) {
+      let body = '';
+      request.on('data', (chunk) => {
+        body += chunk.toString();
+      });
+      request.on('end', () => {
+        const payload = JSON.parse(body) as { provider: { model: string } };
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(JSON.stringify({
+          provider: 'openai-compatible',
+          model: payload.provider.model,
+          mimeType: 'audio/mpeg',
+          audioBase64: Buffer.from('speech-bytes').toString('base64'),
+        }));
+      });
+      return;
+    }
     if (request.method !== 'POST' || request.url !== '/internal/embeddings') {
       response.writeHead(404).end();
       return;
@@ -986,6 +1025,75 @@ test('provider config APIs store secrets as redacted references', async () => {
       },
     },
   }, 1), /HTTPS or loopback HTTP/);
+});
+
+test('speech APIs resolve encrypted STT and TTS provider configs', async () => {
+  async function createSpeechProvider(type: 'stt' | 'tts', model: string) {
+    const response = await fetch(`${baseUrl}/api/provider-configs`, {
+      method: 'POST',
+      headers: jsonAuthHeaders(),
+      body: JSON.stringify({
+        name: `${type}-integration`,
+        type,
+        config: {
+          provider: 'openai-compatible',
+          model,
+          baseUrl: 'https://speech.example/v1',
+        },
+        secret: `${type}-secret-value`,
+      }),
+    });
+    assert.equal(response.status, 201);
+    return response.json() as Promise<{ id: number }>;
+  }
+
+  const stt = await createSpeechProvider('stt', 'gpt-4o-mini-transcribe');
+  const tts = await createSpeechProvider('tts', 'gpt-4o-mini-tts');
+  const transcriptionResponse = await fetch(`${baseUrl}/api/speech/transcriptions`, {
+    method: 'POST',
+    headers: jsonAuthHeaders(),
+    body: JSON.stringify({
+      providerConfigId: stt.id,
+      filename: 'recording.webm',
+      mimeType: 'audio/webm',
+      audioBase64: Buffer.from('webm-audio').toString('base64'),
+    }),
+  });
+  assert.equal(transcriptionResponse.status, 200);
+  assert.deepEqual(await transcriptionResponse.json(), {
+    provider: 'openai-compatible',
+    model: 'gpt-4o-mini-transcribe',
+    text: 'Create a support agent',
+  });
+
+  const synthesisResponse = await fetch(`${baseUrl}/api/speech/synthesis`, {
+    method: 'POST',
+    headers: jsonAuthHeaders(),
+    body: JSON.stringify({
+      providerConfigId: tts.id,
+      text: 'The agent is ready.',
+      voice: 'alloy',
+    }),
+  });
+  assert.equal(synthesisResponse.status, 200);
+  assert.deepEqual(await synthesisResponse.json(), {
+    provider: 'openai-compatible',
+    model: 'gpt-4o-mini-tts',
+    mimeType: 'audio/mpeg',
+    audioBase64: Buffer.from('speech-bytes').toString('base64'),
+  });
+
+  const invalidAudioResponse = await fetch(`${baseUrl}/api/speech/transcriptions`, {
+    method: 'POST',
+    headers: jsonAuthHeaders(),
+    body: JSON.stringify({
+      providerConfigId: stt.id,
+      filename: 'recording.exe',
+      mimeType: 'application/octet-stream',
+      audioBase64: Buffer.from('invalid').toString('base64'),
+    }),
+  });
+  assert.equal(invalidAudioResponse.status, 400);
 });
 
 test('POST /api/runs creates a pending run for an existing agent', async () => {

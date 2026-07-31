@@ -43,12 +43,10 @@ def capability_manifests() -> list[CapabilityManifest]:
         *_storage_manifests(),
         *_tool_manifests(),
         *_skill_manifests(),
-        CapabilityManifest(
-            "stt", "openai", "1.0.0", "OpenAI-compatible speech-to-text adapter.", status="planned"
-        ),
-        CapabilityManifest(
-            "tts", "openai", "1.0.0", "OpenAI-compatible text-to-speech adapter.", status="planned"
-        ),
+        CapabilityManifest("stt", "openai", "1.0.0", "OpenAI speech-to-text adapter."),
+        CapabilityManifest("stt", "openai-compatible", "1.0.0", "OpenAI-compatible speech-to-text adapter."),
+        CapabilityManifest("tts", "openai", "1.0.0", "OpenAI text-to-speech adapter."),
+        CapabilityManifest("tts", "openai-compatible", "1.0.0", "OpenAI-compatible text-to-speech adapter."),
     ]
     validate_capability_manifests(manifests)
     return sorted(manifests, key=lambda item: (item.kind, item.name))

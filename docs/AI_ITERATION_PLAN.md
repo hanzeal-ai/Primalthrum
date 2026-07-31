@@ -1796,7 +1796,15 @@ complete. Follow the same dependency and verification protocol used above.
   stores remain disabled. Agent, Server, and Web suites cover the full
   upload/index/query/source contract. Desktop and 390x844 browser acceptance
   passed with no horizontal overflow. STT/TTS adapters and full browser
-  media/upload E2E remain in P17-03D.
+  media/upload E2E remain in P17-03D. P17-03D1 implements OpenAI and
+  OpenAI-compatible chained STT/TTS adapters using the current multipart
+  transcription and binary speech contracts. Authenticated Node proxy routes
+  resolve workspace-encrypted speech configs, enforce MIME/Base64/8 MiB audio
+  and 4000-character speech limits, and keep plaintext keys inside the trusted
+  service request. Agent and Server suites cover provider payloads, secret
+  resolution, validation, and both speech directions. Provider management,
+  MediaRecorder input, playback controls, browser fallback, and media E2E remain
+  in P17-03D2.
 
 ### P18-01 Plans, Trials, Entitlements, And Credit Ledger
 

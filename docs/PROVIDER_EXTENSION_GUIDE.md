@@ -9,6 +9,7 @@ Each provider must satisfy the matching Protocol and have a stable `name`.
 | --- | --- | --- |
 | LLM | `agent/runtime/llm.py` | `stream_chat(messages)` |
 | Embedding | `agent/runtime/embeddings.py` | `embed(texts)` |
+| STT/TTS | `agent/runtime/audio.py` | `transcribe(audio, filename, mime_type)`, `synthesize(text, voice, response_format)` |
 | Memory | `agent/runtime/memory.py` | `write_summary(run_id, summary)`, `list_summaries()` |
 | Cache | `agent/runtime/cache.py` | `get(key)`, `set(key, value)` |
 | RAG | `agent/runtime/rag.py` | `upsert(document_id, text)`, `retrieve(query, top_k)` |
@@ -65,3 +66,6 @@ if config.memory_provider == "example":
   the Agent validates these invariants before the Server persists vectors.
 - The Server calls `POST /internal/embeddings` for durable indexing. Keep that route
   private to the trusted service network in production.
+- Speech providers use the same encrypted workspace secret boundary. Browser audio
+  must go through the authenticated Node API; keep Agent `/internal/speech/*`
+  endpoints on the trusted service network.

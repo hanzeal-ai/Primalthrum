@@ -1,4 +1,6 @@
 import asyncio
+import base64
+import binascii
 import hashlib
 import json
 import math
@@ -15,6 +17,7 @@ from pydantic import BaseModel, Field, SecretStr
 
 from runtime import AgentRuntimeConfig, ModelProviderConfig, create_runtime
 from runtime.capabilities import capability_health, capability_manifests
+from runtime.audio import create_speech_provider
 from runtime.embeddings import create_embedding_provider
 from runtime.llm import ProviderRequestError
 
@@ -50,6 +53,20 @@ class EmbeddingBatchRequest(BaseModel):
         default_factory=lambda: RuntimeModelRequest(model="mock-embedding")
     )
     texts: list[str] = Field(..., min_length=1, max_length=128)
+
+
+class SpeechTranscriptionRequest(BaseModel):
+    provider: RuntimeModelRequest
+    filename: str = Field(..., min_length=1, max_length=255)
+    mime_type: str = Field(..., min_length=1, max_length=100)
+    audio_base64: str = Field(..., min_length=1)
+
+
+class SpeechSynthesisRequest(BaseModel):
+    provider: RuntimeModelRequest
+    text: str = Field(..., min_length=1, max_length=4_000)
+    voice: str = Field(default="alloy", min_length=1, max_length=50)
+    response_format: str = Field(default="mp3", pattern="^(mp3|opus|aac|flac|wav|pcm)$")
 
 
 class AgentState(TypedDict):
@@ -458,6 +475,54 @@ async def embeddings(request: EmbeddingBatchRequest) -> dict[str, Any]:
         "model": provider.model,
         "dimensions": dimensions,
         "embeddings": vectors,
+    }
+
+
+@app.post("/internal/speech/transcriptions")
+async def transcribe_speech(request: SpeechTranscriptionRequest) -> dict[str, Any]:
+    try:
+        audio = base64.b64decode(request.audio_base64, validate=True)
+    except (binascii.Error, ValueError) as error:
+        raise HTTPException(status_code=400, detail="audio_base64 is invalid") from error
+    if not audio:
+        raise HTTPException(status_code=400, detail="audio cannot be empty")
+    if len(audio) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="audio cannot exceed 8 MiB")
+
+    try:
+        provider = create_speech_provider(model_provider_config(request.provider))
+        text = await asyncio.to_thread(
+            provider.transcribe,
+            audio,
+            request.filename,
+            request.mime_type,
+        )
+    except ProviderRequestError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    except (KeyError, ValueError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return {"provider": provider.name, "model": provider.model, "text": text}
+
+
+@app.post("/internal/speech/synthesis")
+async def synthesize_speech(request: SpeechSynthesisRequest) -> dict[str, Any]:
+    try:
+        provider = create_speech_provider(model_provider_config(request.provider))
+        audio = await asyncio.to_thread(
+            provider.synthesize,
+            request.text.strip(),
+            request.voice,
+            request.response_format,
+        )
+    except ProviderRequestError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    except (KeyError, ValueError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+    return {
+        "provider": provider.name,
+        "model": provider.model,
+        "mimeType": audio.mime_type,
+        "audioBase64": base64.b64encode(audio.data).decode("ascii"),
     }
 
 

@@ -32,6 +32,7 @@ import {
   type CreateDocumentInput,
 } from './services/documentRepository';
 import { AgentEmbeddingClient } from './services/agentEmbeddingClient';
+import { AgentSpeechClient } from './services/agentSpeechClient';
 import { chunkDocumentText } from './services/documentChunker';
 import { DocumentIndexRepository } from './services/documentIndexRepository';
 import { parseDocumentUpload } from './services/documentUpload';
@@ -73,6 +74,8 @@ import { hasWorkspacePermission, type WorkspacePermission } from './services/wor
 import { WorkspaceRepository } from './services/workspaceRepository';
 import { LocalSecretVault } from './services/localSecretVault';
 import { RuntimeProviderResolver } from './services/runtimeProviderResolver';
+import { RuntimeSpeechResolver } from './services/runtimeSpeechResolver';
+import { parseAudioPayload, parseSpeechText } from './services/speechPayload';
 
 export interface AppOptions {
   agentBaseUrl?: string;
@@ -185,6 +188,11 @@ export function createApp(options: AppOptions = {}): Koa {
     new LocalSecretVault(db),
   );
   const embeddingClient = new AgentEmbeddingClient(agentBaseUrl);
+  const speechClient = new AgentSpeechClient(agentBaseUrl);
+  const speechResolver = new RuntimeSpeechResolver(
+    providerConfigRepository,
+    new LocalSecretVault(db),
+  );
   const capabilitySettingsRepository = new CapabilitySettingsRepository(db);
   const toolAuditRepository = new ToolAuditRepository(db);
   const jobRepository = new JobRepository(db);
@@ -307,7 +315,7 @@ export function createApp(options: AppOptions = {}): Koa {
 
     await next();
   });
-  app.use(bodyParser({ jsonLimit: '3mb' }));
+  app.use(bodyParser({ jsonLimit: '12mb' }));
   app.use(async (ctx, next) => {
     const startedAt = Date.now();
     try {
@@ -975,6 +983,61 @@ export function createApp(options: AppOptions = {}): Koa {
 
   router.get('/api/skills', (ctx) => {
     ctx.body = listSkills();
+  });
+
+  router.post('/api/speech/transcriptions', async (ctx) => {
+    if (!authorize(ctx, 'agents.run')) return;
+    try {
+      const body = ctx.request.body as Record<string, unknown>;
+      const providerConfigId = parseOptionalPositiveInteger(body.providerConfigId);
+      if (providerConfigId === null) throw new Error('providerConfigId must be a positive integer');
+      const audio = parseAudioPayload({
+        filename: body.filename,
+        mimeType: body.mimeType,
+        audioBase64: body.audioBase64,
+      });
+      const provider = speechResolver.resolve(
+        'stt',
+        currentWorkspaceId(ctx),
+        providerConfigId,
+      );
+      ctx.body = await speechClient.transcribe(provider, audio);
+    } catch (error) {
+      const upstreamFailure = error instanceof Error
+        && error.message.startsWith('speech service returned HTTP');
+      sendApiError(ctx, logger, {
+        status: upstreamFailure ? 502 : 400,
+        code: upstreamFailure ? 'SPEECH_PROVIDER_FAILED' : 'SPEECH_REQUEST_INVALID',
+        message: error instanceof Error ? error.message : 'speech transcription failed',
+      });
+    }
+  });
+
+  router.post('/api/speech/synthesis', async (ctx) => {
+    if (!authorize(ctx, 'agents.run')) return;
+    try {
+      const body = ctx.request.body as Record<string, unknown>;
+      const providerConfigId = parseOptionalPositiveInteger(body.providerConfigId);
+      if (providerConfigId === null) throw new Error('providerConfigId must be a positive integer');
+      const provider = speechResolver.resolve(
+        'tts',
+        currentWorkspaceId(ctx),
+        providerConfigId,
+      );
+      ctx.body = await speechClient.synthesize(
+        provider,
+        parseSpeechText(body.text),
+        typeof body.voice === 'string' && body.voice.trim() ? body.voice.trim() : 'alloy',
+      );
+    } catch (error) {
+      const upstreamFailure = error instanceof Error
+        && error.message.startsWith('speech service returned HTTP');
+      sendApiError(ctx, logger, {
+        status: upstreamFailure ? 502 : 400,
+        code: upstreamFailure ? 'SPEECH_PROVIDER_FAILED' : 'SPEECH_REQUEST_INVALID',
+        message: error instanceof Error ? error.message : 'speech synthesis failed',
+      });
+    }
   });
 
   router.get('/api/capabilities', async (ctx) => {
