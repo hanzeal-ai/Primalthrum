@@ -1687,14 +1687,20 @@ complete. Follow the same dependency and verification protocol used above.
 
 ### P16-02 Conversations, Agent Versions, And Deployments
 
-- Status: In Progress
+- Status: Done
 - Goal: Persist conversations/messages and implement immutable Agent versions,
   preview, publish, audience policy, and rollback.
 - Dependencies: P15-03, P16-01
 - Verification: migration, lifecycle, reconnect, replay, and rollback tests.
-- Current evidence: conversations/messages, reconnect, replay, audience policy,
-  and hosted deployment URLs are complete from P15-03. Immutable Agent versions,
-  deployment records, preview promotion, and rollback remain open.
+- Current evidence: migration 010 persists immutable configuration snapshots,
+  preview and production deployment history, active deployment pointers, and the
+  Agent version used by each Run. Authenticated preview URLs execute the selected
+  version while public URLs always execute production. Generate creates and
+  publishes version 1; audience changes create a new version; publish and rollback
+  preserve prior snapshots and leave exactly one active production deployment.
+  Owner/admin/member/viewer permissions and cross-workspace hiding are covered by
+  the 20-test server suite. The web version panel supports create-preview, open,
+  publish, and rollback. Desktop and 390x844 browser lifecycle acceptance passed.
 
 ### P17-01 Real Model And Canonical Stream Runtime
 

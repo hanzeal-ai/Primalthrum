@@ -117,11 +117,19 @@ test('POST /api/stream can run by agentId and persist proxied events', async () 
   assert.equal(agentResponse.status, 201);
   const agent = await agentResponse.json() as { id: number; slug: string };
 
+  const versionResponse = await fetch(`${appBaseUrl}/api/agents/${agent.id}/versions`, {
+    method: 'POST',
+    headers: authHeaders,
+  });
+  assert.equal(versionResponse.status, 201);
+  const preview = await versionResponse.json() as { version: { id: number } };
+
   const response = await fetch(`${appBaseUrl}/api/stream`, {
     method: 'POST',
     headers: jsonAuthHeaders(),
     body: JSON.stringify({
       agentId: agent.id,
+      versionId: preview.version.id,
       input: 'Use the saved agent config',
     }),
   });
@@ -148,8 +156,13 @@ test('POST /api/stream can run by agentId and persist proxied events', async () 
     headers: authHeaders,
   });
   assert.equal(runResponse.status, 200);
-  const run = await runResponse.json() as { agentId: number; input: string };
+  const run = await runResponse.json() as {
+    agentId: number;
+    agentVersionId: number | null;
+    input: string;
+  };
   assert.equal(run.agentId, agent.id);
+  assert.equal(run.agentVersionId, preview.version.id);
   assert.equal(run.input, 'Use the saved agent config');
 
   const eventsResponse = await fetch(`${appBaseUrl}/api/runs/${runId}/events`, {

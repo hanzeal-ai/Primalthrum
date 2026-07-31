@@ -3,6 +3,7 @@ import { SqliteDatabase, sqlValue } from '../db/sqlite';
 export interface RunRecord {
   id: number;
   agentId: number;
+  agentVersionId: number | null;
   workspaceId: number;
   input: string;
   status: string;
@@ -13,11 +14,13 @@ export interface RunRecord {
 export interface CreateRunInput {
   agentId: number;
   input: string;
+  agentVersionId?: number | null;
 }
 
 interface RunRow {
   id: number;
   agent_id: number;
+  agent_version_id: number | null;
   workspace_id: number;
   input: string;
   status: string;
@@ -32,9 +35,10 @@ export class RunRepository {
     const normalized = normalizeRunInput(input);
 
     this.db.run(`
-      INSERT INTO runs (agent_id, workspace_id, input, status)
+      INSERT INTO runs (agent_id, agent_version_id, workspace_id, input, status)
       VALUES (
         ${sqlValue(normalized.agentId)},
+        ${sqlValue(normalized.agentVersionId ?? null)},
         (
           SELECT workspace_id
           FROM agents
@@ -46,7 +50,7 @@ export class RunRepository {
     `);
 
     const rows = this.db.query<RunRow>(`
-      SELECT id, agent_id, workspace_id, input, status, started_at, ended_at
+      SELECT id, agent_id, agent_version_id, workspace_id, input, status, started_at, ended_at
       FROM runs
       ORDER BY id DESC
       LIMIT 1;
@@ -61,7 +65,7 @@ export class RunRepository {
 
   findById(id: number): RunRecord | null {
     const rows = this.db.query<RunRow>(`
-      SELECT id, agent_id, workspace_id, input, status, started_at, ended_at
+      SELECT id, agent_id, agent_version_id, workspace_id, input, status, started_at, ended_at
       FROM runs
       WHERE id = ${sqlValue(id)}
       LIMIT 1;
@@ -102,13 +106,24 @@ function normalizeRunInput(input: CreateRunInput): CreateRunInput {
   return {
     agentId,
     input: input.input.trim(),
+    agentVersionId: normalizeOptionalVersionId(input.agentVersionId),
   };
+}
+
+function normalizeOptionalVersionId(value: unknown): number | null {
+  if (value === undefined || value === null) return null;
+  const versionId = Number(value);
+  if (!Number.isInteger(versionId) || versionId <= 0) {
+    throw new Error('agentVersionId must be a positive integer');
+  }
+  return versionId;
 }
 
 function toRunRecord(row: RunRow): RunRecord {
   return {
     id: Number(row.id),
     agentId: Number(row.agent_id),
+    agentVersionId: row.agent_version_id === null ? null : Number(row.agent_version_id),
     workspaceId: Number(row.workspace_id),
     input: row.input,
     status: row.status,

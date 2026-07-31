@@ -1,4 +1,5 @@
 import type { AgentRepository } from './agentRepository';
+import type { AgentVersionRepository } from './agentVersionRepository';
 import type { RunRepository } from './runRepository';
 
 export interface AgentStreamPayload {
@@ -27,6 +28,7 @@ export function resolveStreamRequest(
   agentRepository: AgentRepository,
   runRepository: RunRepository,
   workspaceId?: number,
+  agentVersionRepository?: AgentVersionRepository,
 ): ResolvedStreamRequest {
   const candidate = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
   const agentId = Number(candidate.agentId);
@@ -39,6 +41,15 @@ export function resolveStreamRequest(
       throw new StreamRequestError(404, 'agent not found');
     }
 
+    const requestedVersionId = optionalPositiveInteger(candidate.versionId, 'versionId');
+    const version = typeof workspaceId === 'number' && agentVersionRepository
+      ? agentVersionRepository.resolveForRun(agent.id, workspaceId, requestedVersionId ?? undefined)
+      : null;
+    if (requestedVersionId && !version) {
+      throw new StreamRequestError(404, 'agent version not found');
+    }
+    const config = version?.config ?? agent.config;
+
     const input = toText(candidate.input ?? candidate.goal ?? candidate.task_desc, '');
     if (!input) {
       throw new StreamRequestError(400, 'run input is required');
@@ -46,6 +57,7 @@ export function resolveStreamRequest(
 
     const run = runRepository.create({
       agentId: agent.id,
+      agentVersionId: version?.id,
       input,
     });
 
@@ -54,11 +66,11 @@ export function resolveStreamRequest(
       payload: {
         goal: input,
         agent: agent.name,
-        tools: agent.config.enabledTools,
-        skills: agent.config.enabledSkills,
-        memory_provider: agent.config.memoryProvider,
-        cache_provider: agent.config.cacheProvider,
-        rag_provider: agent.config.ragProvider,
+        tools: config.enabledTools,
+        skills: config.enabledSkills,
+        memory_provider: config.memoryProvider,
+        cache_provider: config.cacheProvider,
+        rag_provider: config.ragProvider,
       },
     };
   }
@@ -67,6 +79,15 @@ export function resolveStreamRequest(
     runId: null,
     payload: normalizeLegacyPayload(candidate),
   };
+}
+
+function optionalPositiveInteger(value: unknown, name: string): number | null {
+  if (value === undefined || value === null || value === '') return null;
+  const parsed = Number(value);
+  if (!Number.isInteger(parsed) || parsed <= 0) {
+    throw new StreamRequestError(400, `${name} must be a positive integer`);
+  }
+  return parsed;
 }
 
 export class StreamRequestError extends Error {

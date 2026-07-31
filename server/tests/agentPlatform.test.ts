@@ -508,6 +508,42 @@ test('POST /api/agents/:id/generate writes a standalone agent project', async ()
   );
   assert.match(stdout, /Planned task: Demo task with file_reader\./);
 
+  const initialVersionsResponse = await fetch(
+    `${baseUrl}/api/agents/${created.id}/versions`,
+    { headers: authHeaders },
+  );
+  assert.equal(initialVersionsResponse.status, 200);
+  const initialVersions = await initialVersionsResponse.json() as Array<{
+    id: number;
+    versionNumber: number;
+    status: string;
+    checksum: string;
+    config: { audience: string };
+  }>;
+  assert.equal(initialVersions.length, 1);
+  assert.equal(initialVersions[0]?.versionNumber, 1);
+  assert.equal(initialVersions[0]?.status, 'published');
+  assert.equal(initialVersions[0]?.config.audience, 'workspace');
+  assert.match(initialVersions[0]?.checksum ?? '', /^[a-f0-9]{64}$/);
+
+  const initialDeploymentsResponse = await fetch(
+    `${baseUrl}/api/agents/${created.id}/deployments`,
+    { headers: authHeaders },
+  );
+  assert.equal(initialDeploymentsResponse.status, 200);
+  const initialDeployments = await initialDeploymentsResponse.json() as Array<{
+    versionId: number;
+    environment: string;
+    status: string;
+    trigger: string;
+  }>;
+  assert.ok(initialDeployments.some((deployment) => (
+    deployment.versionId === initialVersions[0]?.id
+      && deployment.environment === 'production'
+      && deployment.status === 'active'
+      && deployment.trigger === 'publish'
+  )));
+
   const audienceResponse = await fetch(`${baseUrl}/api/agents/${created.id}/audience`, {
     method: 'PUT',
     headers: jsonAuthHeaders(),
@@ -524,6 +560,70 @@ test('POST /api/agents/:id/generate writes a standalone agent project', async ()
   assert.equal(publicAgent.name, 'Standalone Agent');
   assert.equal('config' in publicAgent, false);
   assert.equal('path' in publicAgent, false);
+
+  const versionsAfterAudienceResponse = await fetch(
+    `${baseUrl}/api/agents/${created.id}/versions`,
+    { headers: authHeaders },
+  );
+  const versionsAfterAudience = await versionsAfterAudienceResponse.json() as Array<{
+    id: number;
+    versionNumber: number;
+    status: string;
+    checksum: string;
+    config: { audience: string };
+  }>;
+  assert.equal(versionsAfterAudience.length, 2);
+  const versionOne = versionsAfterAudience.find((version) => version.versionNumber === 1);
+  const versionTwo = versionsAfterAudience.find((version) => version.versionNumber === 2);
+  assert(versionOne);
+  assert(versionTwo);
+  assert.equal(versionOne.checksum, initialVersions[0]?.checksum);
+  assert.equal(versionOne.config.audience, 'workspace');
+  assert.equal(versionTwo.config.audience, 'public');
+
+  const rollbackResponse = await fetch(
+    `${baseUrl}/api/agents/${created.id}/versions/${versionOne.id}/rollback`,
+    { method: 'POST', headers: authHeaders },
+  );
+  assert.equal(rollbackResponse.status, 200);
+  assert.equal((await fetch(`${baseUrl}/api/public/agents/${created.slug}`)).status, 404);
+
+  const republishResponse = await fetch(
+    `${baseUrl}/api/agents/${created.id}/versions/${versionTwo.id}/publish`,
+    { method: 'POST', headers: authHeaders },
+  );
+  assert.equal(republishResponse.status, 200);
+  assert.equal((await fetch(`${baseUrl}/api/public/agents/${created.slug}`)).status, 200);
+
+  const finalVersionsResponse = await fetch(
+    `${baseUrl}/api/agents/${created.id}/versions`,
+    { headers: authHeaders },
+  );
+  const finalVersions = await finalVersionsResponse.json() as typeof versionsAfterAudience;
+  assert.deepEqual(finalVersions, versionsAfterAudience);
+
+  const deploymentsResponse = await fetch(
+    `${baseUrl}/api/agents/${created.id}/deployments`,
+    { headers: authHeaders },
+  );
+  const deployments = await deploymentsResponse.json() as Array<{
+    environment: string;
+    status: string;
+    trigger: string;
+    versionId: number;
+  }>;
+  assert.equal(
+    deployments.filter((deployment) => (
+      deployment.environment === 'production' && deployment.status === 'active'
+    )).length,
+    1,
+  );
+  assert.ok(deployments.some((deployment) => (
+    deployment.trigger === 'rollback' && deployment.versionId === versionOne.id
+  )));
+  assert.ok(deployments.some((deployment) => (
+    deployment.trigger === 'publish' && deployment.versionId === versionTwo.id
+  )));
 });
 
 test('discovery APIs expose typed providers tools and skills', async () => {

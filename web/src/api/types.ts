@@ -34,6 +34,40 @@ export interface GeneratedProject {
   files: string[]
 }
 
+export interface AgentVersionRecord {
+  id: number
+  workspaceId: number
+  agentId: number
+  versionNumber: number
+  status: 'preview' | 'published'
+  config: AgentConfig
+  sourcePath: string
+  checksum: string
+  createdByUserId: number | null
+  createdAt: string
+  publishedAt: string | null
+}
+
+export interface AgentDeploymentRecord {
+  id: number
+  workspaceId: number
+  agentId: number
+  versionId: number
+  environment: 'preview' | 'production'
+  status: 'active' | 'inactive'
+  trigger: 'preview' | 'publish' | 'rollback' | 'migration'
+  urlPath: string
+  createdByUserId: number | null
+  createdAt: string
+  activatedAt: string
+  deactivatedAt: string | null
+}
+
+export interface AgentVersionLifecycleResult {
+  version: AgentVersionRecord
+  deployment: AgentDeploymentRecord
+}
+
 export interface DocumentRecord {
   id: number
   agentId: number
@@ -164,6 +198,7 @@ export interface StoredAgentStreamRequest {
   agentId: number
   input: string
   conversationId?: number
+  versionId?: number
 }
 
 export interface StreamResult {

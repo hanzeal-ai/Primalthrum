@@ -48,6 +48,10 @@ export const MIGRATIONS: Migration[] = [
     id: '009_workspace_memberships',
     up: applyWorkspaceMemberships,
   },
+  {
+    id: '010_agent_versions_deployments',
+    up: applyAgentVersionsAndDeployments,
+  },
 ];
 
 export function runMigrations(db: DatabaseAdapter): void {
@@ -400,6 +404,109 @@ function applyWorkspaceMemberships(db: DatabaseAdapter): void {
     UPDATE sessions
     SET active_workspace_id = workspace_id
     WHERE active_workspace_id IS NULL;
+  `);
+}
+
+function applyAgentVersionsAndDeployments(db: DatabaseAdapter): void {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS agent_versions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      agent_id INTEGER NOT NULL,
+      version_number INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'preview',
+      config_json TEXT NOT NULL,
+      source_path TEXT NOT NULL DEFAULT '',
+      checksum TEXT NOT NULL,
+      created_by_user_id INTEGER,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      published_at TEXT,
+      UNIQUE(agent_id, version_number),
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+      FOREIGN KEY(agent_id) REFERENCES agents(id) ON DELETE CASCADE,
+      FOREIGN KEY(created_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS agent_deployments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      agent_id INTEGER NOT NULL,
+      version_id INTEGER NOT NULL,
+      environment TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      trigger TEXT NOT NULL DEFAULT 'publish',
+      url_path TEXT NOT NULL,
+      created_by_user_id INTEGER,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      activated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      deactivated_at TEXT,
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+      FOREIGN KEY(agent_id) REFERENCES agents(id) ON DELETE CASCADE,
+      FOREIGN KEY(version_id) REFERENCES agent_versions(id) ON DELETE CASCADE,
+      FOREIGN KEY(created_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+    );
+  `);
+
+  ensureColumn(db, 'agents', 'preview_version_id', 'INTEGER');
+  ensureColumn(db, 'agents', 'published_version_id', 'INTEGER');
+  ensureColumn(db, 'runs', 'agent_version_id', 'INTEGER');
+
+  db.run(`
+    INSERT OR IGNORE INTO agent_versions (
+      workspace_id,
+      agent_id,
+      version_number,
+      status,
+      config_json,
+      source_path,
+      checksum,
+      published_at
+    )
+    SELECT
+      a.workspace_id,
+      a.id,
+      1,
+      'published',
+      c.config_json,
+      a.path,
+      'legacy-import',
+      CURRENT_TIMESTAMP
+    FROM agents a
+    JOIN agent_configs c ON c.agent_id = a.id
+    WHERE a.status = 'generated';
+
+    UPDATE agents
+    SET published_version_id = (
+      SELECT v.id
+      FROM agent_versions v
+      WHERE v.agent_id = agents.id AND v.version_number = 1
+    )
+    WHERE status = 'generated' AND published_version_id IS NULL;
+
+    INSERT INTO agent_deployments (
+      workspace_id,
+      agent_id,
+      version_id,
+      environment,
+      status,
+      trigger,
+      url_path
+    )
+    SELECT
+      a.workspace_id,
+      a.id,
+      a.published_version_id,
+      'production',
+      'active',
+      'migration',
+      '/a/' || a.slug
+    FROM agents a
+    WHERE a.published_version_id IS NOT NULL
+      AND NOT EXISTS (
+        SELECT 1
+        FROM agent_deployments d
+        WHERE d.agent_id = a.id AND d.environment = 'production'
+      );
   `);
 }
 

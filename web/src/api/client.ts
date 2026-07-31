@@ -1,5 +1,8 @@
 import type {
   AgentRecord,
+  AgentDeploymentRecord,
+  AgentVersionLifecycleResult,
+  AgentVersionRecord,
   AuthCredentials,
   AuthResponse,
   ConversationMessageRecord,
@@ -158,6 +161,40 @@ export async function generateAgentProject(agentId: number): Promise<GeneratedPr
   return apiFetch<GeneratedProject>(`/api/agents/${agentId}/generate`, {
     method: 'POST',
   })
+}
+
+export async function listAgentVersions(agentId: number): Promise<AgentVersionRecord[]> {
+  return apiFetch<AgentVersionRecord[]>(`/api/agents/${agentId}/versions`)
+}
+
+export async function listAgentDeployments(agentId: number): Promise<AgentDeploymentRecord[]> {
+  return apiFetch<AgentDeploymentRecord[]>(`/api/agents/${agentId}/deployments`)
+}
+
+export async function createAgentVersion(agentId: number): Promise<AgentVersionLifecycleResult> {
+  return apiFetch<AgentVersionLifecycleResult>(`/api/agents/${agentId}/versions`, {
+    method: 'POST',
+  })
+}
+
+export async function publishAgentVersion(
+  agentId: number,
+  versionId: number,
+): Promise<AgentVersionLifecycleResult> {
+  return apiFetch<AgentVersionLifecycleResult>(
+    `/api/agents/${agentId}/versions/${versionId}/publish`,
+    { method: 'POST' },
+  )
+}
+
+export async function rollbackAgentVersion(
+  agentId: number,
+  versionId: number,
+): Promise<AgentVersionLifecycleResult> {
+  return apiFetch<AgentVersionLifecycleResult>(
+    `/api/agents/${agentId}/versions/${versionId}/rollback`,
+    { method: 'POST' },
+  )
 }
 
 export async function listDocuments(agentId: number): Promise<DocumentRecord[]> {

@@ -183,10 +183,28 @@ test('workspace memberships scope resources and enforce role permissions', async
   });
   assert.equal(viewerWriteResponse.status, 403);
 
+  const viewerVersionsResponse = await fetch(
+    `${baseUrl}/api/agents/${defaultAgent.id}/versions`,
+    { headers: jsonHeaders(viewerToken) },
+  );
+  assert.equal(viewerVersionsResponse.status, 200);
+
+  const viewerCreateVersionResponse = await fetch(
+    `${baseUrl}/api/agents/${defaultAgent.id}/versions`,
+    { method: 'POST', headers: jsonHeaders(viewerToken) },
+  );
+  assert.equal(viewerCreateVersionResponse.status, 403);
+
   const crossTenantAgentResponse = await fetch(`${baseUrl}/api/agents/${teamAgent.id}`, {
     headers: jsonHeaders(viewerToken),
   });
   assert.equal(crossTenantAgentResponse.status, 404);
+
+  const crossTenantVersionsResponse = await fetch(
+    `${baseUrl}/api/agents/${teamAgent.id}/versions`,
+    { headers: jsonHeaders(viewerToken) },
+  );
+  assert.equal(crossTenantVersionsResponse.status, 404);
 
   const forbiddenSwitchResponse = await fetch(`${baseUrl}/api/auth/workspace`, {
     method: 'POST',
@@ -217,4 +235,17 @@ test('workspace memberships scope resources and enforce role permissions', async
     body: JSON.stringify({ name: 'Member Agent' }),
   });
   assert.equal(memberWriteResponse.status, 201);
+
+  const memberVersionResponse = await fetch(
+    `${baseUrl}/api/agents/${defaultAgent.id}/versions`,
+    { method: 'POST', headers: jsonHeaders(viewerToken) },
+  );
+  assert.equal(memberVersionResponse.status, 201);
+  const memberVersion = await body<{ version: { id: number } }>(memberVersionResponse);
+
+  const memberPublishResponse = await fetch(
+    `${baseUrl}/api/agents/${defaultAgent.id}/versions/${memberVersion.version.id}/publish`,
+    { method: 'POST', headers: jsonHeaders(viewerToken) },
+  );
+  assert.equal(memberPublishResponse.status, 403);
 });

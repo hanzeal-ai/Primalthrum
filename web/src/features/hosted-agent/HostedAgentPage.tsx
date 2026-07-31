@@ -5,6 +5,7 @@ import {
   Loader2,
   RefreshCcw,
   RotateCcw,
+  Settings,
   User,
   Wrench,
 } from 'lucide-react'
@@ -31,6 +32,7 @@ import { ChatComposer } from '../../components/chat/ChatComposer'
 import { Badge } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
 import { WorkspaceSwitcher } from '../workspaces/WorkspaceSwitcher'
+import { AgentVersionPanel } from './AgentVersionPanel'
 
 interface HostedAgentPageProps {
   slug: string
@@ -38,6 +40,7 @@ interface HostedAgentPageProps {
   access?: 'authenticated' | 'public'
   unavailableFallback?: ReactNode
   onBack: () => void
+  versionId?: number
 }
 
 interface ChatMessage {
@@ -65,6 +68,7 @@ export function HostedAgentPage({
   access = 'authenticated',
   unavailableFallback,
   onBack,
+  versionId,
 }: HostedAgentPageProps) {
   const [agent, setAgent] = useState<HostedAgentRecord | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>(() => loadMessages(slug))
@@ -75,6 +79,7 @@ export function HostedAgentPage({
   const [loading, setLoading] = useState(true)
   const [running, setRunning] = useState(false)
   const [error, setError] = useState('')
+  const [versionsOpen, setVersionsOpen] = useState(false)
   const abortRef = useRef<AbortController | null>(null)
   const messageEndRef = useRef<HTMLDivElement>(null)
 
@@ -200,7 +205,12 @@ export function HostedAgentPage({
             streamOptions,
           )
         : await streamAgentRun(
-            { agentId: agent.id, input: streamInput, conversationId: conversationId ?? undefined },
+            {
+              agentId: agent.id,
+              input: streamInput,
+              conversationId: conversationId ?? undefined,
+              versionId,
+            },
             streamOptions,
           )
       if (result.conversationId) setConversationId(result.conversationId)
@@ -278,12 +288,32 @@ export function HostedAgentPage({
           <div className="flex items-center gap-2">
             <h1 className="truncate text-sm font-semibold">{agent.name}</h1>
             <Badge variant="success">在线</Badge>
+            {versionId ? <Badge variant="secondary">预览</Badge> : null}
           </div>
           <p className="truncate text-xs text-zinc-500">{agent.description || 'Primalthrum Agent'}</p>
         </div>
         {user ? <WorkspaceSwitcher user={user} /> : null}
+        {user ? (
+          <Button
+            aria-label="版本与部署"
+            onClick={() => setVersionsOpen(true)}
+            size="icon"
+            title="版本与部署"
+            variant="ghost"
+          >
+            <Settings />
+          </Button>
+        ) : null}
         <Button aria-label="新建对话" onClick={() => void clearConversation()} size="icon" title="新建对话" variant="ghost"><RotateCcw /></Button>
       </header>
+
+      {user && versionsOpen ? (
+        <AgentVersionPanel
+          agentId={agent.id}
+          onClose={() => setVersionsOpen(false)}
+          role={user.role}
+        />
+      ) : null}
 
       <section className="hosted-chat">
         <div className="mx-auto w-full max-w-3xl space-y-5">

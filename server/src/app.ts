@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { SqliteDatabase } from './db/sqlite';
 import { generateAgentProject } from './generators/agentProjectGenerator';
 import { AgentRepository, type CreateAgentInput } from './services/agentRepository';
+import { AgentVersionRepository } from './services/agentVersionRepository';
 import { sendApiError } from './services/apiErrors';
 import {
   ConversationRepository,
@@ -100,6 +101,7 @@ export function createApp(options: AppOptions = {}): Koa {
     db,
     options.generatedAgentsDir ?? DEFAULT_GENERATED_AGENTS_DIR,
   );
+  const agentVersionRepository = new AgentVersionRepository(db);
   const runRepository = new RunRepository(db);
   const streamEventRepository = new StreamEventRepository(db);
   const documentRepository = new DocumentRepository(db);
@@ -491,20 +493,109 @@ export function createApp(options: AppOptions = {}): Koa {
     if (!agent) return;
 
     const generated = await generateAgentProject(agent);
-    agentRepository.markGenerated(agent.id);
+    const generatedAgent = agentRepository.markGenerated(agent.id);
+    const preview = agentVersionRepository.createPreview(
+      generatedAgent,
+      ctx.state.authSession.user.id,
+    );
+    agentVersionRepository.publish(
+      generatedAgent,
+      preview.version.id,
+      ctx.state.authSession.user.id,
+    );
     ctx.body = generated;
+  });
+
+  router.get('/api/agents/:id/versions', (ctx) => {
+    const agent = scopedAgent(ctx, Number(ctx.params.id), 'agents.read');
+    if (!agent) return;
+    ctx.body = agentVersionRepository.listVersions(agent.id, agent.workspaceId);
+  });
+
+  router.post('/api/agents/:id/versions', (ctx) => {
+    const agent = scopedAgent(ctx, Number(ctx.params.id), 'agents.write');
+    if (!agent) return;
+    try {
+      ctx.status = 201;
+      ctx.body = agentVersionRepository.createPreview(
+        agent,
+        ctx.state.authSession.user.id,
+      );
+    } catch (error) {
+      sendApiError(ctx, logger, {
+        status: 400,
+        code: 'AGENT_VERSION_INVALID',
+        message: error instanceof Error ? error.message : 'failed to create agent version',
+      });
+    }
+  });
+
+  router.post('/api/agents/:id/versions/:versionId/publish', (ctx) => {
+    const agent = scopedAgent(ctx, Number(ctx.params.id), 'agents.publish');
+    if (!agent) return;
+    try {
+      ctx.body = agentVersionRepository.publish(
+        agent,
+        Number(ctx.params.versionId),
+        ctx.state.authSession.user.id,
+      );
+    } catch (error) {
+      sendApiError(ctx, logger, {
+        status: 400,
+        code: 'AGENT_VERSION_INVALID',
+        message: error instanceof Error ? error.message : 'failed to publish agent version',
+      });
+    }
+  });
+
+  router.post('/api/agents/:id/versions/:versionId/rollback', (ctx) => {
+    const agent = scopedAgent(ctx, Number(ctx.params.id), 'agents.publish');
+    if (!agent) return;
+    try {
+      ctx.body = agentVersionRepository.publish(
+        agent,
+        Number(ctx.params.versionId),
+        ctx.state.authSession.user.id,
+        'rollback',
+      );
+    } catch (error) {
+      sendApiError(ctx, logger, {
+        status: 400,
+        code: 'AGENT_VERSION_INVALID',
+        message: error instanceof Error ? error.message : 'failed to roll back agent version',
+      });
+    }
+  });
+
+  router.get('/api/agents/:id/deployments', (ctx) => {
+    const agent = scopedAgent(ctx, Number(ctx.params.id), 'agents.read');
+    if (!agent) return;
+    ctx.body = agentVersionRepository.listDeployments(agent.id, agent.workspaceId);
   });
 
   router.put('/api/agents/:id/audience', (ctx) => {
     const agentId = Number(ctx.params.id);
-    if (!scopedAgent(ctx, agentId, 'agents.publish')) return;
+    const agent = scopedAgent(ctx, agentId, 'agents.publish');
+    if (!agent) return;
     try {
       const body = ctx.request.body as { audience?: unknown };
-      ctx.body = agentRepository.updateAudience(
+      const updated = agentRepository.updateAudience(
         agentId,
         body.audience,
         currentWorkspaceId(ctx),
       );
+      if (updated.status === 'generated') {
+        const preview = agentVersionRepository.createPreview(
+          updated,
+          ctx.state.authSession.user.id,
+        );
+        agentVersionRepository.publish(
+          updated,
+          preview.version.id,
+          ctx.state.authSession.user.id,
+        );
+      }
+      ctx.body = agentRepository.findByIdInWorkspace(agent.id, agent.workspaceId);
     } catch (error) {
       sendApiError(ctx, logger, {
         status: 400,
@@ -747,10 +838,11 @@ export function createApp(options: AppOptions = {}): Koa {
     if (!authorize(ctx, 'agents.run')) return;
     try {
       const body = ctx.request.body as CreateRunInput;
-      if (!agentRepository.findByIdInWorkspace(
+      const agent = agentRepository.findByIdInWorkspace(
         Number(body.agentId),
         currentWorkspaceId(ctx),
-      )) {
+      );
+      if (!agent) {
         sendApiError(ctx, logger, {
           status: 404,
           code: 'RUN_AGENT_NOT_FOUND',
@@ -759,7 +851,33 @@ export function createApp(options: AppOptions = {}): Koa {
         return;
       }
 
-      const created = runRepository.create(body);
+      const requestedVersionId = parseOptionalPositiveInteger(body.agentVersionId);
+      if (requestedVersionId === null) {
+        sendApiError(ctx, logger, {
+          status: 400,
+          code: 'RUN_INVALID',
+          message: 'agentVersionId must be a positive integer',
+        });
+        return;
+      }
+      const version = agentVersionRepository.resolveForRun(
+        agent.id,
+        agent.workspaceId,
+        requestedVersionId,
+      );
+      if (requestedVersionId && !version) {
+        sendApiError(ctx, logger, {
+          status: 404,
+          code: 'RUN_AGENT_NOT_FOUND',
+          message: 'agent version not found',
+        });
+        return;
+      }
+
+      const created = runRepository.create({
+        ...body,
+        agentVersionId: version?.id,
+      });
       ctx.status = 201;
       ctx.body = created;
     } catch (error) {
@@ -903,6 +1021,7 @@ export function createApp(options: AppOptions = {}): Koa {
         agentRepository,
         runRepository,
         workspaceId,
+        agentVersionRepository,
       );
       let conversationId: number | null = null;
       if (streamRequest.runId) {
@@ -932,7 +1051,7 @@ export function createApp(options: AppOptions = {}): Koa {
         });
 
         const agent = agentRepository.findByIdInWorkspace(agentId, workspaceId);
-        if (agent && !['none', 'null'].includes(agent.config.ragProvider)) {
+        if (agent && !['none', 'null'].includes(streamRequest.payload.rag_provider)) {
           const matches = documentIndexRepository.searchByAgent(
             agentId,
             String(body.input ?? ''),

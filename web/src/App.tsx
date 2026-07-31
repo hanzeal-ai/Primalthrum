@@ -9,6 +9,7 @@ import './App.css'
 export default function App() {
   const auth = useAuthSession()
   const agentSlug = hostedAgentSlug(window.location.pathname)
+  const preview = previewAgentRoute(window.location.pathname, window.location.search)
 
   if (auth.mode === 'checking') {
     return (
@@ -32,6 +33,17 @@ export default function App() {
       />
     )
     : null
+
+  if (preview && auth.user) {
+    return (
+      <HostedAgentPage
+        onBack={() => window.location.assign('/')}
+        slug={preview.slug}
+        user={auth.user}
+        versionId={preview.versionId}
+      />
+    )
+  }
 
   if (agentSlug) {
     if (auth.user) {
@@ -70,4 +82,14 @@ export default function App() {
 function hostedAgentSlug(pathname: string): string | null {
   const match = /^\/a\/([^/]+)\/?$/.exec(pathname)
   return match?.[1] ? decodeURIComponent(match[1]) : null
+}
+
+function previewAgentRoute(
+  pathname: string,
+  search: string,
+): { slug: string; versionId: number } | null {
+  const match = /^\/preview\/a\/([^/]+)\/?$/.exec(pathname)
+  const versionId = Number(new URLSearchParams(search).get('version'))
+  if (!match?.[1] || !Number.isInteger(versionId) || versionId <= 0) return null
+  return { slug: decodeURIComponent(match[1]), versionId }
 }
