@@ -1906,7 +1906,14 @@ complete. Follow the same dependency and verification protocol used above.
   opens directly in the conversational builder. A real product screenshot is the
   hero asset. Component tests plus Chrome desktop and 390x844 checks cover signup,
   pricing, overflow, console health, and the live registration handoff. Email
-  verification, recovery, consent analytics, and legal approval remain open.
+  verification now uses migration 019, single-use hashed 24-hour tokens, pending
+  onboarding state, verification-gated APIs, verification-time trial activation,
+  resend supersession, and a durable HTTP email outbox. Password recovery uses
+  enumeration-safe requests, 30-minute single-use tokens, and revokes all prior
+  sessions after reset. Repository, adapter, and real HTTP tests cover expiry,
+  replay, gating, delivery/retry evidence, provider idempotency, reset, and old
+  password rejection. Web verification/recovery UX, consent analytics, and legal
+  approval remain open.
 
 ### P19-02 Billing, Usage, Team, And Settings UX
 

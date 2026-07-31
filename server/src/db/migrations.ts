@@ -84,6 +84,10 @@ export const MIGRATIONS: Migration[] = [
     id: '018_usage_meter_export_outbox',
     up: applyUsageMeterExportOutbox,
   },
+  {
+    id: '019_account_identity_lifecycle',
+    up: applyAccountIdentityLifecycle,
+  },
 ];
 
 export function runMigrations(db: DatabaseAdapter): void {
@@ -1115,6 +1119,61 @@ function applyUsageMeterExportOutbox(db: DatabaseAdapter): void {
 
     INSERT OR IGNORE INTO usage_meter_exports (rated_usage_event_id, destination)
     SELECT id, 'primary' FROM rated_usage_events;
+  `);
+}
+
+function applyAccountIdentityLifecycle(db: DatabaseAdapter): void {
+  ensureColumn(db, 'users', 'email_verified_at', 'TEXT');
+  db.run(`
+    UPDATE users
+    SET email_verified_at = COALESCE(email_verified_at, CURRENT_TIMESTAMP);
+
+    CREATE TABLE IF NOT EXISTS account_action_tokens (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      purpose TEXT NOT NULL CHECK(purpose IN ('verify_email', 'reset_password')),
+      token_hash TEXT NOT NULL UNIQUE,
+      payload_json TEXT NOT NULL DEFAULT '{}',
+      expires_at TEXT NOT NULL,
+      used_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS account_email_outbox (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER NOT NULL,
+      template TEXT NOT NULL CHECK(template IN ('verify_email', 'reset_password')),
+      recipient_email TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending'
+        CHECK(status IN ('pending', 'delivering', 'delivered', 'failed', 'superseded')),
+      attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts >= 0),
+      next_attempt_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      last_error TEXT NOT NULL DEFAULT '',
+      delivered_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS workspace_onboarding (
+      workspace_id INTEGER PRIMARY KEY,
+      owner_user_id INTEGER NOT NULL UNIQUE,
+      selected_plan_key TEXT NOT NULL CHECK(selected_plan_key IN ('free', 'pro')),
+      state TEXT NOT NULL DEFAULT 'pending_email'
+        CHECK(state IN ('pending_email', 'active')),
+      activated_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+      FOREIGN KEY(owner_user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS account_action_tokens_lookup_idx
+      ON account_action_tokens(purpose, token_hash, expires_at);
+    CREATE INDEX IF NOT EXISTS account_email_outbox_dispatch_idx
+      ON account_email_outbox(status, next_attempt_at, id);
   `);
 }
 

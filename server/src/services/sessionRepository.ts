@@ -14,6 +14,7 @@ export interface CreatedSession {
 export interface AuthenticatedSession {
   user: PublicUserRecord;
   expiresAt: string;
+  emailVerified: boolean;
 }
 
 interface SessionUserRow {
@@ -22,6 +23,7 @@ interface SessionUserRow {
   email: string;
   role: string;
   expires_at: string;
+  email_verified_at: string | null;
 }
 
 export class SessionRepository {
@@ -64,7 +66,8 @@ export class SessionRepository {
         s.active_workspace_id AS workspace_id,
         u.email,
         m.role,
-        s.expires_at
+        s.expires_at,
+        u.email_verified_at
       FROM sessions s
       JOIN users u ON u.id = s.user_id
       JOIN workspace_memberships m
@@ -89,6 +92,13 @@ export class SessionRepository {
       UPDATE sessions
       SET revoked_at = ${sqlValue(new Date().toISOString())}
       WHERE token_hash = ${sqlValue(hashToken(token))};
+    `);
+  }
+
+  revokeAllForUser(userId: number): void {
+    this.db.run(`
+      UPDATE sessions SET revoked_at = COALESCE(revoked_at, CURRENT_TIMESTAMP)
+      WHERE user_id = ${sqlValue(userId)};
     `);
   }
 
@@ -131,5 +141,6 @@ function toAuthenticatedSession(row: SessionUserRow): AuthenticatedSession {
       role: row.role,
     },
     expiresAt: row.expires_at,
+    emailVerified: Boolean(row.email_verified_at),
   };
 }

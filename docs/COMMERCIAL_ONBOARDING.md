@@ -13,11 +13,11 @@
 }
 ```
 
-`planKey` is either `free` or `pro`. Pro registration activates the configured
-one-time trial and its credit grant. Free registration provisions the baseline
-free subscription and credits. A successful response includes the Owner user,
-Workspace, Session, Trial when applicable, current entitlement snapshot, and
-credit account.
+`planKey` is either `free` or `pro`. Registration provisions baseline Free
+entitlements and creates pending email verification. A successful response
+includes the Owner user, Workspace, Session, verification requirement, current
+entitlement snapshot, and credit account. The selected Pro trial and its credit
+grant start only after email ownership is verified.
 
 Email is globally unique. Duplicate or concurrent duplicate registration returns
 `409 ACCOUNT_ALREADY_EXISTS`. Registration creates a new Workspace and never
@@ -25,8 +25,8 @@ adds the customer to the installation's default Workspace.
 
 ## Remaining Release Gates
 
-- Email ownership verification and transactional email delivery.
-- Password reset, abuse throttling, bot protection, and account recovery.
+- Transactional email provider credentials and live delivery verification.
+- Abuse throttling, bot protection, and assisted account recovery.
 - Signup funnel analytics with consent controls.
 - Final privacy and terms review by qualified legal counsel.
 

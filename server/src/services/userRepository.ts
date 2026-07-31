@@ -8,6 +8,7 @@ export interface UserRecord {
   email: string;
   passwordHash: string;
   role: string;
+  emailVerifiedAt: string | null;
 }
 
 export interface PublicUserRecord {
@@ -23,6 +24,7 @@ interface UserRow {
   email: string;
   password_hash: string;
   role: string;
+  email_verified_at: string | null;
 }
 
 export class UserRepository {
@@ -43,12 +45,13 @@ export class UserRepository {
     const normalizedEmail = normalizeEmail(email);
 
     this.db.run(`
-      INSERT INTO users (workspace_id, email, password_hash, role)
+      INSERT INTO users (workspace_id, email, password_hash, role, email_verified_at)
       VALUES (
         ${DEFAULT_WORKSPACE_ID},
         ${sqlValue(normalizedEmail)},
         ${sqlValue(passwordHash)},
-        'admin'
+        'admin',
+        CURRENT_TIMESTAMP
       );
 
       INSERT INTO workspace_memberships (workspace_id, user_id, role, status)
@@ -71,15 +74,16 @@ export class UserRepository {
     return toPublicUserRecord(created);
   }
 
-  createUser(email: string, passwordHash: string): UserRecord {
+  createUser(email: string, passwordHash: string, emailVerified = false): UserRecord {
     const normalizedEmail = normalizeEmail(email);
     this.db.run(`
-      INSERT INTO users (workspace_id, email, password_hash, role)
+      INSERT INTO users (workspace_id, email, password_hash, role, email_verified_at)
       VALUES (
         ${DEFAULT_WORKSPACE_ID},
         ${sqlValue(normalizedEmail)},
         ${sqlValue(passwordHash)},
-        'member'
+        'member',
+        ${emailVerified ? 'CURRENT_TIMESTAMP' : 'NULL'}
       );
     `);
     const created = this.findByEmail(normalizedEmail);
@@ -90,7 +94,7 @@ export class UserRepository {
   findByEmail(email: string): UserRecord | null {
     const normalizedEmail = normalizeEmail(email);
     const rows = this.db.query<UserRow>(`
-      SELECT id, workspace_id, email, password_hash, role
+      SELECT id, workspace_id, email, password_hash, role, email_verified_at
       FROM users
       WHERE email = ${sqlValue(normalizedEmail)}
       LIMIT 1;
@@ -100,12 +104,27 @@ export class UserRepository {
 
   findById(id: number): UserRecord | null {
     const rows = this.db.query<UserRow>(`
-      SELECT id, workspace_id, email, password_hash, role
+      SELECT id, workspace_id, email, password_hash, role, email_verified_at
       FROM users
       WHERE id = ${sqlValue(id)}
       LIMIT 1;
     `);
     return rows[0] ? toUserRecord(rows[0]) : null;
+  }
+
+  markEmailVerified(userId: number, verifiedAt = new Date().toISOString()): void {
+    this.db.run(`
+      UPDATE users SET email_verified_at = COALESCE(email_verified_at, ${sqlValue(verifiedAt)}),
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${sqlValue(userId)};
+    `);
+  }
+
+  updatePassword(userId: number, passwordHash: string): void {
+    this.db.run(`
+      UPDATE users SET password_hash = ${sqlValue(passwordHash)}, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${sqlValue(userId)};
+    `);
   }
 }
 
@@ -138,5 +157,6 @@ function toUserRecord(row: UserRow): UserRecord {
     email: row.email,
     passwordHash: row.password_hash,
     role: row.role,
+    emailVerifiedAt: row.email_verified_at,
   };
 }

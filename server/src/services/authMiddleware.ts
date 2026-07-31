@@ -37,6 +37,17 @@ export function createAuthMiddleware(
 
     ctx.state.authSession = session;
     ctx.state.sessionToken = token;
+    if (!session.emailVerified && !isPendingEmailRequest(ctx)) {
+      ctx.status = 403;
+      ctx.body = {
+        error: {
+          code: 'EMAIL_VERIFICATION_REQUIRED',
+          message: 'email verification is required',
+          status: 403,
+        },
+      };
+      return;
+    }
     await next();
   };
 }
@@ -102,9 +113,19 @@ function isPublicRequest(ctx: Koa.Context): boolean {
     '/api/setup/admin',
     '/api/auth/login',
     '/api/auth/register',
+    '/api/auth/verify-email',
+    '/api/auth/verification/resend',
+    '/api/auth/password/forgot',
+    '/api/auth/password/reset',
     '/api/auth/logout',
     '/api/auth/session',
     '/api/invitations/accept',
+  ].includes(ctx.path);
+}
+
+function isPendingEmailRequest(ctx: Koa.Context): boolean {
+  return [
+    '/api/auth/logout',
   ].includes(ctx.path);
 }
 

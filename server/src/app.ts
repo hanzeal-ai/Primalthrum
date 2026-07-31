@@ -94,6 +94,12 @@ import {
 import { UsageExportOutboxRepository } from './services/usageExportOutboxRepository';
 import { UsageExportDispatcher } from './services/usageExportDispatcher';
 import { type UsageMeterExporter } from './services/usageMeterExporter';
+import { AccountTokenRepository } from './services/accountTokenRepository';
+import { AccountOnboardingRepository } from './services/accountOnboardingRepository';
+import { AccountEmailOutboxRepository } from './services/accountEmailOutboxRepository';
+import { AccountEmailDispatcher } from './services/accountEmailDispatcher';
+import { type AccountEmailSender } from './services/accountEmailSender';
+import { AccountIdentityService } from './services/accountIdentityService';
 
 export interface AppOptions {
   agentBaseUrl?: string;
@@ -107,6 +113,8 @@ export interface AppOptions {
   publicAppUrl?: string;
   stripeWebhookSecret?: string;
   usageMeterExporter?: UsageMeterExporter;
+  accountEmailSender?: AccountEmailSender;
+  exposeAccountEmailPreview?: boolean;
 }
 
 const DEFAULT_AGENT_BASE_URL = 'http://127.0.0.1:8000';
@@ -246,6 +254,28 @@ export function createApp(options: AppOptions = {}): Koa {
     billingRepository,
   );
   const publicAppUrl = (options.publicAppUrl ?? DEFAULT_PUBLIC_APP_URL).replace(/\/$/, '');
+  let accountEmailDispatcher: AccountEmailDispatcher | undefined;
+  const accountEmailOutbox = new AccountEmailOutboxRepository(
+    db,
+    undefined,
+    () => accountEmailDispatcher?.kick(),
+  );
+  const accountIdentityService = new AccountIdentityService(
+    userRepository,
+    new AccountTokenRepository(db),
+    accountEmailOutbox,
+    new AccountOnboardingRepository(db),
+    billingRepository,
+    publicAppUrl,
+  );
+  if (options.accountEmailSender) {
+    accountEmailDispatcher = new AccountEmailDispatcher(
+      accountEmailOutbox,
+      options.accountEmailSender,
+      logger,
+    );
+    accountEmailDispatcher.kick();
+  }
   for (const [planKey, priceRef] of Object.entries(options.paymentPriceRefs ?? {})) {
     if (priceRef.trim()) paymentRepository.configurePrice('stripe', planKey, priceRef.trim());
   }
@@ -584,7 +614,7 @@ export function createApp(options: AppOptions = {}): Koa {
       }
       const session = sessionRepository.create(publicUser);
       ctx.set('Set-Cookie', sessionCookie(session.token, session.expiresAt));
-      ctx.body = { user: publicUser, session };
+      ctx.body = { user: publicUser, session, emailVerified: Boolean(user.emailVerifiedAt) };
     } catch (error) {
       ctx.status = 400;
       ctx.body = {
@@ -624,10 +654,13 @@ export function createApp(options: AppOptions = {}): Koa {
       const workspace = workspaceRepository.create(createdUser.id, workspaceName);
       const user = workspaceRepository.principalForUser(createdUser.id, workspace.id);
       if (!user) throw new Error('workspace owner membership could not be loaded');
-      const trial = planKey === 'pro'
-        ? billingRepository.activateTrial(workspace.id, user.id, planKey)
-        : null;
       const session = sessionRepository.create(user);
+      const emailPreviewUrl = accountIdentityService.beginRegistration({
+        userId: user.id,
+        workspaceId: workspace.id,
+        email: user.email,
+        planKey: planKey as 'free' | 'pro',
+      });
 
       ctx.set('Set-Cookie', sessionCookie(session.token, session.expiresAt));
       ctx.status = 201;
@@ -635,7 +668,8 @@ export function createApp(options: AppOptions = {}): Koa {
         user,
         session,
         workspace,
-        trial,
+        verificationRequired: true,
+        ...(options.exposeAccountEmailPreview ? { emailPreviewUrl } : {}),
         entitlementSnapshot: billingRepository.entitlementSnapshot(workspace.id),
         creditAccount: billingRepository.creditAccount(workspace.id),
       };
@@ -653,6 +687,64 @@ export function createApp(options: AppOptions = {}): Koa {
         code: 'REGISTRATION_INVALID',
         message: error instanceof Error ? error.message : 'registration failed',
       });
+    }
+  });
+
+  router.post('/api/auth/verify-email', (ctx) => {
+    try {
+      const token = String((ctx.request.body as { token?: unknown }).token ?? '');
+      ctx.body = { verified: true, ...accountIdentityService.verifyEmail(token) };
+    } catch (error) {
+      sendApiError(ctx, logger, {
+        status: 400,
+        code: 'EMAIL_VERIFICATION_INVALID',
+        message: error instanceof Error ? error.message : 'email verification failed',
+      });
+    }
+  });
+
+  router.post('/api/auth/verification/resend', (ctx) => {
+    const token = extractSessionToken(ctx);
+    const session = token ? sessionRepository.findByToken(token) : null;
+    if (!session) {
+      sendApiError(ctx, logger, { status: 401, code: 'AUTHENTICATION_REQUIRED',
+        message: 'authentication required' });
+      return;
+    }
+    const emailPreviewUrl = accountIdentityService.resendVerification(session.user.id);
+    ctx.status = 202;
+    ctx.body = {
+      accepted: true,
+      ...(options.exposeAccountEmailPreview && emailPreviewUrl ? { emailPreviewUrl } : {}),
+    };
+  });
+
+  router.post('/api/auth/password/forgot', (ctx) => {
+    try {
+      const email = normalizeEmail((ctx.request.body as { email?: unknown }).email);
+      const emailPreviewUrl = accountIdentityService.requestPasswordReset(email);
+      ctx.status = 202;
+      ctx.body = {
+        accepted: true,
+        ...(options.exposeAccountEmailPreview && emailPreviewUrl ? { emailPreviewUrl } : {}),
+      };
+    } catch {
+      ctx.status = 202;
+      ctx.body = { accepted: true };
+    }
+  });
+
+  router.post('/api/auth/password/reset', (ctx) => {
+    try {
+      const body = ctx.request.body as { token?: unknown; password?: unknown };
+      const password = normalizePassword(body.password);
+      const userId = accountIdentityService.consumePasswordReset(String(body.token ?? ''));
+      userRepository.updatePassword(userId, hashPassword(password));
+      sessionRepository.revokeAllForUser(userId);
+      ctx.body = { reset: true };
+    } catch (error) {
+      sendApiError(ctx, logger, { status: 400, code: 'PASSWORD_RESET_INVALID',
+        message: error instanceof Error ? error.message : 'password reset failed' });
     }
   });
 
@@ -812,7 +904,7 @@ export function createApp(options: AppOptions = {}): Koa {
         ctx.body = { error: 'invalid email or password' };
         return;
       }
-      user ??= userRepository.createUser(invitation.email, hashPassword(password));
+      user ??= userRepository.createUser(invitation.email, hashPassword(password), true);
       workspaceRepository.acceptInvitation(token, user.id, user.email);
       const principal = workspaceRepository.principalForUser(user.id, invitation.workspaceId);
       if (!principal) throw new Error('workspace membership could not be loaded');
