@@ -1940,11 +1940,24 @@ complete. Follow the same dependency and verification protocol used above.
 
 ### P19-02 Billing, Usage, Team, And Settings UX
 
-- Status: Todo
+- Status: In Progress
 - Goal: Deliver customer-facing subscription, invoice, payment, usage, credit,
   member, provider, API key, retention, and security management.
 - Dependencies: P16-01, P18-03, P19-01
 - Verification: role matrix and all commercial lifecycle browser E2E.
+- Evidence: the first customer-console slice adds authenticated `/app/billing`
+  and `/app/usage` routes backed by the canonical billing and rating APIs. A
+  shared responsive Workspace shell exposes builder, usage, and billing
+  navigation. Billing shows effective plan, subscription state, credit account,
+  server catalog choices, hosted Checkout, subscription changes, Customer
+  Portal, confirmed period-end cancellation, and invoice links. Usage shows
+  period totals, meter evidence, Provider cost, credit progress, durable alerts,
+  and Owner/Billing-only cost controls. Admin is read-only; roles without
+  `billing.read` do not receive navigation or data.
+  Client and component tests cover idempotency headers, server-shaped data,
+  Checkout navigation, role restrictions, and integer/micro-unit conversion.
+  Team management, API key management, retention/security settings, complete
+  role-matrix browser E2E, and live Stripe lifecycle evidence remain open.
 
 ### P20-01 Operator Administration And Support
 

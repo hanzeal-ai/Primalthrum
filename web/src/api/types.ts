@@ -331,6 +331,130 @@ export interface PublicPlanRecord {
   }>
 }
 
+export interface BillingEntitlementRecord {
+  feature: string
+  enabled: boolean
+  quantityLimit: number | null
+  source: string
+}
+
+export interface BillingEntitlementSnapshot {
+  workspaceId: number
+  planKey: string
+  subscriptionState: string
+  generatedAt: string
+  entitlements: Record<string, BillingEntitlementRecord>
+}
+
+export interface CreditAccountRecord {
+  workspaceId: number
+  availableCredits: number
+  reservedCredits: number
+  spentCredits: number
+  updatedAt: string
+}
+
+export interface WorkspaceSubscriptionRecord {
+  workspaceId: number
+  planKey: string
+  state: 'trialing' | 'active' | 'past_due' | 'restricted' | 'cancel_at_period_end' | 'canceled' | 'refunded'
+  periodStartsAt: string
+  periodEndsAt: string | null
+  trialEndsAt: string | null
+  cancelAtPeriodEnd: boolean
+  provider: string
+  providerCustomerRef: string
+  providerSubscriptionRef: string
+  providerPriceRef: string
+  providerSubscriptionItemRef: string
+  pendingPlanKey: string
+  graceEndsAt: string | null
+  canceledAt: string | null
+}
+
+export interface BillingInvoiceRecord {
+  id: number
+  workspaceId: number
+  provider: string
+  providerInvoiceRef: string
+  status: string
+  currency: string
+  amountDueMinor: number
+  amountPaidMinor: number
+  amountRefundedMinor: number
+  periodStartsAt: string | null
+  periodEndsAt: string | null
+  hostedInvoiceUrl: string
+  invoicePdfUrl: string
+  dueAt: string | null
+  paidAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface BillingSummary {
+  entitlementSnapshot: BillingEntitlementSnapshot
+  creditAccount: CreditAccountRecord
+  subscription: WorkspaceSubscriptionRecord
+  invoices: BillingInvoiceRecord[]
+}
+
+export interface BillingCheckoutRecord {
+  id?: number
+  workspaceId?: number
+  provider?: string
+  planKey?: string
+  status?: string
+  checkoutUrl: string
+  expiresAt?: string | null
+}
+
+export interface BillingCostControls {
+  workspaceId: number
+  monthlyCreditLimit: number | null
+  monthlyProviderCostMicrosLimit: number | null
+  hardLimit: boolean
+  overageEnabled: boolean
+  alertThresholds: number[]
+}
+
+export interface BillingCostControlInput {
+  monthlyCreditLimit: number | null
+  monthlyProviderCostMicrosLimit: number | null
+  hardLimit: boolean
+  overageEnabled: boolean
+  alertThresholds: number[]
+}
+
+export interface BillingUsageSummary {
+  workspaceId: number
+  periodStartsAt: string
+  periodEndsAt: string
+  creditsCharged: number
+  providerCostMicros: number
+  eventCount: number
+  byMeter: Array<{
+    meter: string
+    quantity: number
+    creditsCharged: number
+    providerCostMicros: number
+  }>
+  controls: BillingCostControls
+}
+
+export interface BillingCostAlert {
+  id: number
+  workspaceId: number
+  periodKey: string
+  thresholdPercent: number
+  metric: string
+  currentValue: number
+  limitValue: number
+  status: string
+  createdAt: string
+  deliveredAt: string | null
+}
+
 export interface CurrentSession {
   user: AuthUser
   expiresAt: string

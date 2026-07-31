@@ -5,12 +5,16 @@ import { EmailVerificationPage } from './features/auth/EmailVerificationPage'
 import { ForgotPasswordPage } from './features/auth/ForgotPasswordPage'
 import { ResetPasswordPage } from './features/auth/ResetPasswordPage'
 import { useAuthSession } from './features/auth/useAuthSession'
+import { WorkspaceAccessDeniedPage } from './features/app-shell/WorkspaceAccessDeniedPage'
+import { BillingPage } from './features/billing/BillingPage'
+import { UsagePage } from './features/billing/UsagePage'
 import { AgentBuilderPage } from './features/builder/AgentBuilderPage'
 import { HostedAgentPage } from './features/hosted-agent/HostedAgentPage'
 import { PublicHomePage } from './features/marketing/PublicHomePage'
 import { PublicInfoPage } from './features/marketing/PublicInfoPage'
 import { PublicPricingPage } from './features/marketing/PublicPricingPage'
 import { SignupPage } from './features/onboarding/SignupPage'
+import { canReadBilling } from './lib/workspacePermissions'
 import './App.css'
 
 export default function App() {
@@ -128,6 +132,20 @@ export default function App() {
 
   if (pathname === '/' && window.location.search.includes('marketing=1')) {
     return <PublicHomePage authenticated />
+  }
+
+  if (pathname === '/app/billing') {
+    if (!canReadBilling(auth.user.role)) {
+      return <WorkspaceAccessDeniedPage active="billing" user={auth.user} onLogout={auth.logout} />
+    }
+    return <BillingPage user={auth.user} onLogout={auth.logout} />
+  }
+
+  if (pathname === '/app/usage') {
+    if (!canReadBilling(auth.user.role)) {
+      return <WorkspaceAccessDeniedPage active="usage" user={auth.user} onLogout={auth.logout} />
+    }
+    return <UsagePage user={auth.user} onLogout={auth.logout} />
   }
 
   return <AgentBuilderPage user={auth.user} onLogout={auth.logout} />

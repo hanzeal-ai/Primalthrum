@@ -40,6 +40,24 @@ Use the microphone button in the Builder or hosted Agent page. With an STT Provi
 
 Assistant messages expose a playback button. A configured TTS Provider uses the platform speech route; otherwise supported browsers use native speech synthesis. Starting another message stops the active playback.
 
+## Usage And Cost Controls
+
+Open `/app/usage` from the Workspace navigation to inspect the current UTC
+billing period. The page shows rated credits, Provider cost, event totals, and
+the immutable quantity breakdown for each meter. Owner and Billing roles can set
+monthly credit and Provider-cost limits, choose a hard stop, and review 50%, 80%,
+and 100% threshold alerts. Admin is read-only; roles without `billing.read` do
+not receive usage or billing data.
+
+## Billing And Invoices
+
+Open `/app/billing` to view the effective plan, subscription state, available,
+reserved, and spent credits, and the server-managed plan catalog. Owner and
+Billing roles can start hosted Checkout, request a paid-plan change, open the
+Provider Customer Portal, or confirm period-end cancellation. Payment card data
+stays on the hosted Provider surface. Paid invoice rows link to the Provider's
+hosted invoice when one is available.
+
 ## Generated Agent
 
 After creating an agent, generate the standalone project. The generated project includes a LangGraph skeleton, provider folders, and a demo test path.

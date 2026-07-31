@@ -7,6 +7,12 @@ import type {
   AgentVersionRecord,
   AuthCredentials,
   AuthResponse,
+  BillingCheckoutRecord,
+  BillingCostAlert,
+  BillingCostControlInput,
+  BillingCostControls,
+  BillingSummary,
+  BillingUsageSummary,
   ConversationMessageRecord,
   ConversationRecord,
   CreateAgentInput,
@@ -38,6 +44,7 @@ import type {
   ToolInfo,
   UploadDocumentInput,
   WorkspaceRecord,
+  WorkspaceSubscriptionRecord,
   VerificationDispatchResponse,
 } from './types'
 
@@ -154,6 +161,62 @@ export async function resetPassword(token: string, password: string): Promise<vo
 
 export async function listPublicPlans(): Promise<PublicPlanRecord[]> {
   return apiFetch<PublicPlanRecord[]>('/api/public/plans', { auth: false })
+}
+
+export async function getBillingSummary(): Promise<BillingSummary> {
+  return apiFetch<BillingSummary>('/api/billing/summary')
+}
+
+export async function getBillingUsage(): Promise<BillingUsageSummary> {
+  return apiFetch<BillingUsageSummary>('/api/billing/usage')
+}
+
+export async function listBillingCostAlerts(): Promise<BillingCostAlert[]> {
+  return apiFetch<BillingCostAlert[]>('/api/billing/cost-alerts')
+}
+
+export async function updateBillingCostControls(
+  input: BillingCostControlInput,
+): Promise<BillingCostControls> {
+  return apiFetch<BillingCostControls>('/api/billing/cost-controls', {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function createBillingCheckout(
+  planKey: string,
+  idempotencyKey: string = crypto.randomUUID(),
+): Promise<BillingCheckoutRecord> {
+  return apiFetch<BillingCheckoutRecord>('/api/billing/checkout', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': idempotencyKey },
+    body: JSON.stringify({ planKey }),
+  })
+}
+
+export async function changeBillingSubscription(
+  planKey: string,
+  idempotencyKey: string = crypto.randomUUID(),
+): Promise<WorkspaceSubscriptionRecord> {
+  return apiFetch<WorkspaceSubscriptionRecord>('/api/billing/subscription/change', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': idempotencyKey },
+    body: JSON.stringify({ planKey }),
+  })
+}
+
+export async function createBillingPortal(): Promise<{ url: string }> {
+  return apiFetch<{ url: string }>('/api/billing/portal', { method: 'POST' })
+}
+
+export async function cancelBillingSubscription(
+  idempotencyKey: string = crypto.randomUUID(),
+): Promise<{ accepted: boolean }> {
+  return apiFetch<{ accepted: boolean }>('/api/billing/subscription/cancel', {
+    method: 'POST',
+    headers: { 'Idempotency-Key': idempotencyKey },
+  })
 }
 
 export async function getPrivacyConfig(): Promise<PrivacyConfig> {

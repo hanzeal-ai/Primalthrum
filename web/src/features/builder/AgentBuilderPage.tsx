@@ -1,8 +1,10 @@
 import {
+  BarChart3,
   Bot,
   Brain,
   Check,
   ChevronRight,
+  CreditCard,
   Database,
   FileText,
   Loader2,
@@ -28,6 +30,7 @@ import { ChatComposer } from '../../components/chat/ChatComposer'
 import { Badge } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
 import { Progress } from '../../components/ui/progress'
+import { canReadBilling } from '../../lib/workspacePermissions'
 import {
   prepareTextDocument,
   type PreparedTextDocument,
@@ -343,6 +346,10 @@ export function AgentBuilderPage({ user, onLogout }: AgentBuilderPageProps) {
           </div>
           <div className="flex items-center gap-1">
             <WorkspaceSwitcher user={user} />
+            {canReadBilling(user.role) ? <>
+              <Button asChild className="md:hidden" size="icon" title="用量" variant="ghost"><a aria-label="用量" href="/app/usage"><BarChart3 /></a></Button>
+              <Button asChild className="md:hidden" size="icon" title="账单" variant="ghost"><a aria-label="账单" href="/app/billing"><CreditCard /></a></Button>
+            </> : null}
             {canManageProviders(user.role) ? (
               <Button
                 aria-label="Provider 设置"
@@ -539,8 +546,10 @@ function NavigationRail({ user, onLogout, onOpenProviderSettings, onReset }: {
       <div className="mt-8 grid gap-2">
         <Button size="icon" title="新建 Agent" variant="outline" onClick={onReset}><Plus /></Button>
         <Button className="bg-blue-50 text-blue-700" size="icon" title="对话" variant="ghost"><MessageSquare /></Button>
-        <Button size="icon" title="Agent" variant="ghost"><Bot /></Button>
-        <Button size="icon" title="知识库" variant="ghost"><Database /></Button>
+        {canReadBilling(user.role) ? <>
+          <Button asChild size="icon" title="用量" variant="ghost"><a aria-label="用量" href="/app/usage"><BarChart3 /></a></Button>
+          <Button asChild size="icon" title="账单" variant="ghost"><a aria-label="账单" href="/app/billing"><CreditCard /></a></Button>
+        </> : null}
         {canManageProviders(user.role) ? (
           <Button aria-label="Provider 设置" onClick={onOpenProviderSettings} size="icon" title="Provider 设置" variant="ghost"><Settings /></Button>
         ) : null}

@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 import {
+  createBillingCheckout,
   indexDocument,
   replayAgentRun,
   registerAccount,
@@ -9,6 +10,7 @@ import {
   synthesizeSpeech,
   transcribeAudio,
   uploadDocument,
+  updateBillingCostControls,
 } from './client'
 
 function streamResponse(body: string, headers: Record<string, string>): Response {
@@ -204,6 +206,38 @@ describe('stream client', () => {
       providerConfigId: 8,
       text: 'Read this',
       voice: 'alloy',
+    })
+  })
+
+  it('sends billing mutations with explicit idempotency and typed controls', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        checkoutUrl: 'https://checkout.example/session',
+      }), { status: 201, headers: { 'content-type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        workspaceId: 1,
+        monthlyCreditLimit: 20000,
+        monthlyProviderCostMicrosLimit: 5000000,
+        hardLimit: true,
+        overageEnabled: false,
+        alertThresholds: [50, 80, 100],
+      }), { status: 200, headers: { 'content-type': 'application/json' } }))
+
+    await createBillingCheckout('pro', 'checkout-request-1')
+    await updateBillingCostControls({
+      monthlyCreditLimit: 20000,
+      monthlyProviderCostMicrosLimit: 5000000,
+      hardLimit: true,
+      overageEnabled: false,
+      alertThresholds: [50, 80, 100],
+    })
+
+    expect(fetchMock.mock.calls[0]?.[0]).toContain('/api/billing/checkout')
+    expect(new Headers(fetchMock.mock.calls[0]?.[1]?.headers).get('Idempotency-Key'))
+      .toBe('checkout-request-1')
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toMatchObject({
+      monthlyCreditLimit: 20000,
+      monthlyProviderCostMicrosLimit: 5000000,
     })
   })
 })
