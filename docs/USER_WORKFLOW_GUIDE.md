@@ -25,7 +25,7 @@ Use `none` or `null` when a capability should be disabled.
 
 ## Knowledge
 
-Select an agent, register a document, and index it. Indexed documents become retrieval-ready for providers that support RAG.
+Select an agent, upload a supported document, and start indexing. The server accepts indexing as a durable background Job, and the Web client waits for the Job to succeed before showing the document as indexed. Queued and retrying Jobs resume after a server restart. Indexed documents become retrieval-ready for providers that support RAG.
 
 ## Run Console
 

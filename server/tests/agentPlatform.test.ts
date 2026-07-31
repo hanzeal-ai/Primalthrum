@@ -17,6 +17,7 @@ import { JobRepository } from '../src/services/jobRepository';
 import { LocalDocumentStorage } from '../src/services/fileStorage';
 import { DocumentIndexRepository } from '../src/services/documentIndexRepository';
 import { parseDocumentUpload } from '../src/services/documentUpload';
+import { DurableJobDispatcher } from '../src/services/durableJobDispatcher';
 import { createBackup, restoreBackup } from '../src/services/backupService';
 import { type AgentConfig } from '../src/services/agentRepository';
 import { LocalSecretVault } from '../src/services/localSecretVault';
@@ -235,6 +236,37 @@ test('in-process job worker records retry and failure states', () => {
     assert.equal(secondAttempt.error, 'final failure');
   } finally {
     rmSync(jobRootDir, { recursive: true, force: true });
+  }
+});
+
+test('durable dispatcher recovers interrupted jobs and retries from SQLite state', async () => {
+  const dispatcherRootDir = mkdtempSync(join(tmpdir(), 'primalthrum-dispatcher-'));
+  try {
+    const db = new SqliteDatabase(join(dispatcherRootDir, 'platform.sqlite'));
+    const jobs = new JobRepository(db);
+    const queued = jobs.create({
+      type: 'document.index',
+      payload: { documentId: 7 },
+      maxAttempts: 4,
+    });
+    jobs.markRunning(queued.id);
+    let calls = 0;
+    const dispatcher = new DurableJobDispatcher(jobs, {
+      'document.index': (payload) => {
+        calls += 1;
+        if (calls === 1) throw new Error('temporary index failure');
+        return { documentId: payload.documentId, indexed: true };
+      },
+    });
+
+    dispatcher.resume();
+    await new Promise((resolve) => setImmediate(resolve));
+    const completed = jobs.findById(queued.id);
+    assert.equal(completed?.status, 'succeeded');
+    assert.equal(completed?.attempts, 3);
+    assert.deepEqual(completed?.result, { documentId: 7, indexed: true });
+  } finally {
+    rmSync(dispatcherRootDir, { recursive: true, force: true });
   }
 });
 
@@ -1050,8 +1082,8 @@ test('document APIs register and list agent document metadata', async () => {
     `${baseUrl}/api/agents/${agent.id}/documents/${document.id}/index`,
     { method: 'POST', headers: authHeaders },
   );
-  assert.equal(indexResponse.status, 200);
-  const indexed = await indexResponse.json() as typeof document & {
+  assert.equal(indexResponse.status, 202);
+  const acceptedIndex = await indexResponse.json() as typeof document & {
     job: {
       id: number;
       type: string;
@@ -1060,16 +1092,37 @@ test('document APIs register and list agent document metadata', async () => {
       payload: Record<string, unknown>;
     };
   };
-  assert.equal(indexed.id, document.id);
-  assert.equal(indexed.indexStatus, 'indexed');
-  assert.ok(indexed.job.id > 0);
-  assert.equal(indexed.job.type, 'document.index');
-  assert.equal(indexed.job.status, 'succeeded');
-  assert.equal(indexed.job.attempts, 1);
-  assert.deepEqual(indexed.job.payload, {
+  assert.equal(acceptedIndex.id, document.id);
+  assert.equal(acceptedIndex.indexStatus, 'indexing');
+  assert.ok(acceptedIndex.job.id > 0);
+  assert.equal(acceptedIndex.job.type, 'document.index');
+  assert.equal(acceptedIndex.job.status, 'queued');
+  assert.equal(acceptedIndex.job.attempts, 0);
+  assert.deepEqual(acceptedIndex.job.payload, {
     agentId: agent.id,
     documentId: document.id,
   });
+
+  type CompletedIndexJob = {
+    status: string;
+    attempts: number;
+    result: { document?: typeof document; indexEntryCount?: number };
+  };
+  let completedJob: CompletedIndexJob | null = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const jobResponse = await fetch(`${baseUrl}/api/jobs/${acceptedIndex.job.id}`, {
+      headers: authHeaders,
+    });
+    completedJob = await jobResponse.json() as CompletedIndexJob;
+    if (completedJob?.status === 'succeeded') break;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.equal(completedJob?.status, 'succeeded');
+  assert.equal(completedJob?.attempts, 1);
+  assert.equal(completedJob?.result.indexEntryCount, 1);
+  const indexed = completedJob?.result.document;
+  assert.equal(indexed?.id, document.id);
+  assert.equal(indexed?.indexStatus, 'indexed');
   const db = new SqliteDatabase(dbPath);
   const indexedEntries = db.query<{ count: number }>(`
     SELECT COUNT(*) AS count
@@ -1088,9 +1141,22 @@ test('document APIs register and list agent document metadata', async () => {
     `${baseUrl}/api/agents/${agent.id}/documents/${document.id}/index`,
     { method: 'POST', headers: authHeaders },
   );
-  assert.equal(reindexResponse.status, 200);
-  const reindexed = await reindexResponse.json() as typeof indexed;
-  assert.equal(reindexed.indexStatus, 'indexed');
+  assert.equal(reindexResponse.status, 202);
+  const reindexAccepted = await reindexResponse.json() as {
+    indexStatus: string;
+    job: { id: number };
+  };
+  assert.equal(reindexAccepted.indexStatus, 'indexing');
+  let reindexJob: { status: string } | null = null;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const response = await fetch(`${baseUrl}/api/jobs/${reindexAccepted.job.id}`, {
+      headers: authHeaders,
+    });
+    reindexJob = await response.json() as { status: string };
+    if (reindexJob.status === 'succeeded') break;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.equal(reindexJob?.status, 'succeeded');
   const reindexedEntries = db.query<{ count: number }>(`
     SELECT COUNT(*) AS count
     FROM document_index_entries
@@ -1098,12 +1164,12 @@ test('document APIs register and list agent document metadata', async () => {
   `);
   assert.equal(Number(reindexedEntries[0]?.count ?? 0), 1);
 
-  const jobResponse = await fetch(`${baseUrl}/api/jobs/${indexed.job.id}`, {
+  const jobResponse = await fetch(`${baseUrl}/api/jobs/${acceptedIndex.job.id}`, {
     headers: authHeaders,
   });
   assert.equal(jobResponse.status, 200);
   const loadedJob = await jobResponse.json() as { id: number; status: string };
-  assert.equal(loadedJob.id, indexed.job.id);
+  assert.equal(loadedJob.id, acceptedIndex.job.id);
   assert.equal(loadedJob.status, 'succeeded');
 
   const deleteResponse = await fetch(

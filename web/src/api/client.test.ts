@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { replayAgentRun, streamAgentRun, uploadDocument } from './client'
+import { indexDocument, replayAgentRun, streamAgentRun, uploadDocument } from './client'
 
 function streamResponse(body: string, headers: Record<string, string>): Response {
   return new Response(body, {
@@ -112,5 +112,35 @@ describe('stream client', () => {
       mimeType: 'text/markdown',
       dataBase64: window.btoa('# Guide'),
     })
+  })
+
+  it('waits for a queued document index job to succeed', async () => {
+    const document = {
+      id: 5,
+      agentId: 3,
+      workspaceId: 1,
+      filename: 'guide.md',
+      hash: 'a'.repeat(64),
+      indexStatus: 'indexed',
+      collection: 'default',
+      storageRef: 'local://documents/guide.md',
+      mimeType: 'text/markdown',
+      sizeBytes: 7,
+    }
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        ...document,
+        indexStatus: 'indexing',
+        job: { id: 8, status: 'queued' },
+      }), { status: 202, headers: { 'content-type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        id: 8,
+        status: 'succeeded',
+        result: { document, indexEntryCount: 1 },
+      }), { status: 200, headers: { 'content-type': 'application/json' } }))
+
+    expect(await indexDocument(3, 5)).toEqual(document)
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+    expect(fetchMock.mock.calls[1]?.[0]).toContain('/api/jobs/8')
   })
 })

@@ -94,6 +94,18 @@ export interface UploadDocumentInput {
   collection?: string
 }
 
+export interface JobRecord {
+  id: number
+  workspaceId: number
+  type: string
+  status: 'queued' | 'running' | 'retrying' | 'succeeded' | 'failed'
+  attempts: number
+  maxAttempts: number
+  payload: Record<string, unknown>
+  result: Record<string, unknown>
+  error: string
+}
+
 export interface CreateAgentInput {
   name: string
   description?: string

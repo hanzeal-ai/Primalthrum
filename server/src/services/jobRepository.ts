@@ -99,6 +99,40 @@ export class JobRepository {
     return job?.workspaceId === workspaceId ? job : null;
   }
 
+  nextRunnable(types: string[]): JobRecord | null {
+    if (!types.length) return null;
+    const rows = this.db.query<JobRow>(`
+      SELECT ${JOB_COLUMNS}
+      FROM jobs
+      WHERE status IN ('queued', 'retrying')
+        AND datetime(run_at) <= datetime('now')
+        AND type IN (${types.map(sqlValue).join(', ')})
+      ORDER BY id ASC
+      LIMIT 1;
+    `);
+    return rows[0] ? toJobRecord(rows[0]) : null;
+  }
+
+  recoverInterrupted(types: string[]): void {
+    if (!types.length) return;
+    this.db.run(`
+      UPDATE jobs
+      SET
+        status = CASE
+          WHEN attempts < max_attempts THEN 'retrying'
+          ELSE 'failed'
+        END,
+        error = 'job interrupted by process restart',
+        completed_at = CASE
+          WHEN attempts < max_attempts THEN NULL
+          ELSE CURRENT_TIMESTAMP
+        END,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE status = 'running'
+        AND type IN (${types.map(sqlValue).join(', ')});
+    `);
+  }
+
   markRunning(id: number): JobRecord {
     this.db.run(`
       UPDATE jobs

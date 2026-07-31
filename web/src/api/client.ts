@@ -14,6 +14,7 @@ import type {
   DocumentRecord,
   GeneratedProject,
   HostedAgentRecord,
+  JobRecord,
   ParsedSseEvent,
   ProviderCatalog,
   ProviderConfigRecord,
@@ -238,10 +239,20 @@ export async function indexDocument(
   agentId: number,
   documentId: number,
 ): Promise<DocumentRecord> {
-  return apiFetch<DocumentRecord>(
+  const accepted = await apiFetch<DocumentRecord & { job: JobRecord }>(
     `/api/agents/${agentId}/documents/${documentId}/index`,
     { method: 'POST' },
   )
+  const job = await waitForJob(accepted.job.id)
+  const document = job.result.document
+  if (!document || typeof document !== 'object') {
+    throw new ApiError('索引任务未返回文档结果。', 500, 'DOCUMENT_INDEX_FAILED')
+  }
+  return document as DocumentRecord
+}
+
+export async function getJob(jobId: number): Promise<JobRecord> {
+  return apiFetch<JobRecord>(`/api/jobs/${jobId}`)
 }
 
 export async function listProviders(): Promise<ProviderCatalog> {
@@ -552,4 +563,16 @@ function bytesToBase64(bytes: Uint8Array): string {
     binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize))
   }
   return window.btoa(binary)
+}
+
+async function waitForJob(jobId: number): Promise<JobRecord> {
+  for (let attempt = 0; attempt < 120; attempt += 1) {
+    const job = await getJob(jobId)
+    if (job.status === 'succeeded') return job
+    if (job.status === 'failed') {
+      throw new ApiError(job.error || '索引任务失败。', 500, 'DOCUMENT_INDEX_FAILED')
+    }
+    await new Promise((resolve) => window.setTimeout(resolve, 100))
+  }
+  throw new ApiError('索引任务超时。', 504, 'DOCUMENT_INDEX_TIMEOUT')
 }

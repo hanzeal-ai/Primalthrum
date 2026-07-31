@@ -33,12 +33,12 @@ import {
 } from './services/documentRepository';
 import { DocumentIndexRepository } from './services/documentIndexRepository';
 import { parseDocumentUpload } from './services/documentUpload';
+import { DurableJobDispatcher } from './services/durableJobDispatcher';
 import { LocalDocumentStorage } from './services/fileStorage';
 import { checkServerReadiness } from './services/healthReadiness';
 import { JsonConsoleLogger, type StructuredLogger } from './services/logger';
 import { MetricsRegistry } from './services/metricsRegistry';
 import { hashPassword, verifyPassword } from './services/passwordHash';
-import { InProcessJobWorker } from './services/inProcessJobWorker';
 import { JobRepository } from './services/jobRepository';
 import {
   ProviderConfigRepository,
@@ -185,7 +185,27 @@ export function createApp(options: AppOptions = {}): Koa {
   const capabilitySettingsRepository = new CapabilitySettingsRepository(db);
   const toolAuditRepository = new ToolAuditRepository(db);
   const jobRepository = new JobRepository(db);
-  const jobWorker = new InProcessJobWorker(jobRepository);
+  const jobDispatcher = new DurableJobDispatcher(jobRepository, {
+    'document.index': (payload) => {
+      const agentId = Number(payload.agentId);
+      const documentId = Number(payload.documentId);
+      const existing = documentRepository.findByAgentDocument(agentId, documentId);
+      if (!existing) throw new Error('document not found');
+      try {
+        const content = existing.storageRef
+          ? documentStorage.read(existing.storageRef)
+          : '';
+        const entries = documentIndexRepository.reindex(existing, content);
+        const document = documentRepository.markIndexed(agentId, documentId);
+        if (!document) throw new Error('document not found');
+        return { document, indexEntryCount: entries.length };
+      } catch (error) {
+        documentRepository.markStatus(agentId, documentId, 'failed');
+        throw error;
+      }
+    },
+  });
+  jobDispatcher.resume();
 
   function authorize(ctx: Koa.Context, permission: WorkspacePermission): boolean {
     const role = ctx.state.authSession?.user.role;
@@ -777,40 +797,17 @@ export function createApp(options: AppOptions = {}): Koa {
       return;
     }
 
-    let indexed = documentRepository.findByAgentDocument(agentId, documentId);
     const job = jobRepository.create({
       type: 'document.index',
       workspaceId: agent.workspaceId,
       payload: { agentId, documentId },
     });
-    const completedJob = jobWorker.run(job.id, () => {
-      const existing = documentRepository.findByAgentDocument(agentId, documentId);
-      const content = existing?.storageRef
-        ? documentStorage.read(existing.storageRef)
-        : '';
-      const entries = existing
-        ? documentIndexRepository.reindex(existing, content)
-        : [];
-      indexed = documentRepository.markIndexed(agentId, documentId);
-      if (!indexed) {
-        throw new Error('document not found');
-      }
-      return { document: indexed, indexEntryCount: entries.length };
-    });
-
-    if (completedJob.status !== 'succeeded' || !indexed) {
-      sendApiError(ctx, logger, {
-        status: 500,
-        code: 'DOCUMENT_INDEX_FAILED',
-        message: completedJob.error || 'document index failed',
-        details: { job: completedJob },
-      });
-      return;
-    }
-
+    const indexing = documentRepository.markStatus(agentId, documentId, 'indexing');
+    jobDispatcher.kick();
+    ctx.status = 202;
     ctx.body = {
-      ...indexed,
-      job: completedJob,
+      ...indexing,
+      job,
     };
   });
 

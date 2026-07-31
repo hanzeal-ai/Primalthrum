@@ -23,7 +23,7 @@ Open Agent Builder and create an agent with explicit memory, cache, RAG, tools, 
 
 ## 4. Attach Knowledge
 
-Select the agent, open Knowledge, register the first document, then index it. This verifies document storage and the RAG indexing path for the selected agent.
+Select the agent, open Knowledge, upload the first document, then index it. The request should be accepted with a queued Job and reach `succeeded`; this verifies document storage, durable background dispatch, and the RAG indexing path for the selected agent.
 
 ## 5. Run First Stream
 

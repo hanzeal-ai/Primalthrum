@@ -101,9 +101,16 @@ export class DocumentRepository {
   }
 
   markIndexed(agentId: number, documentId: number): DocumentRecord | null {
+    return this.markStatus(agentId, documentId, 'indexed');
+  }
+
+  markStatus(agentId: number, documentId: number, status: string): DocumentRecord | null {
+    if (!['registered', 'indexing', 'indexed', 'failed'].includes(status)) {
+      throw new Error('document status is invalid');
+    }
     this.db.run(`
       UPDATE documents
-      SET status = 'indexed'
+      SET status = ${sqlValue(status)}
       WHERE agent_id = ${sqlValue(agentId)} AND id = ${sqlValue(documentId)};
     `);
 

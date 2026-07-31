@@ -1774,8 +1774,15 @@ complete. Follow the same dependency and verification protocol used above.
   chat share client-side type, count, and aggregate-size validation. Server and
   Web suites cover valid storage metadata, disguised types, malformed content,
   oversize rejection, Base64 encoding, and prior document/index workflows.
-  Durable async indexing, embedding-backed retrieval, STT/TTS adapters, and full
-  browser media/upload E2E remain in P17-03B through P17-03D.
+  P17-03B moves document indexing behind a SQLite-backed durable dispatcher: the
+  API returns `202` with a queued Job, records indexing/success/failure state,
+  retries transient handler failures within the persisted attempt limit, and
+  reclaims interrupted running jobs and resumes runnable jobs on process startup.
+  The Web client polls the authorized
+  Job API to a terminal state before exposing the indexed document. Server and
+  Web tests cover queue acceptance, retry, startup recovery, status polling, and
+  prior document workflows. Embedding-backed retrieval, STT/TTS adapters, and
+  full browser media/upload E2E remain in P17-03C through P17-03D.
 
 ### P18-01 Plans, Trials, Entitlements, And Credit Ledger
 
