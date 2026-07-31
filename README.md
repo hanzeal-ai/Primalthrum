@@ -25,6 +25,10 @@ Web POST /api/stream
 Conversation 和幂等键。客户端断线后可使用同一幂等键及 `Last-Event-ID`
 继续接收尚未消费的事件；终态 Run 会直接回放，不会重复调用模型。
 
+工作区 Owner/Admin 可从 Builder 的设置入口维护 LLM 与 Embedding Provider。
+API Key 只允许首次写入或轮换，读取与编辑接口不会返回密钥明文；已配置的
+LLM 会立即出现在 Agent 创建对话的模型选项中。
+
 ## 快速启动
 
 ```bash

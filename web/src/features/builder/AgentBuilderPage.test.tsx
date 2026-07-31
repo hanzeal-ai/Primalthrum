@@ -4,6 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { AgentBuilderPage } from './AgentBuilderPage'
 
 vi.mock('../../api/client', () => ({
+  createProviderConfig: vi.fn(),
   createAgent: vi.fn(),
   createDocument: vi.fn(),
   generateAgentProject: vi.fn(),
@@ -19,6 +20,7 @@ vi.mock('../../api/client', () => ({
       updatedAt: '2026-01-01T00:00:00.000Z',
     },
   ]),
+  updateProviderConfig: vi.fn(),
 }))
 
 describe('AgentBuilderPage', () => {

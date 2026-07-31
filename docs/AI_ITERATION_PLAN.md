@@ -1704,7 +1704,7 @@ complete. Follow the same dependency and verification protocol used above.
 
 ### P17-01 Real Model And Canonical Stream Runtime
 
-- Status: In Progress
+- Status: Done
 - Goal: Add real LLM/embedding adapters and canonical message delta stream events.
 - Dependencies: P16-02
 - Verification: mock and configured provider tests, reconnect and idempotency E2E.
@@ -1723,8 +1723,14 @@ complete. Follow the same dependency and verification protocol used above.
   preserves the request key across bounded reconnect attempts and resumes without
   duplicating displayed deltas. Server E2E and Web protocol tests cover increasing
   IDs, replay boundaries, conflict handling, upstream call count, and request
-  headers. Provider configuration UI and responsive browser acceptance remain in
-  P17-01C.
+  headers. P17-01C adds a workspace Provider settings drawer for LLM and embedding
+  configs, OpenAI-compatible endpoints, optional generation parameters, encrypted
+  key creation, and key rotation without plaintext readback. Owner/admin entry
+  points work on desktop and mobile, saved LLM configs immediately appear in the
+  conversational Builder, and component tests cover create and preserve-secret
+  updates. Desktop and 390x844 browser acceptance passed with no horizontal
+  overflow or browser errors; QA database inspection confirmed the submitted key
+  was not stored as plaintext.
 
 ### P17-02 Hot-Pluggable Runtime Capabilities
 

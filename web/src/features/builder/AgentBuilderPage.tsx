@@ -28,6 +28,7 @@ import { Badge } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
 import { Progress } from '../../components/ui/progress'
 import { WorkspaceSwitcher } from '../workspaces/WorkspaceSwitcher'
+import { ProviderSettingsPanel } from '../providers/ProviderSettingsPanel'
 
 type BuilderStage = 'describe' | 'model' | 'rag' | 'knowledge' | 'review' | 'creating' | 'created'
 
@@ -86,6 +87,7 @@ export function AgentBuilderPage({ user, onLogout }: AgentBuilderPageProps) {
   const [draft, setDraft] = useState<BuilderDraft>(() => loadDraft(user.workspaceId))
   const [input, setInput] = useState('')
   const [providers, setProviders] = useState<ProviderConfigRecord[]>([])
+  const [providerSettingsOpen, setProviderSettingsOpen] = useState(false)
   const [error, setError] = useState('')
   const messageEndRef = useRef<HTMLDivElement>(null)
 
@@ -272,7 +274,12 @@ export function AgentBuilderPage({ user, onLogout }: AgentBuilderPageProps) {
 
   return (
     <main className="builder-shell">
-      <NavigationRail user={user} onLogout={onLogout} onReset={resetDraft} />
+      <NavigationRail
+        onLogout={onLogout}
+        onOpenProviderSettings={() => setProviderSettingsOpen(true)}
+        onReset={resetDraft}
+        user={user}
+      />
 
       <section className="builder-conversation">
         <header className="builder-header">
@@ -285,6 +292,18 @@ export function AgentBuilderPage({ user, onLogout }: AgentBuilderPageProps) {
           </div>
           <div className="flex items-center gap-1">
             <WorkspaceSwitcher user={user} />
+            {canManageProviders(user.role) ? (
+              <Button
+                aria-label="Provider 设置"
+                className="md:hidden"
+                onClick={() => setProviderSettingsOpen(true)}
+                size="icon"
+                title="Provider 设置"
+                variant="ghost"
+              >
+                <Settings />
+              </Button>
+            ) : null}
             <Button className="md:hidden" onClick={resetDraft} size="icon" variant="ghost" title="重新创建">
               <RotateCcw />
             </Button>
@@ -417,13 +436,20 @@ export function AgentBuilderPage({ user, onLogout }: AgentBuilderPageProps) {
       </section>
 
       <AgentStatusPanel agentName={agentName} completion={completion} draft={draft} />
+      {providerSettingsOpen ? (
+        <ProviderSettingsPanel
+          onClose={() => setProviderSettingsOpen(false)}
+          onProvidersChange={setProviders}
+        />
+      ) : null}
     </main>
   )
 }
 
-function NavigationRail({ user, onLogout, onReset }: {
+function NavigationRail({ user, onLogout, onOpenProviderSettings, onReset }: {
   user: AuthUser
   onLogout: () => Promise<void>
+  onOpenProviderSettings: () => void
   onReset: () => void
 }) {
   return (
@@ -434,7 +460,9 @@ function NavigationRail({ user, onLogout, onReset }: {
         <Button className="bg-blue-50 text-blue-700" size="icon" title="对话" variant="ghost"><MessageSquare /></Button>
         <Button size="icon" title="Agent" variant="ghost"><Bot /></Button>
         <Button size="icon" title="知识库" variant="ghost"><Database /></Button>
-        <Button size="icon" title="设置" variant="ghost"><Settings /></Button>
+        {canManageProviders(user.role) ? (
+          <Button aria-label="Provider 设置" onClick={onOpenProviderSettings} size="icon" title="Provider 设置" variant="ghost"><Settings /></Button>
+        ) : null}
       </div>
       <div className="mt-auto grid gap-2">
         <div className="grid size-9 place-items-center rounded-full bg-zinc-200 text-xs font-semibold" title={user.email}>
@@ -551,6 +579,10 @@ function configuredModels(providers: ProviderConfigRecord[]): ModelChoice[] {
     })
 
   return choices.length ? choices : [{ label: 'Mock Chat（本地演示）', provider: 'mock', model: 'mock-chat' }]
+}
+
+function canManageProviders(role: string): boolean {
+  return role === 'owner' || role === 'admin'
 }
 
 function loadDraft(workspaceId: number): BuilderDraft {
