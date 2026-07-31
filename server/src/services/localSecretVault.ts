@@ -1,5 +1,6 @@
 import {
   createCipheriv,
+  createDecipheriv,
   createHash,
   randomBytes,
   randomUUID,
@@ -28,6 +29,25 @@ export class LocalSecretVault {
     this.store(secretRef, plaintext, workspaceId);
   }
 
+  read(secretRef: string, workspaceId: number): string {
+    if (!secretRef.startsWith(SECRET_REF_PREFIX)) {
+      throw new Error('only local secret refs can be read');
+    }
+    const rows = this.db.query<{
+      ciphertext: string;
+      iv: string;
+      auth_tag: string;
+    }>(`
+      SELECT ciphertext, iv, auth_tag
+      FROM secrets
+      WHERE secret_ref = ${sqlValue(secretRef)}
+        AND workspace_id = ${sqlValue(workspaceId)}
+      LIMIT 1;
+    `);
+    if (!rows[0]) throw new Error('provider secret not found');
+    return decryptSecret(rows[0]);
+  }
+
   private store(secretRef: string, plaintext: string, workspaceId: number): void {
     const encrypted = encryptSecret(normalizeSecret(plaintext));
 
@@ -54,6 +74,23 @@ export class LocalSecretVault {
       WHERE secrets.workspace_id = excluded.workspace_id;
     `);
   }
+}
+
+function decryptSecret(encrypted: {
+  ciphertext: string;
+  iv: string;
+  auth_tag: string;
+}): string {
+  const decipher = createDecipheriv(
+    'aes-256-gcm',
+    secretKey(),
+    Buffer.from(encrypted.iv, 'base64'),
+  );
+  decipher.setAuthTag(Buffer.from(encrypted.auth_tag, 'base64'));
+  return Buffer.concat([
+    decipher.update(Buffer.from(encrypted.ciphertext, 'base64')),
+    decipher.final(),
+  ]).toString('utf8');
 }
 
 function normalizeSecret(secret: unknown): string {

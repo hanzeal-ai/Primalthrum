@@ -101,6 +101,30 @@ test('POST /api/stream proxies the agent SSE stream', async () => {
 
 test('POST /api/stream can run by agentId and persist proxied events', async () => {
   upstreamPayloads.length = 0;
+  const providerResponse = await fetch(`${appBaseUrl}/api/provider-configs`, {
+    method: 'POST',
+    headers: jsonAuthHeaders(),
+    body: JSON.stringify({
+      name: 'test-openai-compatible',
+      type: 'llm',
+      config: {
+        provider: 'openai-compatible',
+        model: 'gpt-test',
+        baseUrl: 'https://models.example/v1',
+        temperature: 0.2,
+        maxTokens: 512,
+      },
+      secret: 'internal-test-secret',
+    }),
+  });
+  assert.equal(providerResponse.status, 201);
+  const provider = await providerResponse.json() as {
+    id: number;
+    secretRef: string;
+  };
+  assert.match(provider.secretRef, /^secret:\/\/local\//);
+  assert.doesNotMatch(JSON.stringify(provider), /internal-test-secret/);
+
   const agentResponse = await fetch(`${appBaseUrl}/api/agents`, {
     method: 'POST',
     headers: jsonAuthHeaders(),
@@ -112,6 +136,14 @@ test('POST /api/stream can run by agentId and persist proxied events', async () 
       ragProvider: 'in-memory',
       enabledTools: ['file_reader'],
       enabledSkills: ['research'],
+      modelConfig: {
+        default: {
+          provider: 'openai-compatible',
+          providerConfigId: provider.id,
+          model: 'gpt-test',
+        },
+        embedding: { provider: 'mock', model: 'mock-embedding' },
+      },
     }),
   });
   assert.equal(agentResponse.status, 201);
@@ -150,6 +182,18 @@ test('POST /api/stream can run by agentId and persist proxied events', async () 
     memory_provider: 'sqlite',
     cache_provider: 'memory',
     rag_provider: 'in-memory',
+    llm: {
+      provider: 'openai-compatible',
+      model: 'gpt-test',
+      api_key: 'internal-test-secret',
+      base_url: 'https://models.example/v1',
+      temperature: 0.2,
+      max_tokens: 512,
+    },
+    embedding: {
+      provider: 'mock',
+      model: 'mock-embedding',
+    },
   });
 
   const runResponse = await fetch(`${appBaseUrl}/api/runs/${runId}`, {

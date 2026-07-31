@@ -17,6 +17,10 @@ import { JobRepository } from '../src/services/jobRepository';
 import { LocalDocumentStorage } from '../src/services/fileStorage';
 import { DocumentIndexRepository } from '../src/services/documentIndexRepository';
 import { createBackup, restoreBackup } from '../src/services/backupService';
+import { type AgentConfig } from '../src/services/agentRepository';
+import { LocalSecretVault } from '../src/services/localSecretVault';
+import { ProviderConfigRepository } from '../src/services/providerConfigRepository';
+import { RuntimeProviderResolver } from '../src/services/runtimeProviderResolver';
 
 const execFileAsync = promisify(execFile);
 
@@ -633,11 +637,15 @@ test('discovery APIs expose typed providers tools and skills', async () => {
   assert.equal(providersResponse.status, 200);
   const providers = await providersResponse.json() as {
     llm: Array<{ name: string; status: string; description: string }>;
+    embedding: Array<{ name: string; status: string; description: string }>;
     memory: Array<{ name: string; status: string; description: string }>;
     cache: Array<{ name: string; status: string; description: string }>;
     rag: Array<{ name: string; status: string; description: string }>;
   };
   assert.ok(providers.llm.some((provider) => provider.name === 'mock' && provider.status === 'available'));
+  assert.ok(providers.llm.some((provider) => provider.name === 'openai' && provider.status === 'available'));
+  assert.ok(providers.llm.some((provider) => provider.name === 'anthropic' && provider.status === 'available'));
+  assert.ok(providers.embedding.some((provider) => provider.name === 'openai' && provider.status === 'available'));
   assert.ok(providers.memory.some((provider) => provider.name === 'null' && provider.status === 'available'));
   assert.ok(providers.cache.some((provider) => provider.name === 'memory' && provider.status === 'available'));
   assert.ok(providers.rag.some((provider) => provider.name === 'in-memory' && provider.status === 'available'));
@@ -775,6 +783,55 @@ test('provider config APIs store secrets as redacted references', async () => {
   assert.notEqual(storedSecrets[0]?.ciphertext, 'sk-rotated-secret-value');
   assert.doesNotMatch(JSON.stringify(storedSecrets), /sk-live-secret-value/);
   assert.doesNotMatch(JSON.stringify(storedSecrets), /sk-rotated-secret-value/);
+
+  const providerRepository = new ProviderConfigRepository(db);
+  const secretVault = new LocalSecretVault(db);
+  const resolver = new RuntimeProviderResolver(providerRepository, secretVault);
+  const runtimeConfig: AgentConfig = {
+    memoryProvider: 'null',
+    cacheProvider: 'memory',
+    ragProvider: 'none',
+    enabledTools: [],
+    enabledSkills: [],
+    modelConfig: {
+      default: {
+        provider: 'openai',
+        providerConfigId: updated.id,
+        model: 'gpt-5',
+      },
+      embedding: { provider: 'mock', model: 'mock-embedding' },
+    },
+    audience: 'workspace',
+  };
+  assert.deepEqual(resolver.resolve(runtimeConfig, 1), {
+    llm: {
+      provider: 'openai',
+      model: 'gpt-5',
+      api_key: 'sk-rotated-secret-value',
+    },
+    embedding: { provider: 'mock', model: 'mock-embedding' },
+  });
+  assert.throws(() => secretVault.read(updated.secretRef, 2), /secret not found/);
+
+  const unsafe = providerRepository.create({
+    name: 'unsafe-provider-endpoint',
+    type: 'llm',
+    config: {
+      provider: 'openai-compatible',
+      model: 'unsafe-model',
+      baseUrl: 'http://attacker.example/v1',
+    },
+    secret: 'must-not-be-forwarded',
+  }, 1);
+  assert.throws(() => resolver.resolve({
+    ...runtimeConfig,
+    modelConfig: {
+      default: {
+        provider: 'openai-compatible',
+        providerConfigId: unsafe.id,
+      },
+    },
+  }, 1), /HTTPS or loopback HTTP/);
 });
 
 test('POST /api/runs creates a pending run for an existing agent', async () => {

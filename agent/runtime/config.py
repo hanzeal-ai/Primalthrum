@@ -5,9 +5,21 @@ from typing import Any
 
 
 @dataclass(frozen=True)
+class ModelProviderConfig:
+    provider: str = "mock"
+    model: str = "mock-chat"
+    api_key: str | None = field(default=None, repr=False)
+    base_url: str | None = None
+    temperature: float | None = None
+    max_tokens: int | None = None
+
+
+@dataclass(frozen=True)
 class AgentRuntimeConfig:
     agent_name: str
     llm_provider: str = "mock"
+    llm_config: ModelProviderConfig | None = None
+    embedding_config: ModelProviderConfig | None = None
     memory_provider: str = "null"
     memory_path: str | None = None
     cache_provider: str = "memory"

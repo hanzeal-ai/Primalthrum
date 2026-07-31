@@ -3,8 +3,9 @@ from __future__ import annotations
 from dataclasses import dataclass
 
 from .cache import CacheProvider, MemoryCache, NullCache, SQLiteCache
-from .config import AgentRuntimeConfig
-from .llm import LLMProvider, MockLLMProvider
+from .config import AgentRuntimeConfig, ModelProviderConfig
+from .embeddings import EmbeddingProvider, create_embedding_provider
+from .llm import LLMProvider, create_llm_provider
 from .memory import MemoryProvider, NullMemory, SQLiteMemory
 from .rag import InMemoryRagProvider, NullRagProvider, RagProvider
 from .registry import Registry
@@ -22,6 +23,7 @@ from .tools import (
 class AgentRuntime:
     config: AgentRuntimeConfig
     llm: LLMProvider
+    embeddings: EmbeddingProvider
     memory: MemoryProvider
     cache: CacheProvider
     rag: RagProvider
@@ -30,8 +32,16 @@ class AgentRuntime:
 
 
 def create_runtime(config: AgentRuntimeConfig) -> AgentRuntime:
-    llm_registry = Registry[LLMProvider]()
-    llm_registry.register("mock", MockLLMProvider())
+    llm_config = config.llm_config or ModelProviderConfig(
+        provider=config.llm_provider,
+        model="mock-chat",
+    )
+    embedding_config = config.embedding_config or ModelProviderConfig(
+        provider="mock",
+        model="mock-embedding",
+    )
+    llm = create_llm_provider(llm_config)
+    embeddings = create_embedding_provider(embedding_config)
 
     memory_registry = Registry[MemoryProvider]()
     memory_registry.register("null", NullMemory())
@@ -76,7 +86,8 @@ def create_runtime(config: AgentRuntimeConfig) -> AgentRuntime:
 
     return AgentRuntime(
         config=config,
-        llm=llm_registry.get(config.llm_provider),
+        llm=llm,
+        embeddings=embeddings,
         memory=memory_registry.get(config.memory_provider),
         cache=cache_registry.get(config.cache_provider),
         rag=rag_registry.get(config.rag_provider),

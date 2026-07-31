@@ -8,10 +8,21 @@ from typing import Any, TypedDict
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
+from langgraph.config import get_stream_writer
 from langgraph.graph import END, StateGraph
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, SecretStr
 
-from runtime import AgentRuntimeConfig, create_runtime
+from runtime import AgentRuntimeConfig, ModelProviderConfig, create_runtime
+from runtime.llm import ProviderRequestError
+
+
+class RuntimeModelRequest(BaseModel):
+    provider: str = "mock"
+    model: str = "mock-chat"
+    api_key: SecretStr | None = None
+    base_url: str | None = None
+    temperature: float | None = Field(default=None, ge=0, le=2)
+    max_tokens: int | None = Field(default=None, ge=1, le=128_000)
 
 
 class AgentRequest(BaseModel):
@@ -23,6 +34,10 @@ class AgentRequest(BaseModel):
     cache_provider: str = "memory"
     cache_path: str | None = None
     rag_provider: str = "null"
+    llm: RuntimeModelRequest = Field(default_factory=RuntimeModelRequest)
+    embedding: RuntimeModelRequest = Field(
+        default_factory=lambda: RuntimeModelRequest(model="mock-embedding")
+    )
     context: str = ""
     sources: list[dict[str, Any]] = Field(default_factory=list)
 
@@ -33,6 +48,7 @@ class AgentState(TypedDict):
     tools: list[str]
     skills: list[str]
     runtime: dict[str, Any]
+    runtime_options: dict[str, Any]
     context: str
     sources: list[dict[str, Any]]
     plan: list[str]
@@ -58,19 +74,35 @@ def cache_key_for_goal(agent: str, goal: str) -> str:
     return f"stream:{digest}"
 
 
+def model_provider_config(value: RuntimeModelRequest) -> ModelProviderConfig:
+    return ModelProviderConfig(
+        provider=value.provider.strip(),
+        model=value.model.strip(),
+        api_key=value.api_key.get_secret_value() if value.api_key else None,
+        base_url=value.base_url.strip() if value.base_url else None,
+        temperature=value.temperature,
+        max_tokens=value.max_tokens,
+    )
+
+
+def runtime_config(state: AgentState) -> AgentRuntimeConfig:
+    options = state["runtime_options"]
+    return AgentRuntimeConfig(
+        agent_name=state["agent"],
+        enabled_tools=state["tools"],
+        enabled_skills=state["skills"],
+        memory_provider=options["memory_provider"],
+        cache_provider=options["cache_provider"],
+        cache_path=options.get("cache_path"),
+        rag_provider=options["rag_provider"],
+        llm_config=options["llm"],
+        embedding_config=options["embedding"],
+    )
+
+
 def intake(state: AgentState) -> dict[str, Any]:
     tools = normalize_tools(state["tools"])
-    runtime = create_runtime(
-        AgentRuntimeConfig(
-            agent_name=state["agent"],
-            enabled_tools=tools,
-            enabled_skills=state["skills"],
-            memory_provider=state["runtime"]["memory_provider"],
-            cache_provider=state["runtime"]["cache_provider"],
-            cache_path=state["runtime"].get("cache_path"),
-            rag_provider=state["runtime"]["rag_provider"],
-        )
-    )
+    runtime = create_runtime(runtime_config({**state, "tools": tools}))
     cache_event = None
     if runtime.cache.name != "null":
         cache_key = cache_key_for_goal(state["agent"], state["goal"])
@@ -92,18 +124,19 @@ def intake(state: AgentState) -> dict[str, Any]:
             "status": cache_status,
             "message": f"Cache {cache_status} for intake",
         }
-    runtime_metadata = {
-        key: value
-        for key, value in state["runtime"].items()
-        if key != "cache_path"
-    }
+    options = state["runtime_options"]
     return {
         "tools": tools,
         "runtime": {
-            **runtime_metadata,
+            "memory_provider": options["memory_provider"],
+            "cache_provider": options["cache_provider"],
+            "rag_provider": options["rag_provider"],
             "loaded_tools": runtime.tools.names(),
             "loaded_skills": runtime.skills.names(),
             "llm_provider": runtime.llm.name,
+            "llm_model": runtime.llm.model,
+            "embedding_provider": runtime.embeddings.name,
+            "embedding_model": runtime.embeddings.model,
         },
         "cache_event": cache_event,
         "message": f"Accepted goal for {state['agent']}: {state['goal']}",
@@ -128,9 +161,9 @@ def scaffold_agent(state: AgentState) -> dict[str, Any]:
         f"agent:{state['agent']}",
         f"tools:{','.join(state['tools'])}",
         f"skills:{','.join(state['skills']) or 'none'}",
-        f"memory:{state['runtime']['memory_provider']}",
-        f"cache:{state['runtime']['cache_provider']}",
-        f"rag:{state['runtime']['rag_provider']}",
+        f"memory:{state['runtime_options']['memory_provider']}",
+        f"cache:{state['runtime_options']['cache_provider']}",
+        f"rag:{state['runtime_options']['rag_provider']}",
         "interface:stream",
     ]
     return {
@@ -139,25 +172,28 @@ def scaffold_agent(state: AgentState) -> dict[str, Any]:
     }
 
 
-def respond(state: AgentState) -> dict[str, Any]:
-    runtime = create_runtime(
-        AgentRuntimeConfig(
-            agent_name=state["agent"],
-            enabled_tools=state["tools"],
-            enabled_skills=state["skills"],
-            memory_provider=state["runtime"]["memory_provider"],
-            cache_provider=state["runtime"]["cache_provider"],
-            rag_provider=state["runtime"]["rag_provider"],
-            llm_provider=state["runtime"].get("llm_provider", "mock"),
-        )
-    )
+async def respond(state: AgentState) -> dict[str, Any]:
+    runtime = create_runtime(runtime_config(state))
+    writer = get_stream_writer()
     system_message = f"You are {state['agent']}. Answer the user's request directly."
     if state["context"]:
         system_message += f"\n\nUse this retrieved context and cite it when relevant:\n{state['context']}"
-    answer = runtime.llm.chat([
+    answer_parts: list[str] = []
+    async for delta in runtime.llm.stream_chat([
         {"role": "system", "content": system_message},
         {"role": "user", "content": state["goal"]},
-    ])
+    ]):
+        answer_parts.append(delta)
+        writer({
+            "event": "message.delta",
+            "payload": {
+                "node": "respond",
+                "agent": state["agent"],
+                "delta": delta,
+                "status": "running",
+            },
+        })
+    answer = "".join(answer_parts)
     return {
         "answer": answer,
         "message": "Generated assistant response",
@@ -218,8 +254,15 @@ async def stream_graph(request: AgentRequest) -> AsyncIterator[str]:
         "runtime": {
             "memory_provider": request.memory_provider,
             "cache_provider": request.cache_provider,
+            "rag_provider": request.rag_provider,
+        },
+        "runtime_options": {
+            "memory_provider": request.memory_provider,
+            "cache_provider": request.cache_provider,
             "cache_path": request.cache_path,
             "rag_provider": request.rag_provider,
+            "llm": model_provider_config(request.llm),
+            "embedding": model_provider_config(request.embedding),
         },
         "context": request.context.strip(),
         "sources": request.sources,
@@ -242,47 +285,81 @@ async def stream_graph(request: AgentRequest) -> AsyncIterator[str]:
         },
     )
 
-    async for update in compiled_graph.astream(initial_state, stream_mode="updates"):
-        for node, patch in update.items():
-            cache_event = patch.get("cache_event")
-            if isinstance(cache_event, dict):
-                yield sse(f"agent.cache.{cache_event['status']}", cache_event)
-                await asyncio.sleep(0)
+    try:
+        stream = compiled_graph.astream(
+            initial_state,
+            stream_mode=["updates", "custom"],
+        )
+        async for mode, update in stream:
+            if mode == "custom":
+                if isinstance(update, dict):
+                    event = str(update.get("event", "message"))
+                    payload = update.get("payload")
+                    if isinstance(payload, dict):
+                        yield sse(event, payload)
+                        await asyncio.sleep(0)
+                continue
 
-            answer = patch.get("answer")
-            if isinstance(answer, str) and answer:
-                yield sse(
-                    "message.delta",
-                    {
-                        "node": node,
-                        "agent": initial_state["agent"],
-                        "delta": answer,
-                        "status": "running",
-                    },
-                )
-                yield sse(
-                    "message.completed",
-                    {
-                        "node": node,
-                        "agent": initial_state["agent"],
-                        "message": answer,
-                        "sources": initial_state["sources"],
-                        "status": "done",
-                    },
-                )
-                await asyncio.sleep(0)
+            for node, patch in update.items():
+                cache_event = patch.get("cache_event")
+                if isinstance(cache_event, dict):
+                    yield sse(f"agent.cache.{cache_event['status']}", cache_event)
+                    await asyncio.sleep(0)
 
-            payload = {
-                "node": node,
+                answer = patch.get("answer")
+                if isinstance(answer, str) and answer:
+                    yield sse(
+                        "message.completed",
+                        {
+                            "node": node,
+                            "agent": initial_state["agent"],
+                            "message": answer,
+                            "sources": initial_state["sources"],
+                            "status": "done",
+                        },
+                    )
+                    await asyncio.sleep(0)
+
+                payload = {
+                    "node": node,
+                    "agent": initial_state["agent"],
+                    "message": patch.get("message", f"{node} completed"),
+                    "status": patch.get("status", "running"),
+                }
+                for key in (
+                    "tools",
+                    "skills",
+                    "runtime",
+                    "plan",
+                    "artifacts",
+                    "checks",
+                ):
+                    if key in patch:
+                        payload[key] = patch[key]
+                yield sse("agent.node.completed", payload)
+                await asyncio.sleep(0)
+    except ProviderRequestError as error:
+        yield sse(
+            "agent.error",
+            {
+                "node": "respond",
                 "agent": initial_state["agent"],
-                "message": patch.get("message", f"{node} completed"),
-                "status": patch.get("status", "running"),
-            }
-            for key in ("tools", "skills", "runtime", "plan", "artifacts", "checks"):
-                if key in patch:
-                    payload[key] = patch[key]
-            yield sse("agent.node.completed", payload)
-            await asyncio.sleep(0)
+                "message": str(error),
+                "status": "error",
+            },
+        )
+        return
+    except Exception:
+        yield sse(
+            "agent.error",
+            {
+                "node": "run",
+                "agent": initial_state["agent"],
+                "message": "Agent runtime failed",
+                "status": "error",
+            },
+        )
+        return
 
     yield sse(
         "agent.run.completed",

@@ -1704,10 +1704,19 @@ complete. Follow the same dependency and verification protocol used above.
 
 ### P17-01 Real Model And Canonical Stream Runtime
 
-- Status: Todo
+- Status: In Progress
 - Goal: Add real LLM/embedding adapters and canonical message delta stream events.
 - Dependencies: P16-02
 - Verification: mock and configured provider tests, reconnect and idempotency E2E.
+- Current evidence: P17-01A connects workspace-scoped encrypted Provider configs
+  to the internal runtime without exposing plaintext secrets through public APIs
+  or SSE. OpenAI, OpenAI-compatible, and Anthropic chat adapters stream real
+  deltas; OpenAI-compatible embeddings and deterministic Mock adapters share a
+  typed runtime contract. HTTPS/loopback endpoint policy blocks credential
+  forwarding to unsafe endpoints. Agent, server, and web suites cover provider
+  protocol parsing, secret scope, configured payload resolution, and multi-delta
+  message completion. Canonical server event IDs, Run lifecycle, reconnect, and
+  idempotency remain in P17-01B.
 
 ### P17-02 Hot-Pluggable Runtime Capabilities
 

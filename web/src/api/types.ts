@@ -104,6 +104,7 @@ export interface ProviderInfo {
 
 export interface ProviderCatalog {
   llm: ProviderInfo[]
+  embedding: ProviderInfo[]
   memory: ProviderInfo[]
   cache: ProviderInfo[]
   rag: ProviderInfo[]

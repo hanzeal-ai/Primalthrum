@@ -46,6 +46,7 @@ interface ModelChoice {
   label: string
   provider: string
   model: string
+  providerConfigId?: number
 }
 
 interface BuilderDraft {
@@ -226,7 +227,11 @@ export function AgentBuilderPage({ user, onLogout }: AgentBuilderPageProps) {
         enabledTools: ['file_reader'],
         enabledSkills: ['research'],
         modelConfig: {
-          default: { provider: draft.model.provider, model: draft.model.model },
+          default: {
+            provider: draft.model.provider,
+            model: draft.model.model,
+            providerConfigId: draft.model.providerConfigId,
+          },
           embedding: { provider: 'mock', model: 'mock-embedding' },
         },
       })
@@ -537,7 +542,12 @@ function configuredModels(providers: ProviderConfigRecord[]): ModelChoice[] {
     .map((provider) => {
       const providerName = String(provider.config.provider ?? 'mock')
       const modelName = String(provider.config.model ?? 'mock-chat')
-      return { label: provider.name, provider: providerName, model: modelName }
+      return {
+        label: provider.name,
+        provider: providerName,
+        model: modelName,
+        providerConfigId: provider.id,
+      }
     })
 
   return choices.length ? choices : [{ label: 'Mock Chat（本地演示）', provider: 'mock', model: 'mock-chat' }]

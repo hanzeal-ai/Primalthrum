@@ -54,6 +54,8 @@ import {
 } from './services/userRepository';
 import { hasWorkspacePermission, type WorkspacePermission } from './services/workspaceAuthorization';
 import { WorkspaceRepository } from './services/workspaceRepository';
+import { LocalSecretVault } from './services/localSecretVault';
+import { RuntimeProviderResolver } from './services/runtimeProviderResolver';
 
 export interface AppOptions {
   agentBaseUrl?: string;
@@ -114,6 +116,10 @@ export function createApp(options: AppOptions = {}): Koa {
   const workspaceRepository = new WorkspaceRepository(db);
   const sessionRepository = new SessionRepository(db);
   const providerConfigRepository = new ProviderConfigRepository(db);
+  const runtimeProviderResolver = new RuntimeProviderResolver(
+    providerConfigRepository,
+    new LocalSecretVault(db),
+  );
   const toolAuditRepository = new ToolAuditRepository(db);
   const jobRepository = new JobRepository(db);
   const jobWorker = new InProcessJobWorker(jobRepository);
@@ -1022,6 +1028,7 @@ export function createApp(options: AppOptions = {}): Koa {
         runRepository,
         workspaceId,
         agentVersionRepository,
+        runtimeProviderResolver,
       );
       let conversationId: number | null = null;
       if (streamRequest.runId) {

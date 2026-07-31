@@ -8,6 +8,7 @@ export interface ProviderDescriptor {
 
 export interface ProviderCatalog {
   llm: ProviderDescriptor[];
+  embedding: ProviderDescriptor[];
   memory: ProviderDescriptor[];
   cache: ProviderDescriptor[];
   rag: ProviderDescriptor[];
@@ -39,9 +40,36 @@ export function listProviders(): ProviderCatalog {
         status: 'available',
       },
       {
+        name: 'openai',
+        description: 'OpenAI Chat Completions streaming adapter.',
+        status: 'available',
+      },
+      {
         name: 'openai-compatible',
         description: 'OpenAI-compatible chat and embedding endpoint adapter.',
-        status: 'planned',
+        status: 'available',
+      },
+      {
+        name: 'anthropic',
+        description: 'Anthropic Messages streaming adapter.',
+        status: 'available',
+      },
+    ],
+    embedding: [
+      {
+        name: 'mock',
+        description: 'Deterministic local embedding adapter.',
+        status: 'available',
+      },
+      {
+        name: 'openai',
+        description: 'OpenAI embeddings adapter.',
+        status: 'available',
+      },
+      {
+        name: 'openai-compatible',
+        description: 'OpenAI-compatible embeddings endpoint adapter.',
+        status: 'available',
       },
     ],
     memory: [

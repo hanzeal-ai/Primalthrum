@@ -1,6 +1,10 @@
 import type { AgentRepository } from './agentRepository';
 import type { AgentVersionRepository } from './agentVersionRepository';
 import type { RunRepository } from './runRepository';
+import type {
+  RuntimeModelEndpoint,
+  RuntimeProviderResolver,
+} from './runtimeProviderResolver';
 
 export interface AgentStreamPayload {
   goal: string;
@@ -10,6 +14,8 @@ export interface AgentStreamPayload {
   memory_provider: string;
   cache_provider: string;
   rag_provider: string;
+  llm: RuntimeModelEndpoint;
+  embedding: RuntimeModelEndpoint;
   context?: string;
   sources?: Array<{
     title: string;
@@ -29,6 +35,7 @@ export function resolveStreamRequest(
   runRepository: RunRepository,
   workspaceId?: number,
   agentVersionRepository?: AgentVersionRepository,
+  runtimeProviderResolver?: RuntimeProviderResolver,
 ): ResolvedStreamRequest {
   const candidate = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
   const agentId = Number(candidate.agentId);
@@ -49,6 +56,9 @@ export function resolveStreamRequest(
       throw new StreamRequestError(404, 'agent version not found');
     }
     const config = version?.config ?? agent.config;
+    const providers = typeof workspaceId === 'number' && runtimeProviderResolver
+      ? runtimeProviderResolver.resolve(config, workspaceId)
+      : mockRuntimeProviders();
 
     const input = toText(candidate.input ?? candidate.goal ?? candidate.task_desc, '');
     if (!input) {
@@ -71,6 +81,8 @@ export function resolveStreamRequest(
         memory_provider: config.memoryProvider,
         cache_provider: config.cacheProvider,
         rag_provider: config.ragProvider,
+        llm: providers.llm,
+        embedding: providers.embedding,
       },
     };
   }
@@ -113,6 +125,15 @@ function normalizeLegacyPayload(candidate: Record<string, unknown>): AgentStream
     memory_provider: toText(candidate.memory_provider, 'null'),
     cache_provider: toText(candidate.cache_provider, 'memory'),
     rag_provider: toText(candidate.rag_provider, 'null'),
+    llm: mockRuntimeProviders().llm,
+    embedding: mockRuntimeProviders().embedding,
+  };
+}
+
+function mockRuntimeProviders() {
+  return {
+    llm: { provider: 'mock', model: 'mock-chat' },
+    embedding: { provider: 'mock', model: 'mock-embedding' },
   };
 }
 

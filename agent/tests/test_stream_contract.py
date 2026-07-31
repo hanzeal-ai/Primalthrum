@@ -84,8 +84,16 @@ class StreamContractTest(unittest.TestCase):
         self.assertEqual(events[-1], "agent.run.completed")
 
         messages = sse_messages(response.text)
-        delta = next(payload for event, payload in messages if event == "message.delta")
-        self.assertEqual(delta["delta"], "mock response: Create a research agent")
+        deltas = [
+            payload["delta"]
+            for event, payload in messages
+            if event == "message.delta"
+        ]
+        self.assertGreater(len(deltas), 1)
+        self.assertEqual(
+            "".join(deltas),
+            "mock response: Create a research agent",
+        )
         completed = next(
             payload for event, payload in messages if event == "message.completed"
         )
@@ -93,6 +101,12 @@ class StreamContractTest(unittest.TestCase):
             completed["sources"],
             [{"title": "launch-guide.md", "documentId": 7}],
         )
+        runtime_event = next(
+            payload for event, payload in messages
+            if event == "agent.node.completed" and payload["node"] == "intake"
+        )
+        self.assertEqual(runtime_event["runtime"]["llm_provider"], "mock")
+        self.assertNotIn("api_key", json.dumps(runtime_event))
 
         payloads = sse_payloads(response.text)
         self.assertGreaterEqual(len(payloads), 5)
