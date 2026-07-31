@@ -72,6 +72,10 @@ export const MIGRATIONS: Migration[] = [
     id: '015_billing_entitlements_ledger',
     up: applyBillingEntitlementsLedger,
   },
+  {
+    id: '016_payment_lifecycle',
+    up: applyPaymentLifecycle,
+  },
 ];
 
 export function runMigrations(db: DatabaseAdapter): void {
@@ -808,6 +812,147 @@ function applyBillingEntitlementsLedger(db: DatabaseAdapter): void {
 
     INSERT OR IGNORE INTO credit_accounts (workspace_id)
     SELECT id FROM workspaces;
+  `);
+}
+
+function applyPaymentLifecycle(db: DatabaseAdapter): void {
+  ensureColumn(db, 'workspace_subscriptions', 'provider_price_ref', `TEXT NOT NULL DEFAULT ''`);
+  ensureColumn(db, 'workspace_subscriptions', 'provider_subscription_item_ref', `TEXT NOT NULL DEFAULT ''`);
+  ensureColumn(db, 'workspace_subscriptions', 'pending_plan_key', `TEXT NOT NULL DEFAULT ''`);
+  ensureColumn(db, 'workspace_subscriptions', 'grace_ends_at', 'TEXT');
+  ensureColumn(db, 'workspace_subscriptions', 'canceled_at', 'TEXT');
+  ensureColumn(db, 'workspace_subscriptions', 'latest_provider_event_created', 'INTEGER NOT NULL DEFAULT 0');
+  ensureColumn(db, 'workspace_subscriptions', 'latest_provider_event_ref', `TEXT NOT NULL DEFAULT ''`);
+
+  db.run(`
+    CREATE TABLE IF NOT EXISTS payment_prices (
+      provider TEXT NOT NULL,
+      plan_key TEXT NOT NULL,
+      provider_price_ref TEXT NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(provider, plan_key),
+      UNIQUE(provider, provider_price_ref),
+      FOREIGN KEY(plan_key) REFERENCES billing_plans(key) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS payment_customers (
+      workspace_id INTEGER NOT NULL,
+      provider TEXT NOT NULL,
+      provider_customer_ref TEXT NOT NULL,
+      email TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      PRIMARY KEY(workspace_id, provider),
+      UNIQUE(provider, provider_customer_ref),
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS payment_checkout_sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      provider TEXT NOT NULL,
+      idempotency_key TEXT NOT NULL,
+      provider_session_ref TEXT NOT NULL,
+      plan_key TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'open',
+      checkout_url TEXT NOT NULL DEFAULT '',
+      created_by_user_id INTEGER NOT NULL,
+      expires_at TEXT,
+      completed_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(workspace_id, provider, idempotency_key),
+      UNIQUE(provider, provider_session_ref),
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+      FOREIGN KEY(created_by_user_id) REFERENCES users(id) ON DELETE RESTRICT,
+      FOREIGN KEY(plan_key) REFERENCES billing_plans(key)
+    );
+
+    CREATE TABLE IF NOT EXISTS payment_webhook_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      provider TEXT NOT NULL,
+      provider_event_ref TEXT NOT NULL,
+      event_type TEXT NOT NULL,
+      livemode INTEGER NOT NULL DEFAULT 0,
+      api_version TEXT NOT NULL DEFAULT '',
+      payload_json TEXT NOT NULL,
+      signature_timestamp INTEGER,
+      object_created_at INTEGER NOT NULL DEFAULT 0,
+      workspace_id INTEGER,
+      status TEXT NOT NULL DEFAULT 'received',
+      attempts INTEGER NOT NULL DEFAULT 1,
+      error TEXT NOT NULL DEFAULT '',
+      received_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      processed_at TEXT,
+      UNIQUE(provider, provider_event_ref),
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS billing_invoices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      provider TEXT NOT NULL,
+      provider_invoice_ref TEXT NOT NULL,
+      provider_customer_ref TEXT NOT NULL DEFAULT '',
+      provider_subscription_ref TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL,
+      currency TEXT NOT NULL DEFAULT 'usd',
+      amount_due_minor INTEGER NOT NULL DEFAULT 0,
+      amount_paid_minor INTEGER NOT NULL DEFAULT 0,
+      amount_refunded_minor INTEGER NOT NULL DEFAULT 0,
+      period_starts_at TEXT,
+      period_ends_at TEXT,
+      hosted_invoice_url TEXT NOT NULL DEFAULT '',
+      invoice_pdf_url TEXT NOT NULL DEFAULT '',
+      due_at TEXT,
+      paid_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(provider, provider_invoice_ref),
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS billing_refunds (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      provider TEXT NOT NULL,
+      provider_refund_ref TEXT NOT NULL,
+      provider_payment_ref TEXT NOT NULL DEFAULT '',
+      provider_invoice_ref TEXT NOT NULL DEFAULT '',
+      status TEXT NOT NULL,
+      amount_minor INTEGER NOT NULL DEFAULT 0,
+      currency TEXT NOT NULL DEFAULT 'usd',
+      reason TEXT NOT NULL DEFAULT '',
+      provider_created_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(provider, provider_refund_ref),
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS subscription_state_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      provider TEXT NOT NULL,
+      provider_event_ref TEXT NOT NULL,
+      from_state TEXT NOT NULL,
+      to_state TEXT NOT NULL,
+      plan_key TEXT NOT NULL,
+      effective_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(provider, provider_event_ref),
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+      FOREIGN KEY(plan_key) REFERENCES billing_plans(key)
+    );
+
+    CREATE INDEX IF NOT EXISTS payment_webhook_events_status_idx
+      ON payment_webhook_events(status, received_at);
+    CREATE INDEX IF NOT EXISTS billing_invoices_workspace_idx
+      ON billing_invoices(workspace_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS billing_refunds_workspace_idx
+      ON billing_refunds(workspace_id, created_at DESC);
   `);
 }
 
