@@ -3,6 +3,7 @@ import Koa from 'koa';
 import { type StructuredLogger } from './logger';
 
 export type ErrorCode =
+  | 'ACCOUNT_ALREADY_EXISTS'
   | 'AUTHORIZATION_FORBIDDEN'
   | 'CAPABILITY_CATALOG_UNAVAILABLE'
   | 'CAPABILITY_DISABLED'
@@ -29,6 +30,7 @@ export type ErrorCode =
   | 'PAYMENT_SUBSCRIPTION_INVALID'
   | 'PROVIDER_CONFIG_INVALID'
   | 'PROVIDER_CONFIG_NOT_FOUND'
+  | 'REGISTRATION_INVALID'
   | 'RUN_AGENT_NOT_FOUND'
   | 'RUN_EVENT_INVALID'
   | 'RUN_ID_INVALID'

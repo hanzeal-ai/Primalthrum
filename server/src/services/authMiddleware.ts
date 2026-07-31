@@ -101,6 +101,7 @@ function isPublicRequest(ctx: Koa.Context): boolean {
     '/api/setup/status',
     '/api/setup/admin',
     '/api/auth/login',
+    '/api/auth/register',
     '/api/auth/logout',
     '/api/auth/session',
     '/api/invitations/accept',

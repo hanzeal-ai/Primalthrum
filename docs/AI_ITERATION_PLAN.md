@@ -1890,12 +1890,18 @@ complete. Follow the same dependency and verification protocol used above.
 
 ### P19-01 Public Website And Conversion Onboarding
 
-- Status: Todo
+- Status: In Progress
 - Goal: Deliver product, solution, template, pricing, security, docs, contact,
   status, legal, auth, email verification, and onboarding surfaces.
 - Dependencies: P15-02, P18-01
 - Verification: SEO, accessibility, signup, trial activation, analytics consent,
   and responsive browser E2E.
+- Evidence: the first onboarding slice adds anonymous account registration with
+  password validation, duplicate-account conflict handling, isolated Owner
+  Workspace creation, optional Free enrollment or one-time Pro trial activation,
+  credit/entitlement provisioning, session issuance, and real HTTP coverage.
+  Public product, pricing, signup, login, legal, and conversion UI remains in the
+  next slice.
 
 ### P19-02 Billing, Usage, Team, And Settings UX
 

@@ -593,6 +593,69 @@ export function createApp(options: AppOptions = {}): Koa {
     }
   });
 
+  router.post('/api/auth/register', (ctx) => {
+    try {
+      const body = ctx.request.body as {
+        email?: unknown;
+        password?: unknown;
+        workspaceName?: unknown;
+        planKey?: unknown;
+      };
+      const email = normalizeEmail(body.email);
+      const password = normalizePassword(body.password);
+      const workspaceName = typeof body.workspaceName === 'string'
+        ? body.workspaceName.trim()
+        : '';
+      const planKey = typeof body.planKey === 'string' ? body.planKey.trim() : 'pro';
+      if (!workspaceName) throw new Error('workspace name is required');
+      if (!['free', 'pro'].includes(planKey)) {
+        throw new Error('registration plan must be free or pro');
+      }
+      if (userRepository.findByEmail(email)) {
+        sendApiError(ctx, logger, {
+          status: 409,
+          code: 'ACCOUNT_ALREADY_EXISTS',
+          message: 'an account with this email already exists',
+        });
+        return;
+      }
+
+      const createdUser = userRepository.createUser(email, hashPassword(password));
+      const workspace = workspaceRepository.create(createdUser.id, workspaceName);
+      const user = workspaceRepository.principalForUser(createdUser.id, workspace.id);
+      if (!user) throw new Error('workspace owner membership could not be loaded');
+      const trial = planKey === 'pro'
+        ? billingRepository.activateTrial(workspace.id, user.id, planKey)
+        : null;
+      const session = sessionRepository.create(user);
+
+      ctx.set('Set-Cookie', sessionCookie(session.token, session.expiresAt));
+      ctx.status = 201;
+      ctx.body = {
+        user,
+        session,
+        workspace,
+        trial,
+        entitlementSnapshot: billingRepository.entitlementSnapshot(workspace.id),
+        creditAccount: billingRepository.creditAccount(workspace.id),
+      };
+    } catch (error) {
+      if (error instanceof Error && error.message.includes('UNIQUE constraint failed: users.email')) {
+        sendApiError(ctx, logger, {
+          status: 409,
+          code: 'ACCOUNT_ALREADY_EXISTS',
+          message: 'an account with this email already exists',
+        });
+        return;
+      }
+      sendApiError(ctx, logger, {
+        status: error instanceof BillingError ? 409 : 400,
+        code: 'REGISTRATION_INVALID',
+        message: error instanceof Error ? error.message : 'registration failed',
+      });
+    }
+  });
+
   router.post('/api/auth/logout', (ctx) => {
     const token = extractSessionToken(ctx);
     if (token) {
