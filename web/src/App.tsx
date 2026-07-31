@@ -1,6 +1,9 @@
 import { Loader2 } from 'lucide-react'
 
 import { AuthScreen } from './features/auth/AuthScreen'
+import { EmailVerificationPage } from './features/auth/EmailVerificationPage'
+import { ForgotPasswordPage } from './features/auth/ForgotPasswordPage'
+import { ResetPasswordPage } from './features/auth/ResetPasswordPage'
 import { useAuthSession } from './features/auth/useAuthSession'
 import { AgentBuilderPage } from './features/builder/AgentBuilderPage'
 import { HostedAgentPage } from './features/hosted-agent/HostedAgentPage'
@@ -77,6 +80,22 @@ export default function App() {
     return <PublicPricingPage authenticated={Boolean(auth.user)} />
   }
 
+  if (pathname === '/verify-email') {
+    return (
+      <EmailVerificationPage
+        authenticated={Boolean(auth.user)}
+        email={auth.user?.email}
+        onLogout={auth.logout}
+        onPreviewUrl={auth.updateEmailPreview}
+        onVerified={auth.refreshSession}
+        previewUrl={auth.emailPreviewUrl}
+      />
+    )
+  }
+
+  if (pathname === '/forgot-password') return <ForgotPasswordPage />
+  if (pathname === '/reset-password') return <ResetPasswordPage />
+
   const infoSlug = publicInfoSlug(pathname)
   if (infoSlug) {
     return <PublicInfoPage authenticated={Boolean(auth.user)} slug={infoSlug} />
@@ -88,6 +107,19 @@ export default function App() {
 
   if (!auth.user && pathname === '/login') {
     return authScreen
+  }
+
+  if (auth.user && !auth.emailVerified) {
+    return (
+      <EmailVerificationPage
+        authenticated
+        email={auth.user.email}
+        onLogout={auth.logout}
+        onPreviewUrl={auth.updateEmailPreview}
+        onVerified={auth.refreshSession}
+        previewUrl={auth.emailPreviewUrl}
+      />
+    )
   }
 
   if (!auth.user) {

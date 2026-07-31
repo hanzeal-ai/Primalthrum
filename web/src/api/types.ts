@@ -281,6 +281,7 @@ export interface AuthSession {
 export interface AuthResponse {
   user: AuthUser
   session: AuthSession
+  emailVerified: boolean
 }
 
 export interface RegistrationInput extends AuthCredentials {
@@ -290,13 +291,8 @@ export interface RegistrationInput extends AuthCredentials {
 
 export interface RegistrationResponse extends AuthResponse {
   workspace: Omit<WorkspaceRecord, 'role'>
-  trial: {
-    id: number
-    planKey: string
-    creditAmount: number
-    startsAt: string
-    endsAt: string
-  } | null
+  verificationRequired: boolean
+  emailPreviewUrl?: string
   entitlementSnapshot: {
     workspaceId: number
     planKey: string
@@ -332,6 +328,12 @@ export interface PublicPlanRecord {
 export interface CurrentSession {
   user: AuthUser
   expiresAt: string
+  emailVerified: boolean
+}
+
+export interface VerificationDispatchResponse {
+  accepted: boolean
+  emailPreviewUrl?: string
 }
 
 export interface WorkspaceRecord {

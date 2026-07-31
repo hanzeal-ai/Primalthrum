@@ -584,7 +584,7 @@ export function createApp(options: AppOptions = {}): Koa {
 
       ctx.set('Set-Cookie', sessionCookie(session.token, session.expiresAt));
       ctx.status = 201;
-      ctx.body = { user, session };
+      ctx.body = { user, session, emailVerified: true };
     } catch (error) {
       ctx.status = 400;
       ctx.body = {
@@ -669,6 +669,7 @@ export function createApp(options: AppOptions = {}): Koa {
         session,
         workspace,
         verificationRequired: true,
+        emailVerified: false,
         ...(options.exposeAccountEmailPreview ? { emailPreviewUrl } : {}),
         entitlementSnapshot: billingRepository.entitlementSnapshot(workspace.id),
         creditAccount: billingRepository.creditAccount(workspace.id),
@@ -911,7 +912,7 @@ export function createApp(options: AppOptions = {}): Koa {
       const session = sessionRepository.create(principal);
       ctx.set('Set-Cookie', sessionCookie(session.token, session.expiresAt));
       ctx.status = 201;
-      ctx.body = { user: principal, session };
+      ctx.body = { user: principal, session, emailVerified: true };
     } catch (error) {
       sendApiError(ctx, logger, {
         status: 400,

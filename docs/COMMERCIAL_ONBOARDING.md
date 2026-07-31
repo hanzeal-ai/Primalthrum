@@ -36,6 +36,8 @@ adds the customer to the installation's default Workspace.
 - `/pricing`: live plan catalog sourced from `GET /api/public/plans`.
 - `/signup`: Free or Pro registration and immediate Workspace handoff.
 - `/login`: existing account access.
+- `/verify-email`: pending, resend, and one-time verification completion.
+- `/forgot-password` and `/reset-password`: enumeration-safe account recovery.
 - `/security`, `/docs`, `/contact`, and `/status`: product trust and help pages.
 - `/legal/privacy` and `/legal/terms`: clearly labeled pre-release legal surfaces.
 

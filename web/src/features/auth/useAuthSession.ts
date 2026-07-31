@@ -24,17 +24,23 @@ export function useAuthSession() {
   const [credentials, setCredentials] = useState<AuthCredentials>(DEFAULT_CREDENTIALS)
   const [message, setMessage] = useState('正在检查登录状态')
   const [user, setUser] = useState<AuthUser | null>(null)
+  const [emailVerified, setEmailVerified] = useState(false)
+  const [emailPreviewUrl, setEmailPreviewUrl] = useState(() => (
+    window.sessionStorage.getItem('primalthrum.email-preview-url') ?? ''
+  ))
 
   async function initialize() {
     setMode('checking')
     try {
       const session = await getCurrentSession()
       setUser(session.user)
+      setEmailVerified(session.emailVerified)
       setMode('ready')
       return
     } catch (error) {
       clearStoredSessionToken()
       setUser(null)
+      setEmailVerified(false)
       try {
         const setupStatus = await getSetupStatus()
         if (setupStatus.needsSetup) {
@@ -71,6 +77,7 @@ export function useAuthSession() {
         ? await setupAdmin({ email, password: credentials.password })
         : await loginAdmin({ email, password: credentials.password })
       setUser(response.user)
+      setEmailVerified(response.emailVerified)
       setMode('ready')
     } catch (error) {
       setMessage(errorMessage(error))
@@ -80,6 +87,7 @@ export function useAuthSession() {
   async function logout() {
     await logoutAdmin()
     setUser(null)
+    setEmailVerified(false)
     setMode('login')
     setMessage('已安全退出。')
   }
@@ -89,6 +97,10 @@ export function useAuthSession() {
     try {
       const response = await registerAccount(input)
       setUser(response.user)
+      setEmailVerified(response.emailVerified)
+      const previewUrl = response.emailPreviewUrl ?? ''
+      setEmailPreviewUrl(previewUrl)
+      if (previewUrl) window.sessionStorage.setItem('primalthrum.email-preview-url', previewUrl)
       setMode('ready')
       return response
     } catch (error) {
@@ -97,14 +109,33 @@ export function useAuthSession() {
     }
   }
 
+  async function refreshSession() {
+    const session = await getCurrentSession()
+    setUser(session.user)
+    setEmailVerified(session.emailVerified)
+    if (session.emailVerified) {
+      setEmailPreviewUrl('')
+      window.sessionStorage.removeItem('primalthrum.email-preview-url')
+    }
+  }
+
+  function updateEmailPreview(url: string) {
+    setEmailPreviewUrl(url)
+    if (url) window.sessionStorage.setItem('primalthrum.email-preview-url', url)
+  }
+
   return {
     mode,
     credentials,
     message,
     user,
+    emailVerified,
+    emailPreviewUrl,
     setCredentials,
     authenticate,
     register,
+    refreshSession,
+    updateEmailPreview,
     logout,
   }
 }

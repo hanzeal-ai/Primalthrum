@@ -34,6 +34,7 @@ import type {
   ToolInfo,
   UploadDocumentInput,
   WorkspaceRecord,
+  VerificationDispatchResponse,
 } from './types'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? ''
@@ -107,6 +108,36 @@ export async function registerAccount(input: RegistrationInput): Promise<Registr
   })
   storeSessionToken(response.session.token)
   return response
+}
+
+export async function verifyEmail(token: string): Promise<void> {
+  await apiFetch('/api/auth/verify-email', {
+    auth: false,
+    method: 'POST',
+    body: JSON.stringify({ token }),
+  })
+}
+
+export async function resendVerification(): Promise<VerificationDispatchResponse> {
+  return apiFetch<VerificationDispatchResponse>('/api/auth/verification/resend', {
+    method: 'POST',
+  })
+}
+
+export async function requestPasswordReset(email: string): Promise<VerificationDispatchResponse> {
+  return apiFetch<VerificationDispatchResponse>('/api/auth/password/forgot', {
+    auth: false,
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  })
+}
+
+export async function resetPassword(token: string, password: string): Promise<void> {
+  await apiFetch('/api/auth/password/reset', {
+    auth: false,
+    method: 'POST',
+    body: JSON.stringify({ token, password }),
+  })
 }
 
 export async function listPublicPlans(): Promise<PublicPlanRecord[]> {

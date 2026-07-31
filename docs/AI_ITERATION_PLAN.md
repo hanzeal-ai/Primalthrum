@@ -1912,8 +1912,11 @@ complete. Follow the same dependency and verification protocol used above.
   enumeration-safe requests, 30-minute single-use tokens, and revokes all prior
   sessions after reset. Repository, adapter, and real HTTP tests cover expiry,
   replay, gating, delivery/retry evidence, provider idempotency, reset, and old
-  password rejection. Web verification/recovery UX, consent analytics, and legal
-  approval remain open.
+  password rejection. The Web now includes pending-verification, resend, automatic
+  token confirmation, forgot-password, reset-password, and revoked-session login
+  handoff surfaces. Component tests and a live Chrome lifecycle cover the complete
+  path without console errors. Consent analytics, qualified legal approval, and
+  live transactional email delivery remain open.
 
 ### P19-02 Billing, Usage, Team, And Settings UX
 

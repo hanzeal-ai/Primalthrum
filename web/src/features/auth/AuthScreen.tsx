@@ -60,6 +60,7 @@ export function AuthScreen({ credentials, message, mode, onChange, onSubmit }: A
             </Button>
           </form>
           {mode === 'login' ? <p className="mt-6 text-center text-sm text-zinc-600">还没有账号？ <a className="font-medium text-zinc-950 underline underline-offset-4" href="/signup?plan=pro">免费试用</a></p> : null}
+          {mode === 'login' ? <p className="mt-3 text-center text-sm"><a className="text-zinc-500 hover:text-zinc-950" href="/forgot-password">忘记密码？</a></p> : null}
         </CardContent>
       </Card>
     </main>
