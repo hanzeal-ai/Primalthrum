@@ -69,6 +69,19 @@ export interface UsagePeriodSummary {
   controls: CostControlRecord;
 }
 
+export interface CostAlertRecord {
+  id: number;
+  workspaceId: number;
+  periodKey: string;
+  thresholdPercent: number;
+  metric: string;
+  currentValue: number;
+  limitValue: number;
+  status: string;
+  createdAt: string;
+  deliveredAt: string | null;
+}
+
 export class UsageRatingError extends Error {
   constructor(
     readonly code:

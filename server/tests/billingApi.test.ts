@@ -27,6 +27,7 @@ before(async () => {
   const address = server.address();
   assert(address && typeof address === 'object');
   baseUrl = `http://127.0.0.1:${address.port}`;
+  authHeaders = await bootstrapAdminSession(baseUrl, 'billing-owner@example.com');
 });
 
 after(async () => {
@@ -51,8 +52,6 @@ test('public plan catalog is readable without an authenticated session', async (
 test('workspace billing summary and one-time trial require billing permissions', async () => {
   const unauthorized = await fetch(`${baseUrl}/api/billing/summary`);
   assert.equal(unauthorized.status, 401);
-  authHeaders = await bootstrapAdminSession(baseUrl, 'billing-owner@example.com');
-
   const freeResponse = await fetch(`${baseUrl}/api/billing/summary`, { headers: authHeaders });
   assert.equal(freeResponse.status, 200);
   const free = await freeResponse.json() as {
@@ -81,4 +80,38 @@ test('workspace billing summary and one-time trial require billing permissions',
   assert.equal(hasWorkspacePermission('billing', 'billing.manage'), true);
   assert.equal(hasWorkspacePermission('billing', 'agents.run'), false);
   assert.equal(hasWorkspacePermission('viewer', 'billing.read'), false);
+});
+
+test('billing usage and cost controls expose workspace-scoped commercial limits', async () => {
+  const updateResponse = await fetch(`${baseUrl}/api/billing/cost-controls`, {
+    method: 'PUT',
+    headers: { ...authHeaders, 'content-type': 'application/json' },
+    body: JSON.stringify({
+      monthlyCreditLimit: 50_000,
+      monthlyProviderCostMicrosLimit: 2_000_000,
+      hardLimit: true,
+      overageEnabled: false,
+      alertThresholds: [50, 80, 100],
+    }),
+  });
+  assert.equal(updateResponse.status, 200);
+  const controls = await updateResponse.json() as { monthlyCreditLimit: number };
+  assert.equal(controls.monthlyCreditLimit, 50_000);
+
+  const usageResponse = await fetch(`${baseUrl}/api/billing/usage`, { headers: authHeaders });
+  assert.equal(usageResponse.status, 200);
+  const usage = await usageResponse.json() as {
+    creditsCharged: number;
+    providerCostMicros: number;
+    controls: { monthlyProviderCostMicrosLimit: number };
+  };
+  assert.equal(usage.creditsCharged, 0);
+  assert.equal(usage.providerCostMicros, 0);
+  assert.equal(usage.controls.monthlyProviderCostMicrosLimit, 2_000_000);
+
+  const alertsResponse = await fetch(`${baseUrl}/api/billing/cost-alerts`, {
+    headers: authHeaders,
+  });
+  assert.equal(alertsResponse.status, 200);
+  assert.deepEqual(await alertsResponse.json(), []);
 });

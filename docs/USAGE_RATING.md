@@ -57,6 +57,15 @@ Crossed thresholds create one `cost_alerts` record per workspace, UTC month,
 metric, and percentage. The default thresholds are 50, 80, and 100 percent.
 Delivery is a later notification concern; the threshold evidence remains durable.
 
+## HTTP Surface
+
+- `GET /api/billing/usage`: current UTC period totals, meter breakdown, and controls.
+- `GET /api/billing/cost-controls`: current workspace limits and thresholds.
+- `PUT /api/billing/cost-controls`: Owner or Billing updates limits and policy.
+- `GET /api/billing/cost-alerts`: durable threshold crossings for the workspace.
+
+All endpoints are workspace-scoped and use server-side billing permissions.
+
 ## Invariants
 
 1. Every rated event references the price used at occurrence time.

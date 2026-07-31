@@ -2,6 +2,7 @@ import { initializeSchema } from '../db/schema';
 import { SqliteDatabase, sqlValue } from '../db/sqlite';
 import {
   type CostControlRecord,
+  type CostAlertRecord,
   type MeterPriceRecord,
   type RatedUsageRecord,
   type ResourceUsageTotals,
@@ -228,6 +229,38 @@ export class UsageRatingRepository {
       overageEnabled: false,
       alertThresholds: [50, 80, 100],
     };
+  }
+
+  listAlerts(workspaceId: number): CostAlertRecord[] {
+    return this.db.query<{
+      id: number;
+      workspace_id: number;
+      period_key: string;
+      threshold_percent: number;
+      metric: string;
+      current_value: number;
+      limit_value: number;
+      status: string;
+      created_at: string;
+      delivered_at: string | null;
+    }>(`
+      SELECT id, workspace_id, period_key, threshold_percent, metric,
+        current_value, limit_value, status, created_at, delivered_at
+      FROM cost_alerts
+      WHERE workspace_id = ${sqlValue(workspaceId)}
+      ORDER BY created_at DESC, id DESC;
+    `).map((row) => ({
+      id: Number(row.id),
+      workspaceId: Number(row.workspace_id),
+      periodKey: row.period_key,
+      thresholdPercent: Number(row.threshold_percent),
+      metric: row.metric,
+      currentValue: Number(row.current_value),
+      limitValue: Number(row.limit_value),
+      status: row.status,
+      createdAt: row.created_at,
+      deliveredAt: row.delivered_at,
+    }));
   }
 
   summary(workspaceId: number, at = this.now()): UsagePeriodSummary {

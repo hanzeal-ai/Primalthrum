@@ -139,6 +139,9 @@ scripts/commercial-smoke.sh
 - `POST /api/billing/subscription/change`：请求升级或降级，等待 Webhook 确认。
 - `POST /api/billing/subscription/cancel`：计划在周期结束时取消。
 - `GET /api/billing/invoices`：读取工作区发票历史。
+- `GET /api/billing/usage`：读取周期用量、credits 与供应商成本。
+- `GET/PUT /api/billing/cost-controls`：读取或维护工作区成本上限。
+- `GET /api/billing/cost-alerts`：读取持久化阈值告警。
 
 账本生命周期与不变量见 [Billing Entitlements And Credit Ledger](docs/BILLING_LEDGER.md)。
 Stripe 配置、Webhook 和沙箱发布门禁见 [Stripe Payments And Subscription Lifecycle](docs/STRIPE_PAYMENTS.md)。

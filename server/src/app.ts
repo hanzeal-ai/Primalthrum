@@ -329,6 +329,7 @@ export function createApp(options: AppOptions = {}): Koa {
     payments: paymentRepository,
     publicAppUrl,
     stripeWebhookSecret: options.stripeWebhookSecret,
+    usage: usageRatingRepository,
     webhooks: paymentWebhookProcessor,
   });
 

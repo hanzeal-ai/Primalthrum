@@ -11,6 +11,7 @@ import { PaymentError, type PaymentWebhookEvent } from '../services/paymentTypes
 import { PaymentWebhookProcessor } from '../services/paymentWebhookProcessor';
 import { verifyStripeWebhookSignature } from '../services/stripeWebhookSignature';
 import { type WorkspacePermission } from '../services/workspaceAuthorization';
+import { UsageRatingRepository } from '../services/usageRatingRepository';
 
 interface BillingRouteDependencies {
   authorize: (ctx: Koa.Context, permission: WorkspacePermission) => boolean;
@@ -23,6 +24,7 @@ interface BillingRouteDependencies {
   publicAppUrl: string;
   stripeWebhookSecret?: string;
   webhooks: PaymentWebhookProcessor;
+  usage: UsageRatingRepository;
 }
 
 export function registerBillingRoutes(
@@ -40,6 +42,7 @@ export function registerBillingRoutes(
     publicAppUrl,
     stripeWebhookSecret,
     webhooks,
+    usage,
   } = dependencies;
 
   router.get('/api/public/plans', (ctx) => {
@@ -94,6 +97,50 @@ export function registerBillingRoutes(
   router.get('/api/billing/invoices', (ctx) => {
     if (!authorize(ctx, 'billing.read')) return;
     ctx.body = payments.listInvoices(currentWorkspaceId(ctx));
+  });
+
+  router.get('/api/billing/usage', (ctx) => {
+    if (!authorize(ctx, 'billing.read')) return;
+    ctx.body = usage.summary(currentWorkspaceId(ctx));
+  });
+
+  router.get('/api/billing/cost-controls', (ctx) => {
+    if (!authorize(ctx, 'billing.read')) return;
+    ctx.body = usage.controls(currentWorkspaceId(ctx));
+  });
+
+  router.put('/api/billing/cost-controls', (ctx) => {
+    if (!authorize(ctx, 'billing.manage')) return;
+    try {
+      const body = ctx.request.body as Record<string, unknown>;
+      const current = usage.controls(currentWorkspaceId(ctx));
+      const creditLimit = optionalLimit(body.monthlyCreditLimit);
+      const providerCostLimit = optionalLimit(body.monthlyProviderCostMicrosLimit);
+      ctx.body = usage.setControls({
+        workspaceId: currentWorkspaceId(ctx),
+        monthlyCreditLimit: creditLimit === undefined ? current.monthlyCreditLimit : creditLimit,
+        monthlyProviderCostMicrosLimit: providerCostLimit === undefined
+          ? current.monthlyProviderCostMicrosLimit
+          : providerCostLimit,
+        hardLimit: optionalBoolean(body.hardLimit, current.hardLimit),
+        overageEnabled: optionalBoolean(body.overageEnabled, current.overageEnabled),
+        alertThresholds: Array.isArray(body.alertThresholds)
+          ? body.alertThresholds.map(Number)
+          : current.alertThresholds,
+        updatedByUserId: currentUserId(ctx),
+      });
+    } catch (error) {
+      sendApiError(ctx, logger, {
+        status: 400,
+        code: 'USAGE_CONTROL_INVALID',
+        message: error instanceof Error ? error.message : 'cost controls are invalid',
+      });
+    }
+  });
+
+  router.get('/api/billing/cost-alerts', (ctx) => {
+    if (!authorize(ctx, 'billing.read')) return;
+    ctx.body = usage.listAlerts(currentWorkspaceId(ctx));
   });
 
   router.post('/api/billing/checkout', async (ctx) => {
@@ -277,6 +324,20 @@ export function registerBillingRoutes(
 
 function requestIdempotencyKey(ctx: Koa.Context): string {
   return normalizeBillingKey(ctx.get('idempotency-key'), 'Idempotency-Key');
+}
+
+function optionalLimit(value: unknown): number | null | undefined {
+  if (value === undefined) return undefined;
+  if (value === null || value === '') return null;
+  const parsed = Number(value);
+  if (!Number.isSafeInteger(parsed) || parsed < 0) throw new Error('cost limit must be non-negative');
+  return parsed;
+}
+
+function optionalBoolean(value: unknown, fallback: boolean): boolean {
+  if (value === undefined) return fallback;
+  if (typeof value !== 'boolean') throw new Error('cost control flags must be boolean');
+  return value;
 }
 
 function providerUnavailable(ctx: Koa.Context, logger: StructuredLogger): void {
