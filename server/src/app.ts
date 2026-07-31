@@ -76,6 +76,7 @@ import { LocalSecretVault } from './services/localSecretVault';
 import { RuntimeProviderResolver } from './services/runtimeProviderResolver';
 import { RuntimeSpeechResolver } from './services/runtimeSpeechResolver';
 import { parseAudioPayload, parseSpeechText } from './services/speechPayload';
+import { BillingError, BillingRepository } from './services/billingRepository';
 
 export interface AppOptions {
   agentBaseUrl?: string;
@@ -194,6 +195,7 @@ export function createApp(options: AppOptions = {}): Koa {
     new LocalSecretVault(db),
   );
   const capabilitySettingsRepository = new CapabilitySettingsRepository(db);
+  const billingRepository = new BillingRepository(db);
   const toolAuditRepository = new ToolAuditRepository(db);
   const jobRepository = new JobRepository(db);
   const jobDispatcher = new DurableJobDispatcher(jobRepository, {
@@ -354,6 +356,10 @@ export function createApp(options: AppOptions = {}): Koa {
     ctx.body = {
       needsSetup: !userRepository.hasAdmin(),
     };
+  });
+
+  router.get('/api/public/plans', (ctx) => {
+    ctx.body = billingRepository.listPlans();
   });
 
   router.post('/api/setup/admin', (ctx) => {
@@ -912,6 +918,49 @@ export function createApp(options: AppOptions = {}): Koa {
   router.get('/api/provider-configs', (ctx) => {
     if (!authorize(ctx, 'providers.manage')) return;
     ctx.body = providerConfigRepository.list(currentWorkspaceId(ctx));
+  });
+
+  router.get('/api/billing/summary', (ctx) => {
+    if (!authorize(ctx, 'billing.read')) return;
+    const workspaceId = currentWorkspaceId(ctx);
+    ctx.body = {
+      entitlementSnapshot: billingRepository.entitlementSnapshot(workspaceId),
+      creditAccount: billingRepository.creditAccount(workspaceId),
+    };
+  });
+
+  router.get('/api/billing/entitlements', (ctx) => {
+    if (!authorize(ctx, 'billing.read')) return;
+    ctx.body = billingRepository.entitlementSnapshot(currentWorkspaceId(ctx));
+  });
+
+  router.post('/api/billing/trial', (ctx) => {
+    if (!authorize(ctx, 'billing.manage')) return;
+    try {
+      const body = ctx.request.body as { planKey?: unknown };
+      const planKey = typeof body.planKey === 'string' ? body.planKey : 'pro';
+      const trial = billingRepository.activateTrial(
+        currentWorkspaceId(ctx),
+        currentUserId(ctx),
+        planKey,
+      );
+      ctx.status = 201;
+      ctx.body = {
+        trial,
+        entitlementSnapshot: billingRepository.entitlementSnapshot(currentWorkspaceId(ctx)),
+        creditAccount: billingRepository.creditAccount(currentWorkspaceId(ctx)),
+      };
+    } catch (error) {
+      const trialErrorCode = error instanceof BillingError
+        && (error.code === 'TRIAL_NOT_ELIGIBLE' || error.code === 'TRIAL_PLAN_INVALID')
+        ? error.code
+        : 'TRIAL_REQUEST_INVALID';
+      sendApiError(ctx, logger, {
+        status: error instanceof BillingError ? 409 : 400,
+        code: trialErrorCode,
+        message: error instanceof Error ? error.message : 'trial activation failed',
+      });
+    }
   });
 
   router.post('/api/provider-configs', (ctx) => {

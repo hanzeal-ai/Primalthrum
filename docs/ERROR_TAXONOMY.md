@@ -30,6 +30,12 @@ Tests inject a silent logger so payload assertions stay deterministic.
 
 | Code | Status | Workflow |
 | --- | --- | --- |
+| `TRIAL_NOT_ELIGIBLE` | 409 | The user or workspace already consumed a one-time trial. |
+| `TRIAL_PLAN_INVALID` | 409 | The selected plan has no activatable trial. |
+| `TRIAL_REQUEST_INVALID` | 400 | The trial request payload is invalid. |
+| `ENTITLEMENT_REQUIRED` | 403 | The effective subscription and grants do not enable a feature. |
+| `ENTITLEMENT_LIMIT_EXCEEDED` | 409 | A requested quantity exceeds the effective entitlement. |
+| `CREDIT_LIMIT_EXCEEDED` | 402 | Available credit cannot cover a reservation or settlement. |
 | `DOCUMENT_AGENT_NOT_FOUND` | 404 | Document operation references a missing agent. |
 | `DOCUMENT_INVALID` | 400 | Document registration payload is invalid. |
 | `DOCUMENT_INDEX_FAILED` | 500 | Document indexing job failed. |

@@ -9,6 +9,8 @@ export type WorkspacePermission =
   | 'agents.run'
   | 'agents.publish'
   | 'providers.manage'
+  | 'billing.read'
+  | 'billing.manage'
   | 'audit.read';
 
 const ROLE_PERMISSIONS: Record<WorkspaceRole, ReadonlySet<WorkspacePermission>> = {
@@ -21,6 +23,8 @@ const ROLE_PERMISSIONS: Record<WorkspaceRole, ReadonlySet<WorkspacePermission>> 
     'agents.run',
     'agents.publish',
     'providers.manage',
+    'billing.read',
+    'billing.manage',
     'audit.read',
   ]),
   admin: new Set([
@@ -31,13 +35,27 @@ const ROLE_PERMISSIONS: Record<WorkspaceRole, ReadonlySet<WorkspacePermission>> 
     'agents.run',
     'agents.publish',
     'providers.manage',
+    'billing.read',
     'audit.read',
+  ]),
+  developer: new Set([
+    'workspace.read',
+    'agents.read',
+    'agents.write',
+    'agents.run',
+    'agents.publish',
+    'providers.manage',
   ]),
   member: new Set([
     'workspace.read',
     'agents.read',
     'agents.write',
     'agents.run',
+  ]),
+  billing: new Set([
+    'workspace.read',
+    'billing.read',
+    'billing.manage',
   ]),
   viewer: new Set([
     'workspace.read',

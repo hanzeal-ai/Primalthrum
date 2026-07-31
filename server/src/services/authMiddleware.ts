@@ -89,6 +89,10 @@ function isPublicRequest(ctx: Koa.Context): boolean {
     return true;
   }
 
+  if (ctx.method === 'GET' && ctx.path === '/api/public/plans') {
+    return true;
+  }
+
   return [
     '/api/setup/status',
     '/api/setup/admin',

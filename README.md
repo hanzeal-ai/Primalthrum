@@ -129,6 +129,14 @@ scripts/smoke.sh
 scripts/commercial-smoke.sh
 ```
 
+商业授权基础接口：
+
+- `GET /api/public/plans`：公开套餐与权益目录。
+- `GET /api/billing/summary`：当前工作区套餐、权益和额度余额。
+- `POST /api/billing/trial`：领取一次性 Pro 试用。
+
+账本生命周期与不变量见 [Billing Entitlements And Credit Ledger](docs/BILLING_LEDGER.md)。
+
 分段执行：
 
 ```bash

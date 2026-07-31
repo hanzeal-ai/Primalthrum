@@ -4,7 +4,14 @@ import { initializeSchema } from '../db/schema';
 import { SqliteDatabase, sqlValue } from '../db/sqlite';
 import { normalizeEmail, type PublicUserRecord } from './userRepository';
 
-export const WORKSPACE_ROLES = ['owner', 'admin', 'member', 'viewer'] as const;
+export const WORKSPACE_ROLES = [
+  'owner',
+  'admin',
+  'developer',
+  'member',
+  'billing',
+  'viewer',
+] as const;
 export type WorkspaceRole = typeof WORKSPACE_ROLES[number];
 
 export interface WorkspaceRecord {

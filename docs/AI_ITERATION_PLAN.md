@@ -1678,7 +1678,8 @@ complete. Follow the same dependency and verification protocol used above.
 - Verification: repository scope tests and cross-tenant denial E2E.
 - Evidence: migration `009_workspace_memberships` adds memberships, invitations,
   active session workspaces, and workspace-scoped provider uniqueness. Owner,
-  admin, member, and viewer permissions are enforced server-side across Agent,
+  Admin, Developer, Member, Billing, and Viewer permissions are enforced
+  server-side across Agent,
   Provider, Document, Conversation, Run, Job, audit, and stream routes. The
   20-test server suite includes explicit repository scoping, invitation
   acceptance, role changes, duplicate provider names across workspaces, denied
@@ -1818,11 +1819,24 @@ complete. Follow the same dependency and verification protocol used above.
 
 ### P18-01 Plans, Trials, Entitlements, And Credit Ledger
 
-- Status: Todo
+- Status: Done
 - Goal: Implement configurable catalog, one-time trial grants, entitlement checks,
   immutable usage events, credit reservation, settlement, and release.
 - Dependencies: P16-01
 - Verification: trial abuse, quota race, failed run, refund, and ledger invariants.
+- Evidence: migration 015 adds a data-driven five-plan catalog, plan and timed
+  grant entitlements, canonical workspace subscription state, user/workspace
+  one-time trial constraints, credit accounts, atomic reservations, immutable
+  usage events, and an append-only ledger with database balance projection
+  triggers. Billing responsibilities are separated into plan, entitlement,
+  trial, ledger, validation, and facade modules. Public plan, authorized summary,
+  entitlement, and trial APIs are implemented with Owner/Billing mutation rules;
+  Developer and Billing complete the six-role workspace matrix. Tests cover
+  trial replay and cross-workspace abuse, plan/grant composition, limit denial,
+  competing quota reservations, failed-run release, actual-cost settlement,
+  bounded refunds, immutability, and ledger-to-account equality. The complete
+  server suite passes 31 tests; payment-provider lifecycle and runtime rating
+  remain isolated to P18-02 and P18-03.
 
 ### P18-02 Payment Adapter And Subscription Lifecycle
 

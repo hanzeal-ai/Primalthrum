@@ -264,11 +264,13 @@ export interface StreamResult {
   lastEventId?: number
 }
 
+export type WorkspaceRole = 'owner' | 'admin' | 'developer' | 'member' | 'billing' | 'viewer'
+
 export interface AuthUser {
   id: number
   workspaceId: number
   email: string
-  role: string
+  role: WorkspaceRole
 }
 
 export interface AuthSession {
@@ -290,7 +292,7 @@ export interface WorkspaceRecord {
   id: number
   name: string
   slug: string
-  role: 'owner' | 'admin' | 'member' | 'viewer'
+  role: WorkspaceRole
   createdAt: string
   updatedAt: string
 }
