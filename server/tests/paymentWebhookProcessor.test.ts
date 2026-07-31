@@ -81,6 +81,8 @@ test('signed-provider events drive an idempotent subscription and credit lifecyc
   processor.process(currentFailure, JSON.stringify(currentFailure), 300);
   assert.equal(payments.subscription(1).state, 'past_due');
   assert.equal(payments.subscription(1).graceEndsAt, '1970-01-08T00:05:00.000Z');
+  assert.equal(billing.entitlementSnapshot(1).subscriptionState, 'restricted');
+  assert.equal(billing.entitlementSnapshot(1).planKey, 'free');
 
   const renewal = invoiceEvent('evt_invoice_renewal', 400, 'invoice.paid', 'in_002', true);
   processor.process(renewal, JSON.stringify(renewal), 400);

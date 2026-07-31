@@ -42,6 +42,14 @@ export class EntitlementRepository {
   snapshot(workspaceId: number): EntitlementSnapshot {
     ensureBillingWorkspaceBaseline(this.db, workspaceId);
     const generatedAt = this.now().toISOString();
+    this.db.run(`
+      UPDATE workspace_subscriptions
+      SET state = 'restricted', updated_at = CURRENT_TIMESTAMP
+      WHERE workspace_id = ${sqlValue(workspaceId)}
+        AND state = 'past_due'
+        AND grace_ends_at IS NOT NULL
+        AND grace_ends_at <= ${sqlValue(generatedAt)};
+    `);
     const subscription = this.db.query<SubscriptionRow>(`
       SELECT plan_key, state, trial_ends_at
       FROM workspace_subscriptions

@@ -1840,11 +1840,24 @@ complete. Follow the same dependency and verification protocol used above.
 
 ### P18-02 Payment Adapter And Subscription Lifecycle
 
-- Status: Todo
+- Status: In Progress
 - Goal: Implement hosted checkout, payment customer mapping, signed idempotent
   webhooks, invoices, upgrades, downgrades, renewal, dunning, cancellation, and refund.
 - Dependencies: P18-01
 - Verification: provider sandbox E2E and replay/out-of-order webhook tests.
+- Evidence: migration 016 adds provider Price/customer/Checkout mappings,
+  canonical invoice and refund records, immutable webhook payload evidence, and
+  subscription transition history. A replaceable Stripe adapter implements
+  hosted Checkout, customer portal, pending plan changes, and period-end
+  cancellation without adding a provider SDK. The public webhook route verifies
+  the exact raw body with HMAC and timestamp tolerance, deduplicates event IDs,
+  rejects stale state events, provisions credits once per paid invoice, applies
+  a seven-day dunning grace period, and prevents active access from being
+  revoked by an unrelated historical refund. Repository and real Koa HTTP tests
+  cover replay, out-of-order failure, renewal, plan change, cancellation, full
+  refund, malformed signatures, and provider request contracts. Operator-owned
+  Stripe test credentials are still required to execute the documented live
+  sandbox release gate before this item can move to Done.
 
 ### P18-03 Usage Rating And Cost Controls
 

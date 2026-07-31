@@ -134,8 +134,14 @@ scripts/commercial-smoke.sh
 - `GET /api/public/plans`：公开套餐与权益目录。
 - `GET /api/billing/summary`：当前工作区套餐、权益和额度余额。
 - `POST /api/billing/trial`：领取一次性 Pro 试用。
+- `POST /api/billing/checkout`：创建托管订阅 Checkout。
+- `POST /api/billing/portal`：打开托管账单门户。
+- `POST /api/billing/subscription/change`：请求升级或降级，等待 Webhook 确认。
+- `POST /api/billing/subscription/cancel`：计划在周期结束时取消。
+- `GET /api/billing/invoices`：读取工作区发票历史。
 
 账本生命周期与不变量见 [Billing Entitlements And Credit Ledger](docs/BILLING_LEDGER.md)。
+Stripe 配置、Webhook 和沙箱发布门禁见 [Stripe Payments And Subscription Lifecycle](docs/STRIPE_PAYMENTS.md)。
 
 分段执行：
 

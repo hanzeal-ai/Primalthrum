@@ -213,6 +213,15 @@ export class PaymentLifecycleRepository {
     `);
   }
 
+  markPendingPlan(workspaceId: number, planKey: string): void {
+    ensureBillingWorkspaceBaseline(this.db, workspaceId);
+    this.db.run(`
+      UPDATE workspace_subscriptions
+      SET pending_plan_key = ${sqlValue(planKey)}, updated_at = CURRENT_TIMESTAMP
+      WHERE workspace_id = ${sqlValue(workspaceId)};
+    `);
+  }
+
   receiveWebhook(
     provider: string,
     event: PaymentWebhookEvent,
@@ -305,6 +314,7 @@ export class PaymentLifecycleRepository {
         provider_subscription_ref = ${sqlValue(input.subscriptionRef ?? current.provider_subscription_ref)},
         provider_price_ref = ${sqlValue(input.priceRef ?? current.provider_price_ref)},
         provider_subscription_item_ref = ${sqlValue(input.subscriptionItemRef ?? current.provider_subscription_item_ref)},
+        pending_plan_key = '',
         grace_ends_at = ${sqlValue(input.graceEndsAt ?? null)},
         canceled_at = ${sqlValue(canceledAt)},
         latest_provider_event_created = ${sqlValue(input.eventCreated)},
@@ -395,6 +405,27 @@ export class PaymentLifecycleRepository {
       ) ON CONFLICT(provider, provider_refund_ref) DO UPDATE SET
         status = excluded.status, amount_minor = excluded.amount_minor,
         reason = excluded.reason, updated_at = CURRENT_TIMESTAMP;
+    `);
+  }
+
+  recordInvoiceRefund(input: {
+    workspaceId: number;
+    provider: string;
+    invoiceRef: string;
+    amountRefundedMinor: number;
+    status: string;
+  }): void {
+    this.db.run(`
+      INSERT INTO billing_invoices (
+        workspace_id, provider, provider_invoice_ref, status, amount_refunded_minor
+      ) VALUES (
+        ${sqlValue(input.workspaceId)}, ${sqlValue(input.provider)},
+        ${sqlValue(input.invoiceRef)}, ${sqlValue(input.status)},
+        ${sqlValue(input.amountRefundedMinor)}
+      ) ON CONFLICT(provider, provider_invoice_ref) DO UPDATE SET
+        status = excluded.status,
+        amount_refunded_minor = excluded.amount_refunded_minor,
+        updated_at = CURRENT_TIMESTAMP;
     `);
   }
 

@@ -1,10 +1,37 @@
+import 'dotenv/config';
+
 import { createApp } from './src/app';
+import { StripePaymentAdapter } from './src/services/stripePaymentAdapter';
 
 const port = Number(process.env.PORT ?? 3000);
 const agentBaseUrl = process.env.AGENT_BASE_URL ?? 'http://127.0.0.1:8000';
 const documentStorageDir = process.env.DOCUMENT_STORAGE_DIR;
+const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim();
+const paymentAdapter = stripeSecretKey
+  ? new StripePaymentAdapter(
+      stripeSecretKey,
+      fetch,
+      'https://api.stripe.com',
+      process.env.STRIPE_API_VERSION,
+    )
+  : undefined;
+const paymentPriceRefs = Object.fromEntries(
+  [
+    ['pro', process.env.STRIPE_PRICE_PRO],
+    ['team', process.env.STRIPE_PRICE_TEAM],
+    ['business', process.env.STRIPE_PRICE_BUSINESS],
+    ['enterprise', process.env.STRIPE_PRICE_ENTERPRISE],
+  ].filter((entry): entry is [string, string] => Boolean(entry[1]?.trim())),
+);
 
-const app = createApp({ agentBaseUrl, documentStorageDir });
+const app = createApp({
+  agentBaseUrl,
+  documentStorageDir,
+  paymentAdapter,
+  paymentPriceRefs,
+  publicAppUrl: process.env.PUBLIC_APP_URL,
+  stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
+});
 
 app.listen(port, () => {
   console.log(`Primalthrum Node server listening on http://127.0.0.1:${port}`);

@@ -152,6 +152,11 @@ export class PaymentWebhookProcessor {
     });
 
     const subscription = this.payments.subscription(workspaceId);
+    const invoicePriceRef = nestedString(object, 'lines', 'data', 0, 'price', 'id')
+      || nestedString(object, 'lines', 'data', 0, 'pricing', 'price_details', 'price');
+    const invoicePlanKey = invoicePriceRef
+      ? this.payments.planForPrice(PROVIDER, invoicePriceRef) ?? subscription.planKey
+      : subscription.planKey;
     if (event.type === 'invoice.payment_failed') {
       this.payments.applySubscriptionState({
         workspaceId,
@@ -159,7 +164,7 @@ export class PaymentWebhookProcessor {
         eventRef: event.id,
         eventCreated: event.created,
         state: 'past_due',
-        planKey: subscription.planKey,
+        planKey: invoicePlanKey,
         customerRef,
         subscriptionRef,
         graceEndsAt: this.graceEnd(event.created),
@@ -174,7 +179,7 @@ export class PaymentWebhookProcessor {
       eventRef: event.id,
       eventCreated: event.created,
       state: subscription.cancelAtPeriodEnd ? 'cancel_at_period_end' : 'active',
-      planKey: subscription.planKey,
+      planKey: invoicePlanKey,
       customerRef,
       subscriptionRef,
       periodStartsAt: unixTimestamp(period.start),
@@ -182,7 +187,7 @@ export class PaymentWebhookProcessor {
       cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
     });
     if (applied) {
-      const plan = this.billing.listPlans().find((candidate) => candidate.key === subscription.planKey);
+      const plan = this.billing.listPlans().find((candidate) => candidate.key === invoicePlanKey);
       if (plan && plan.monthlyCreditGrant > 0) {
         const invoiceRef = requiredString(object.id, 'invoice id');
         this.billing.grantCredits({
@@ -209,17 +214,20 @@ export class PaymentWebhookProcessor {
     const amount = numberValue(object.amount);
     const refunded = numberValue(object.amount_refunded);
     if (invoiceRef) {
-      this.payments.upsertInvoice({
+      this.payments.recordInvoiceRefund({
         workspaceId,
         provider: PROVIDER,
         invoiceRef,
         status: refunded >= amount && amount > 0 ? 'refunded' : 'paid',
-        amountPaidMinor: amount,
         amountRefundedMinor: refunded,
       });
     }
-    if (refunded >= amount && amount > 0) {
-      const subscription = this.payments.subscription(workspaceId);
+    const subscription = this.payments.subscription(workspaceId);
+    if (
+      refunded >= amount
+      && amount > 0
+      && ['canceled', 'cancel_at_period_end'].includes(subscription.state)
+    ) {
       this.payments.applySubscriptionState({
         workspaceId,
         provider: PROVIDER,
@@ -272,7 +280,7 @@ export class PaymentWebhookProcessor {
   private planKey(object: Record<string, unknown>, priceRef: string, workspaceId: number): string {
     const metadataPlan = nestedString(object, 'metadata', 'plan_key');
     const mappedPlan = priceRef ? this.payments.planForPrice(PROVIDER, priceRef) : null;
-    const planKey = metadataPlan || mappedPlan || this.payments.subscription(workspaceId).planKey;
+    const planKey = mappedPlan || metadataPlan || this.payments.subscription(workspaceId).planKey;
     if (!this.billing.listPlans().some((plan) => plan.key === planKey)) {
       throw new PaymentError('PAYMENT_PLAN_UNKNOWN', 'payment event references an unknown plan');
     }

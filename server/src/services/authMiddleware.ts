@@ -93,6 +93,10 @@ function isPublicRequest(ctx: Koa.Context): boolean {
     return true;
   }
 
+  if (ctx.method === 'POST' && ctx.path === '/api/webhooks/stripe') {
+    return true;
+  }
+
   return [
     '/api/setup/status',
     '/api/setup/admin',
