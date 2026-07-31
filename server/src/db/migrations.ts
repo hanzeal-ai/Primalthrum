@@ -104,6 +104,10 @@ export const MIGRATIONS: Migration[] = [
     id: '023_api_keys_security',
     up: applyApiKeysSecurity,
   },
+  {
+    id: '024_workspace_retention',
+    up: applyWorkspaceRetention,
+  },
 ];
 
 export function runMigrations(db: DatabaseAdapter): void {
@@ -1395,6 +1399,106 @@ function applyApiKeysSecurity(db: DatabaseAdapter): void {
     BEFORE DELETE ON api_key_usage_events
     BEGIN
       SELECT RAISE(ABORT, 'api key usage events are immutable');
+    END;
+  `);
+}
+
+function applyWorkspaceRetention(db: DatabaseAdapter): void {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS workspace_retention_policies (
+      workspace_id INTEGER PRIMARY KEY,
+      conversation_days INTEGER CHECK(
+        conversation_days IS NULL OR conversation_days BETWEEN 30 AND 3650
+      ),
+      run_days INTEGER CHECK(run_days IS NULL OR run_days BETWEEN 7 AND 3650),
+      document_days INTEGER CHECK(
+        document_days IS NULL OR document_days BETWEEN 30 AND 3650
+      ),
+      updated_by_user_id INTEGER,
+      last_enforced_at TEXT,
+      next_enforcement_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+      FOREIGN KEY(updated_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS retention_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      event_type TEXT NOT NULL CHECK(
+        event_type IN ('policy_updated', 'enforcement_completed')
+      ),
+      actor_user_id INTEGER,
+      policy_json TEXT NOT NULL,
+      result_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+      FOREIGN KEY(actor_user_id) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS retention_file_deletions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      storage_ref TEXT NOT NULL UNIQUE,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(
+        status IN ('pending', 'retrying', 'completed', 'failed')
+      ),
+      attempts INTEGER NOT NULL DEFAULT 0,
+      error TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      completed_at TEXT,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS retained_tool_audit_logs (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      original_audit_id INTEGER NOT NULL UNIQUE,
+      workspace_id INTEGER NOT NULL,
+      run_id INTEGER NOT NULL,
+      event_id INTEGER NOT NULL UNIQUE,
+      tool_name TEXT NOT NULL,
+      status TEXT NOT NULL,
+      dangerous INTEGER NOT NULL DEFAULT 0,
+      node TEXT NOT NULL DEFAULT '',
+      payload_json TEXT NOT NULL,
+      created_at TEXT NOT NULL,
+      archived_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS workspace_retention_due_idx
+      ON workspace_retention_policies(next_enforcement_at);
+    CREATE INDEX IF NOT EXISTS retention_events_workspace_time_idx
+      ON retention_events(workspace_id, created_at DESC);
+    CREATE INDEX IF NOT EXISTS retention_file_deletions_status_idx
+      ON retention_file_deletions(status, id);
+    CREATE INDEX IF NOT EXISTS retained_tool_audit_workspace_run_idx
+      ON retained_tool_audit_logs(workspace_id, run_id, id);
+
+    CREATE TRIGGER IF NOT EXISTS retention_events_no_update
+    BEFORE UPDATE ON retention_events
+    BEGIN
+      SELECT RAISE(ABORT, 'retention events are immutable');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS retention_events_no_delete
+    BEFORE DELETE ON retention_events
+    BEGIN
+      SELECT RAISE(ABORT, 'retention events are immutable');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS retained_tool_audit_no_update
+    BEFORE UPDATE ON retained_tool_audit_logs
+    BEGIN
+      SELECT RAISE(ABORT, 'retained tool audit logs are immutable');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS retained_tool_audit_no_delete
+    BEFORE DELETE ON retained_tool_audit_logs
+    BEGIN
+      SELECT RAISE(ABORT, 'retained tool audit logs are immutable');
     END;
   `);
 }

@@ -108,7 +108,11 @@ import { AbuseProtectionRepository } from './services/abuseProtectionRepository'
 import { type BotChallengeVerifier } from './services/botChallengeVerifier';
 import { registerAbuseRoutes } from './routes/abuseRoutes';
 import { registerSecuritySettingsRoutes } from './routes/securitySettingsRoutes';
+import { registerRetentionSettingsRoutes } from './routes/retentionSettingsRoutes';
 import { ApiKeyRepository } from './services/apiKeyRepository';
+import { RetentionPolicyRepository } from './services/retentionPolicyRepository';
+import { RetentionScheduler } from './services/retentionScheduler';
+import { RetentionService } from './services/retentionService';
 import {
   apiKeyScopeForPermission,
   hasWorkspacePermission,
@@ -296,6 +300,8 @@ export function createApp(options: AppOptions = {}): Koa {
     publicAppUrl,
   );
   const privacyAnalyticsRepository = new PrivacyAnalyticsRepository(db);
+  const retentionPolicies = new RetentionPolicyRepository(db);
+  const retentionService = new RetentionService(retentionPolicies, documentStorage);
   if (options.accountEmailSender) {
     accountEmailDispatcher = new AccountEmailDispatcher(
       accountEmailOutbox,
@@ -399,6 +405,13 @@ export function createApp(options: AppOptions = {}): Koa {
         throw error;
       }
     },
+    'retention.enforce': (payload) => {
+      const workspaceId = Number(payload.workspaceId);
+      if (!Number.isSafeInteger(workspaceId) || workspaceId <= 0) {
+        throw new Error('retention job workspaceId is invalid');
+      }
+      return retentionService.enforce(workspaceId, null) as unknown as Record<string, unknown>;
+    },
   }, (error) => {
     logger.log({
       level: 'error',
@@ -406,7 +419,13 @@ export function createApp(options: AppOptions = {}): Koa {
       message: error instanceof Error ? error.message : 'job dispatcher failed',
     });
   });
+  const retentionScheduler = new RetentionScheduler(
+    retentionPolicies,
+    jobRepository,
+    () => jobDispatcher.kick(),
+  );
   jobDispatcher.resume();
+  retentionScheduler.start();
 
   function authorize(ctx: Koa.Context, permission: WorkspacePermission): boolean {
     if (ctx.state.apiKey) {
@@ -558,6 +577,17 @@ export function createApp(options: AppOptions = {}): Koa {
     currentWorkspaceId,
     logger,
     sessions: sessionRepository,
+    users: userRepository,
+  });
+  registerRetentionSettingsRoutes(router, {
+    authorize,
+    billing: billingRepository,
+    currentUserId,
+    currentWorkspaceId,
+    logger,
+    policies: retentionPolicies,
+    retention: retentionService,
+    schedule: (workspaceId) => retentionScheduler.trigger(workspaceId),
     users: userRepository,
   });
 

@@ -15,3 +15,7 @@ export function canManageMembers(role: WorkspaceRole): boolean {
 export function canManageApiKeys(role: WorkspaceRole): boolean {
   return role === 'owner' || role === 'admin'
 }
+
+export function canManageRetention(role: WorkspaceRole): boolean {
+  return role === 'owner' || role === 'admin'
+}

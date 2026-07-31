@@ -11,6 +11,10 @@ Use this checklist before tagging or deploying a commercial Primalthrum build.
   plaintext only once after password reauthentication.
 - Revoked Keys and Sessions fail on their next authenticated request, and API
   Key use creates immutable method/path audit evidence without payloads.
+- Retention changes require role, plan entitlement, and password reauthentication;
+  active runs, billing evidence, and security audit archives survive enforcement.
+- A retention smoke run proves tenant-scoped metadata deletion and physical
+  document removal without leaving a pending file-deletion outbox backlog.
 - API clients show standardized `error.code`, `error.message`, and `error.status` without exposing secrets.
 - Public endpoints are limited to liveness, readiness, metrics, setup, auth, and documented public flows.
 
@@ -46,6 +50,7 @@ Use this checklist before tagging or deploying a commercial Primalthrum build.
 - `docs/USER_WORKFLOW_GUIDE.md` exists.
 - `docs/TROUBLESHOOTING.md` exists.
 - `docs/API_KEYS_AND_SESSIONS.md` exists.
+- `docs/DATA_RETENTION.md` exists.
 - `docs/DEMO_RESEARCH_AGENT.md` exists.
 
 ## Operator Preflight
@@ -80,6 +85,8 @@ Confirm:
 - Rate-limit and challenge-outage alerts are active with no raw identity labels.
 - A least-privilege API Key passes its allowed Agent call, fails a missing-scope
   call, cannot access settings, and fails every call after revocation.
+- A Business or Enterprise test Workspace saves and enforces a finite retention
+  policy while a second Workspace and active runs remain unchanged.
 
 ## Known Limitations
 

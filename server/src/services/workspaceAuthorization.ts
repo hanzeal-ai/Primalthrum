@@ -11,6 +11,7 @@ export type WorkspacePermission =
   | 'agents.publish'
   | 'providers.manage'
   | 'api_keys.manage'
+  | 'retention.manage'
   | 'billing.read'
   | 'billing.manage'
   | 'audit.read';
@@ -26,6 +27,7 @@ const ROLE_PERMISSIONS: Record<WorkspaceRole, ReadonlySet<WorkspacePermission>> 
     'agents.publish',
     'providers.manage',
     'api_keys.manage',
+    'retention.manage',
     'billing.read',
     'billing.manage',
     'audit.read',
@@ -39,6 +41,7 @@ const ROLE_PERMISSIONS: Record<WorkspaceRole, ReadonlySet<WorkspacePermission>> 
     'agents.publish',
     'providers.manage',
     'api_keys.manage',
+    'retention.manage',
     'billing.read',
     'audit.read',
   ]),

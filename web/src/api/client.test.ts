@@ -5,6 +5,7 @@ import {
   createBillingCheckout,
   createWorkspaceApiKey,
   createWorkspaceInvitation,
+  enforceRetentionSettings,
   indexDocument,
   replayAgentRun,
   registerAccount,
@@ -14,6 +15,7 @@ import {
   synthesizeSpeech,
   transcribeAudio,
   uploadDocument,
+  updateRetentionSettings,
   updateBillingCostControls,
 } from './client'
 
@@ -288,5 +290,34 @@ describe('stream client', () => {
       expiresInDays: 90, password: 'current password value',
     })
     expect(fetchMock.mock.calls[1]?.[0]).toContain('/api/settings/sessions/revoke-others')
+  })
+
+  it('serializes nullable retention periods and password-protected enforcement', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({ policy: {}, preview: {}, events: [] }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        event: { eventType: 'enforcement_completed', result: {} },
+        filesDeleted: 0, fileDeletionFailures: 0,
+      }), { status: 200, headers: { 'content-type': 'application/json' } }))
+
+    await updateRetentionSettings({
+      conversationDays: 90,
+      runDays: 30,
+      documentDays: null,
+      password: 'current password value',
+    })
+    await enforceRetentionSettings('current password value')
+
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      conversationDays: 90,
+      runDays: 30,
+      documentDays: null,
+      password: 'current password value',
+    })
+    expect(JSON.parse(String(fetchMock.mock.calls[1]?.[1]?.body))).toEqual({
+      password: 'current password value',
+    })
   })
 })

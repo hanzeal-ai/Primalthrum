@@ -30,6 +30,8 @@ import type {
   ProviderConfigRecord,
   PrivacyConfig,
   PrivacyConsentReceipt,
+  RetentionEnforcementOutcome,
+  RetentionSettingsState,
   SpeechSynthesisResult,
   TranscriptionResult,
   RuntimeCapabilityCatalog,
@@ -383,6 +385,29 @@ export async function revokeSecuritySession(sessionId: number): Promise<void> {
 
 export async function revokeOtherSecuritySessions(): Promise<{ revoked: number }> {
   return apiFetch<{ revoked: number }>('/api/settings/sessions/revoke-others', { method: 'POST' })
+}
+
+export async function getRetentionSettings(): Promise<RetentionSettingsState> {
+  return apiFetch<RetentionSettingsState>('/api/settings/retention')
+}
+
+export async function updateRetentionSettings(input: {
+  conversationDays: number | null
+  runDays: number | null
+  documentDays: number | null
+  password: string
+}): Promise<RetentionSettingsState> {
+  return apiFetch<RetentionSettingsState>('/api/settings/retention', {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function enforceRetentionSettings(password: string): Promise<RetentionEnforcementOutcome> {
+  return apiFetch<RetentionEnforcementOutcome>('/api/settings/retention/enforce', {
+    method: 'POST',
+    body: JSON.stringify({ password }),
+  })
 }
 
 export async function listAgents(): Promise<AgentRecord[]> {

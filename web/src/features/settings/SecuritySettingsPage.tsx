@@ -32,6 +32,7 @@ import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
 import { canManageApiKeys } from '../../lib/workspacePermissions'
 import { WorkspaceAppShell } from '../app-shell/WorkspaceAppShell'
+import { RetentionSettingsSection } from './RetentionSettingsSection'
 
 const API_KEY_SCOPE_OPTIONS: Array<{ scope: ApiKeyScope; label: string; description: string }> = [
   { scope: 'agents:read', label: '读取', description: '读取 Agent、版本、对话和运行记录' },
@@ -162,7 +163,7 @@ export function SecuritySettingsPage({ onLogout, user }: SecuritySettingsPagePro
   }
 
   return (
-    <WorkspaceAppShell active="settings" description="API Key、访问作用域与登录会话" onLogout={onLogout} title="设置与安全" user={user}>
+    <WorkspaceAppShell active="settings" description="API Key、数据留存与登录会话" onLogout={onLogout} title="设置与安全" user={user}>
       {error ? <div className="mb-5 border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">{error}</div> : null}
       {notice ? <div className="mb-5 border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800" role="status">{notice}</div> : null}
       {loading ? <LoadingState /> : <div className="grid min-w-0 gap-10">
@@ -184,6 +185,8 @@ export function SecuritySettingsPage({ onLogout, user }: SecuritySettingsPagePro
             <div className="min-w-0"><h3 className="text-base font-semibold">现有 Keys</h3><div className="mt-3 overflow-hidden rounded-lg border bg-white">{apiKeys.length ? apiKeys.slice(0, 20).map((apiKey) => <ApiKeyRow apiKey={apiKey} busy={busy} confirmKey={confirmKey} key={apiKey.id} onCancel={() => setConfirmKey(null)} onConfirm={() => void revokeKey(apiKey)} onRequestRevoke={() => setConfirmKey(apiKey.id)} />) : <p className="p-5 text-sm text-zinc-500">尚未创建 API Key。</p>}</div></div>
           </div>
         </section> : null}
+
+        <RetentionSettingsSection key={user.workspaceId} workspaceId={user.workspaceId} />
 
         <section className="min-w-0" aria-labelledby="sessions-title">
           <div className="flex flex-wrap items-end justify-between gap-4"><div className="flex items-center gap-3"><span className="grid size-9 place-items-center rounded-md bg-emerald-50 text-emerald-700"><ShieldCheck className="size-4" /></span><div><h2 className="text-xl font-semibold" id="sessions-title">登录会话</h2><p className="mt-1 text-sm text-zinc-500">检查当前账号仍处于登录状态的会话。</p></div></div><Button disabled={Boolean(busy) || sessions.every((session) => session.current)} onClick={() => void revokeOtherSessions()} variant="outline">{busy === 'sessions' ? <Loader2 className="animate-spin" /> : <LogOut />}退出其他会话</Button></div>

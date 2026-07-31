@@ -33,5 +33,8 @@ buckets, short-lived challenge grants, and immutable HMAC-only enforcement
 evidence.
 Migration `023_api_keys_security` adds hashed, scoped, expiring Workspace API
 Keys, immutable Key-use audit events, and Session last-seen metadata.
+Migration `024_workspace_retention` adds customer-configurable retention policy,
+immutable policy and enforcement evidence, durable file-deletion intent, and a
+preserved tool-audit archive for expired runs.
 
 See [Postgres Persistence Path](POSTGRES_PERSISTENCE.md) before adding migrations that rely on SQLite-only SQL.

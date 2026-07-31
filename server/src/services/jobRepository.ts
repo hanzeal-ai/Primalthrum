@@ -99,6 +99,17 @@ export class JobRepository {
     return job?.workspaceId === workspaceId ? job : null;
   }
 
+  hasActive(type: string, workspaceId: number): boolean {
+    const row = this.db.query<{ count: number }>(`
+      SELECT COUNT(*) AS count
+      FROM jobs
+      WHERE type = ${sqlValue(type)}
+        AND workspace_id = ${sqlValue(workspaceId)}
+        AND status IN ('queued', 'running', 'retrying');
+    `)[0];
+    return Number(row?.count ?? 0) > 0;
+  }
+
   nextRunnable(types: string[]): JobRecord | null {
     if (!types.length) return null;
     const rows = this.db.query<JobRow>(`

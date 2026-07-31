@@ -319,6 +319,49 @@ export interface SessionSecurityRecord {
   createdAt: string
 }
 
+export interface RetentionPolicyRecord {
+  workspaceId: number
+  conversationDays: number | null
+  runDays: number | null
+  documentDays: number | null
+  updatedByUserId: number | null
+  lastEnforcedAt: string | null
+  nextEnforcementAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface RetentionPreview {
+  conversations: number
+  runs: number
+  documents: number
+  documentBytes: number
+}
+
+export interface RetentionEventRecord {
+  id: number
+  workspaceId: number
+  eventType: 'policy_updated' | 'enforcement_completed'
+  actorUserId: number | null
+  policy: Pick<RetentionPolicyRecord, 'conversationDays' | 'runDays' | 'documentDays'>
+  result: Record<string, unknown>
+  createdAt: string
+}
+
+export interface RetentionSettingsState {
+  policy: RetentionPolicyRecord
+  preview: RetentionPreview
+  events: RetentionEventRecord[]
+  customRetentionEnabled: boolean
+  canManage: boolean
+}
+
+export interface RetentionEnforcementOutcome {
+  event: RetentionEventRecord
+  filesDeleted: number
+  fileDeletionFailures: number
+}
+
 export interface RegistrationInput extends AuthCredentials {
   workspaceName: string
   planKey: 'free' | 'pro'

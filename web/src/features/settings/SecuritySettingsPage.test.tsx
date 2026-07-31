@@ -5,12 +5,15 @@ import { SecuritySettingsPage } from './SecuritySettingsPage'
 
 const api = vi.hoisted(() => ({
   createWorkspaceApiKey: vi.fn(),
+  enforceRetentionSettings: vi.fn(),
+  getRetentionSettings: vi.fn(),
   listSecuritySessions: vi.fn(),
   listWorkspaceApiKeys: vi.fn(),
   listWorkspaces: vi.fn(),
   revokeOtherSecuritySessions: vi.fn(),
   revokeSecuritySession: vi.fn(),
   revokeWorkspaceApiKey: vi.fn(),
+  updateRetentionSettings: vi.fn(),
 }))
 
 vi.mock('../../api/client', () => api)
@@ -25,6 +28,15 @@ describe('SecuritySettingsPage', () => {
     api.listWorkspaces.mockResolvedValue([{ id: 1, name: 'Acme', slug: 'acme', role: 'owner' }])
     api.listSecuritySessions.mockResolvedValue(sessions)
     api.listWorkspaceApiKeys.mockResolvedValue([])
+    api.getRetentionSettings.mockResolvedValue({
+      policy: {
+        workspaceId: 1, conversationDays: null, runDays: null, documentDays: null,
+        updatedByUserId: null, lastEnforcedAt: null, nextEnforcementAt: null,
+        createdAt: '2026-07-31T00:00:00.000Z', updatedAt: '2026-07-31T00:00:00.000Z',
+      },
+      preview: { conversations: 0, runs: 0, documents: 0, documentBytes: 0 },
+      events: [], customRetentionEnabled: false, canManage: true,
+    })
   })
 
   afterEach(() => {

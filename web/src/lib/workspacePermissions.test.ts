@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import type { WorkspaceRole } from '../api/types'
-import { canManageApiKeys, canManageBilling, canManageMembers, canReadBilling } from './workspacePermissions'
+import { canManageApiKeys, canManageBilling, canManageMembers, canManageRetention, canReadBilling } from './workspacePermissions'
 
 describe('workspace billing permissions', () => {
   it.each<[WorkspaceRole, boolean, boolean]>([
@@ -22,5 +22,6 @@ describe('workspace billing permissions', () => {
   ])('mirrors member management for %s', (role, expected) => {
     expect(canManageMembers(role)).toBe(expected)
     expect(canManageApiKeys(role)).toBe(expected)
+    expect(canManageRetention(role)).toBe(expected)
   })
 })

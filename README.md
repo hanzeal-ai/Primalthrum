@@ -152,11 +152,14 @@ scripts/commercial-smoke.sh
 - `GET /api/settings/sessions`：读取当前账号的有效登录会话。
 - `DELETE /api/settings/sessions/:id`：退出指定的其他会话。
 - `POST /api/settings/sessions/revoke-others`：退出当前账号的全部其他会话。
+- `GET/PUT /api/settings/retention`：读取或维护工作区数据留存策略。
+- `POST /api/settings/retention/enforce`：密码复验后立即执行留存清理。
 
 账本生命周期与不变量见 [Billing Entitlements And Credit Ledger](docs/BILLING_LEDGER.md)。
 Stripe 配置、Webhook 和沙箱发布门禁见 [Stripe Payments And Subscription Lifecycle](docs/STRIPE_PAYMENTS.md)。
 版本化计量价格、供应商成本与预算控制见 [Usage Rating And Cost Controls](docs/USAGE_RATING.md)。
 API Key 和登录会话安全契约见 [API Keys And Session Security](docs/API_KEYS_AND_SESSIONS.md)。
+工作区留存范围、执行和审计边界见 [Workspace Data Retention](docs/DATA_RETENTION.md)。
 
 分段执行：
 
@@ -194,4 +197,5 @@ web/     React + TypeScript + Vite 研发控制台
 - [Operator Setup](docs/OPERATOR_SETUP.md): 首次运营者从创建管理员到完成首个 Agent 运行的检查清单。
 - [Demo Research Agent](docs/DEMO_RESEARCH_AGENT.md): 可用于演示的 Research Agent 配置、知识文档和 smoke 命令。
 - [Security And Release Checklist](docs/SECURITY_RELEASE_CHECKLIST.md): 商业发布前的安全、secrets、危险工具、备份和文档 gate。
+- [Workspace Data Retention](docs/DATA_RETENTION.md): 客户留存策略、自动执行、文件清理和审计保留边界。
 - [Release Gate](docs/RELEASE_GATE.md): 版本规则、发布 gate 和商业就绪证据。

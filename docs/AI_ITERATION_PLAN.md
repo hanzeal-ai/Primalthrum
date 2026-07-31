@@ -1980,8 +1980,18 @@ complete. Follow the same dependency and verification protocol used above.
   creation, and post-revocation 401. Desktop browser acceptance covers Key
   creation, one-time display, revocation, and bulk other-Session logout. Chrome
   acceptance at 390x844 confirms the fully loaded settings page has no
-  horizontal overflow or console warnings. Customer retention controls, MFA,
-  complete role-matrix browser E2E, and live Stripe lifecycle evidence remain open.
+  horizontal overflow or console warnings. The fourth slice adds default-safe
+  Workspace retention policies for conversations, completed runs, and knowledge
+  files. Business/Enterprise entitlement, Owner/Admin permission, password
+  reauthentication, dry-run counts, immediate enforcement, hourly due-policy
+  scheduling, durable file-deletion outbox, immutable policy/execution evidence,
+  and preserved tool audit archives are enforced server-side. Repository and HTTP
+  tests cover tenant isolation, active-run preservation, physical file deletion,
+  plan and role gates, and immutable evidence. Desktop browser acceptance covers
+  the plan gate, policy save, background execution, second confirmation, immediate
+  cleanup, and execution history. The 390x844 acceptance has no horizontal
+  overflow or console warnings. MFA, complete role-matrix browser E2E, live Stripe
+  lifecycle evidence, and transactional invitation email remain open.
 
 ### P20-01 Operator Administration And Support
 

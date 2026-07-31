@@ -88,6 +88,19 @@ API Keys are for server integrations and can authenticate only Agent, run,
 conversation, job, and stream routes. They cannot access billing, members,
 Providers, account, Workspace, or settings APIs.
 
+## Data Retention
+
+Open `/app/settings` to inspect the Workspace retention policy and the number of
+records currently eligible for cleanup. Business and Enterprise Owners or
+Admins can independently choose retention periods for conversations, completed
+runs, and knowledge files. Enter the current password to save a policy. Saving
+a finite policy queues background enforcement; `立即执行` requires a second
+confirmation and performs the same tenant-scoped cleanup immediately.
+
+Active runs are preserved. Billing, usage, security, API Key, privacy, and
+retention audit evidence is excluded from customer data cleanup. The execution
+history shows policy changes and completed cleanup counts.
+
 ## Generated Agent
 
 After creating an agent, generate the standalone project. The generated project includes a LangGraph skeleton, provider folders, and a demo test path.

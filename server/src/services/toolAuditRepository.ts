@@ -85,21 +85,20 @@ export class ToolAuditRepository {
       : '';
 
     return this.db.query<ToolAuditRow>(`
-      SELECT
-        id,
-        workspace_id,
-        run_id,
-        event_id,
-        tool_name,
-        status,
-        dangerous,
-        node,
-        payload_json,
-        created_at
-      FROM tool_audit_logs
-      WHERE workspace_id = ${sqlValue(workspaceId)}
-      ${runClause}
-      ORDER BY id ASC;
+      SELECT id, workspace_id, run_id, event_id, tool_name, status,
+        dangerous, node, payload_json, created_at
+      FROM (
+        SELECT id, workspace_id, run_id, event_id, tool_name, status,
+          dangerous, node, payload_json, created_at
+        FROM tool_audit_logs
+        WHERE workspace_id = ${sqlValue(workspaceId)} ${runClause}
+        UNION ALL
+        SELECT original_audit_id AS id, workspace_id, run_id, event_id,
+          tool_name, status, dangerous, node, payload_json, created_at
+        FROM retained_tool_audit_logs
+        WHERE workspace_id = ${sqlValue(workspaceId)} ${runClause}
+      )
+      ORDER BY created_at ASC, event_id ASC;
     `).map(toToolAuditRecord);
   }
 
