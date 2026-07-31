@@ -76,11 +76,14 @@ import { LocalSecretVault } from './services/localSecretVault';
 import { RuntimeProviderResolver } from './services/runtimeProviderResolver';
 import { RuntimeSpeechResolver } from './services/runtimeSpeechResolver';
 import { parseAudioPayload, parseSpeechText } from './services/speechPayload';
-import { BillingRepository } from './services/billingRepository';
+import { BillingError, BillingRepository } from './services/billingRepository';
 import { PaymentLifecycleRepository } from './services/paymentLifecycleRepository';
 import { type PaymentProviderAdapter } from './services/paymentProvider';
 import { PaymentWebhookProcessor } from './services/paymentWebhookProcessor';
 import { registerBillingRoutes } from './routes/billingRoutes';
+import { UsageRatingRepository } from './services/usageRatingRepository';
+import { RunUsageService } from './services/runUsageService';
+import { UsageRatingError } from './services/usageRatingTypes';
 
 export interface AppOptions {
   agentBaseUrl?: string;
@@ -211,6 +214,8 @@ export function createApp(options: AppOptions = {}): Koa {
     billingRepository,
   );
   const paymentAdapter = options.paymentAdapter;
+  const usageRatingRepository = new UsageRatingRepository(db);
+  const runUsageService = new RunUsageService(usageRatingRepository, billingRepository);
   const publicAppUrl = (options.publicAppUrl ?? DEFAULT_PUBLIC_APP_URL).replace(/\/$/, '');
   for (const [planKey, priceRef] of Object.entries(options.paymentPriceRefs ?? {})) {
     if (priceRef.trim()) paymentRepository.configurePrice('stripe', planKey, priceRef.trim());
@@ -1441,6 +1446,7 @@ export function createApp(options: AppOptions = {}): Koa {
       if (!ctx.res.writableEnded) abortController.abort();
     });
     let currentRunId: number | null = null;
+    let usageReserved = false;
     let finished = false;
     let sawAgentError = false;
 
@@ -1458,6 +1464,21 @@ export function createApp(options: AppOptions = {}): Koa {
       currentRunId = streamRequest.runId;
       let conversationId: number | null = null;
       if (streamRequest.runId) {
+        try {
+          runUsageService.reserve({
+            runId: streamRequest.runId,
+            workspaceId,
+            prompt: streamRequest.payload.goal,
+            llm: streamRequest.payload.llm,
+            channel: publicAgentId ? 'hosted' : 'api',
+          });
+          usageReserved = true;
+        } catch (error) {
+          if (error instanceof BillingError || error instanceof UsageRatingError) {
+            throw new StreamRequestError(402, error.message);
+          }
+          throw error;
+        }
         runRepository.updateStatus(streamRequest.runId, 'running');
         const agentId = Number(body.agentId);
         const requestedConversationId = parseOptionalPositiveInteger(body.conversationId);
@@ -1502,6 +1523,17 @@ export function createApp(options: AppOptions = {}): Koa {
                 [String(body.input ?? '')],
               )
             : null;
+          if (queryEmbedding) {
+            runUsageService.recordEmbedding({
+              runId: streamRequest.runId,
+              workspaceId,
+              provider: streamRequest.payload.embedding.provider,
+              model: streamRequest.payload.embedding.model,
+              tokenCount: queryEmbedding.inputTokens
+                ?? Math.max(1, Math.ceil(String(body.input ?? '').length / 4)),
+              purpose: 'query',
+            });
+          }
           const matches = queryEmbedding
             ? documentIndexRepository.searchByAgent(
                 agentId,
@@ -1513,6 +1545,13 @@ export function createApp(options: AppOptions = {}): Koa {
                 },
               )
             : [];
+          if (queryEmbedding) {
+            runUsageService.recordRetrieval({
+              runId: streamRequest.runId,
+              workspaceId,
+              matchCount: matches.length,
+            });
+          }
           if (matches.length) {
             streamRequest.payload.context = matches
               .map((match) => `[${match.title}] ${match.text}`)
@@ -1567,6 +1606,14 @@ export function createApp(options: AppOptions = {}): Koa {
         return;
       }
 
+      if (currentRunId) {
+        runUsageService.recordRun({
+          runId: currentRunId,
+          workspaceId,
+          channel: publicAgentId ? 'hosted' : 'api',
+        });
+      }
+
       await pipeSseStream(upstream, ctx.res, streamRequest.runId
         ? (event) => {
             const created = streamEventRepository.create({
@@ -1577,6 +1624,24 @@ export function createApp(options: AppOptions = {}): Koa {
             });
             if (event.eventType === 'agent.error') sawAgentError = true;
             toolAuditRepository.recordStreamEvent(created);
+            if (event.eventType === 'agent.usage.reported') {
+              runUsageService.recordLlmUsage({
+                runId: streamRequest.runId as number,
+                workspaceId,
+                provider: String(event.payload.provider ?? ''),
+                model: String(event.payload.model ?? ''),
+                inputTokens: nonNegativeEventInteger(event.payload.inputTokens),
+                outputTokens: nonNegativeEventInteger(event.payload.outputTokens),
+              });
+            }
+            if (event.eventType === 'agent.tool.called') {
+              runUsageService.recordToolCall({
+                runId: streamRequest.runId as number,
+                workspaceId,
+                eventId: created.id,
+                tool: String(event.payload.tool ?? event.payload.toolName ?? 'unknown'),
+              });
+            }
             if (
               conversationId
               && event.eventType === 'message.completed'
@@ -1644,6 +1709,18 @@ export function createApp(options: AppOptions = {}): Koa {
           });
         }
         runRepository.updateStatus(currentRunId, status, new Date().toISOString());
+      }
+      if (currentRunId && usageReserved) {
+        try {
+          runUsageService.settle(currentRunId, workspaceId);
+        } catch (error) {
+          logger.log({
+            level: 'error',
+            code: 'RUN_USAGE_SETTLEMENT_FAILED',
+            message: error instanceof Error ? error.message : 'run usage settlement failed',
+            context: { runId: currentRunId, workspaceId },
+          });
+        }
       }
       ctx.res.end();
     }
@@ -1728,4 +1805,9 @@ function conversationSourcesFromPayload(value: unknown): ConversationSource[] {
       url: typeof source.url === 'string' ? source.url : undefined,
     }];
   });
+}
+
+function nonNegativeEventInteger(value: unknown): number {
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : 0;
 }

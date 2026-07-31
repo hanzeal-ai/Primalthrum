@@ -28,6 +28,22 @@ export interface RatedUsageRecord {
   createdAt: string;
 }
 
+export interface UsageQuote {
+  meterPriceId: number;
+  meter: string;
+  quantity: number;
+  billableUnits: number;
+  credits: number;
+  providerCostMicros: number;
+}
+
+export interface ResourceUsageTotals {
+  eventCount: number;
+  quantity: number;
+  credits: number;
+  providerCostMicros: number;
+}
+
 export interface CostControlRecord {
   workspaceId: number;
   monthlyCreditLimit: number | null;

@@ -60,6 +60,7 @@ before(async () => {
           provider: 'mock',
           model: 'mock-embedding',
           dimensions: 2,
+          inputTokens: 12,
           embeddings: payload.texts.map(() => [1, 0]),
         }));
       });
@@ -83,6 +84,8 @@ before(async () => {
       res.write('data: {"node":"intake","message":"accepted"}\n\n');
       res.write('event: agent.tool.called\n');
       res.write('data: {"node":"act_with_tools","tool":"file_reader","status":"allowed","dangerous":false,"message":"file_reader executed"}\n\n');
+      res.write('event: agent.usage.reported\n');
+      res.write('data: {"node":"respond","provider":"openai-compatible","model":"gpt-test","inputTokens":20,"outputTokens":40,"status":"done"}\n\n');
       res.write('event: message.completed\n');
       res.write('data: {"node":"respond","message":"Saved assistant response","sources":[{"title":"guide.md"}],"status":"done"}\n\n');
       res.write('event: agent.run.completed\n');
@@ -282,7 +285,7 @@ test('POST /api/stream can run by agentId and persist proxied events', async () 
   assert.match(body, /event: agent\.node\.completed/);
   const liveEventIds = [...body.matchAll(/^id: (\d+)$/gm)]
     .map((match) => Number(match[1]));
-  assert.equal(liveEventIds.length, 5);
+  assert.equal(liveEventIds.length, 6);
   assert.ok(liveEventIds.every((id, index) => (
     index === 0 || id > liveEventIds[index - 1]!
   )));
@@ -362,14 +365,37 @@ test('POST /api/stream can run by agentId and persist proxied events', async () 
     'agent.run.started',
     'agent.node.completed',
     'agent.tool.called',
+    'agent.usage.reported',
     'message.completed',
     'agent.run.completed',
   ]);
   assert.equal(events[0]?.node, 'run');
   assert.equal(events[1]?.node, 'intake');
   assert.equal(events[2]?.node, 'act_with_tools');
-  assert.equal(events[3]?.payload.message, 'Saved assistant response');
-  assert.equal(events[4]?.payload.status, 'done');
+  assert.equal(events[3]?.payload.inputTokens, 20);
+  assert.equal(events[4]?.payload.message, 'Saved assistant response');
+  assert.equal(events[5]?.payload.status, 'done');
+
+  const usageDb = new SqliteDatabase(join(rootDir, 'platform.sqlite'));
+  const rated = usageDb.query<{ meter: string; credits_charged: number }>(`
+    SELECT meter, credits_charged FROM rated_usage_events
+    WHERE resource_type = 'run' AND resource_id = ${sqlValue(String(runId))}
+    ORDER BY meter;
+  `);
+  assert.deepEqual(rated.map((item) => item.meter), [
+    'api.runs',
+    'embedding.tokens',
+    'llm.input_tokens',
+    'llm.output_tokens',
+    'rag.retrievals',
+    'tool.calls',
+  ]);
+  assert.equal(rated.reduce((sum, item) => sum + Number(item.credits_charged), 0), 59);
+  const settled = usageDb.query<{ state: string; settled_credits: number }>(`
+    SELECT state, settled_credits FROM credit_reservations
+    WHERE workspace_id = 1 AND idempotency_key = ${sqlValue(`run:${runId}`)};
+  `)[0];
+  assert.deepEqual(settled, { state: 'settled', settled_credits: 59 });
 
   const conversationsResponse = await fetch(
     `${appBaseUrl}/api/agents/${agent.id}/conversations`,

@@ -4,6 +4,7 @@ export interface EmbeddingBatchResult {
   provider: string;
   model: string;
   dimensions: number;
+  inputTokens?: number;
   embeddings: number[][];
 }
 
@@ -56,6 +57,12 @@ function validateEmbeddingBatch(
     || result.embeddings.length !== expectedCount
   ) {
     throw new Error('embedding service returned an invalid batch');
+  }
+  if (
+    result.inputTokens !== undefined
+    && (!Number.isSafeInteger(result.inputTokens) || result.inputTokens < 0)
+  ) {
+    throw new Error('embedding service returned invalid token usage');
   }
   for (const vector of result.embeddings) {
     if (

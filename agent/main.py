@@ -220,6 +220,18 @@ async def respond(state: AgentState) -> dict[str, Any]:
             },
         })
     answer = "".join(answer_parts)
+    writer({
+        "event": "agent.usage.reported",
+        "payload": {
+            "node": "respond",
+            "agent": state["agent"],
+            "provider": runtime.llm.name,
+            "model": runtime.llm.model,
+            "inputTokens": runtime.llm.usage.input_tokens,
+            "outputTokens": runtime.llm.usage.output_tokens,
+            "status": "done",
+        },
+    })
     return {
         "answer": answer,
         "message": "Generated assistant response",
@@ -475,6 +487,7 @@ async def embeddings(request: EmbeddingBatchRequest) -> dict[str, Any]:
         "model": provider.model,
         "dimensions": dimensions,
         "embeddings": vectors,
+        "inputTokens": provider.usage_tokens,
     }
 
 

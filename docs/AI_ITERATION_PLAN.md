@@ -1872,7 +1872,13 @@ complete. Follow the same dependency and verification protocol used above.
   threshold alerts. Tests cover wildcard and model-specific pricing, unit
   rounding, replay/conflict behavior, immutable evidence, credit hard stops,
   provider-cost hard stops, period summaries, and 50/80/100 alert deduplication.
-  Run reservation/settlement and remaining meter producers are the next slice.
+  Persisted Runs now quote model and channel usage, enforce projected limits,
+  reserve credits before provider execution, ingest LLM/Embedding/Tool/RAG/run
+  evidence, and settle aggregate actuals or release an untouched failure.
+  OpenAI usage chunks, Anthropic usage events, Mock estimates, and Embedding token
+  metadata are covered by provider, Agent SSE, Node HTTP, reconciliation, replay,
+  failed-run release, and preflight cost-cap tests. Speech, storage, customer
+  usage APIs, and external meter export remain in the next slice.
 
 ### P19-01 Public Website And Conversion Onboarding
 

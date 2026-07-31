@@ -12,6 +12,7 @@ from .llm import ProviderRequestError, mock_embedding
 class EmbeddingProvider(Protocol):
     name: str
     model: str
+    usage_tokens: int
 
     def embed(self, texts: list[str]) -> list[list[float]]:
         ...
@@ -21,8 +22,10 @@ class EmbeddingProvider(Protocol):
 class MockEmbeddingProvider:
     model: str = "mock-embedding"
     name: str = "mock"
+    usage_tokens: int = field(default=0, init=False)
 
     def embed(self, texts: list[str]) -> list[list[float]]:
+        self.usage_tokens = sum(max(1, (len(text) + 3) // 4) for text in texts)
         return [mock_embedding(text) for text in texts]
 
 
@@ -32,6 +35,7 @@ class OpenAIEmbeddingProvider:
     transport: httpx.BaseTransport | None = field(default=None, repr=False)
     name: str = field(init=False)
     model: str = field(init=False)
+    usage_tokens: int = field(default=0, init=False)
 
     def __post_init__(self) -> None:
         self.name = self.config.provider
@@ -55,7 +59,12 @@ class OpenAIEmbeddingProvider:
                     json={"model": self.model, "input": texts},
                 )
                 response.raise_for_status()
-                data = response.json().get("data", [])
+                payload = response.json()
+                data = payload.get("data", [])
+                usage = payload.get("usage", {})
+                self.usage_tokens = int(
+                    usage.get("prompt_tokens") or usage.get("total_tokens") or 0
+                )
                 ordered = sorted(data, key=lambda item: int(item.get("index", 0)))
                 return [list(map(float, item["embedding"])) for item in ordered]
         except httpx.HTTPStatusError as error:

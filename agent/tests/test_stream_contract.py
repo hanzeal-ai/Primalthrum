@@ -92,6 +92,7 @@ class StreamContractTest(unittest.TestCase):
         self.assertIn("agent.node.completed", events)
         self.assertIn("agent.rag.retrieved", events)
         self.assertIn("message.delta", events)
+        self.assertIn("agent.usage.reported", events)
         self.assertIn("message.completed", events)
         self.assertEqual(events[-1], "agent.run.completed")
 
@@ -113,6 +114,13 @@ class StreamContractTest(unittest.TestCase):
             completed["sources"],
             [{"title": "launch-guide.md", "documentId": 7}],
         )
+        usage = next(
+            payload for event, payload in messages
+            if event == "agent.usage.reported"
+        )
+        self.assertEqual(usage["provider"], "mock")
+        self.assertGreater(usage["inputTokens"], 0)
+        self.assertGreater(usage["outputTokens"], 0)
         runtime_event = next(
             payload for event, payload in messages
             if event == "agent.node.completed" and payload["node"] == "intake"
@@ -145,6 +153,7 @@ class StreamContractTest(unittest.TestCase):
         self.assertEqual(body["provider"], "mock")
         self.assertEqual(body["model"], "mock-embedding")
         self.assertEqual(body["dimensions"], 8)
+        self.assertGreater(body["inputTokens"], 0)
         self.assertEqual(len(body["embeddings"]), 2)
         self.assertTrue(all(len(vector) == 8 for vector in body["embeddings"]))
 

@@ -5,6 +5,21 @@ versioned price converts each raw quantity into billable units, platform credits
 and provider cost in integer micro-US dollars. Runtime settlement later sums the
 rated events for one resource and posts one atomic ledger settlement.
 
+Every persisted Run performs this lifecycle before contacting a model:
+
+```text
+quote input/output/run -> enforce monthly controls -> reserve credits
+-> execute -> record provider/platform evidence -> settle aggregate actuals
+                                      -> no evidence on failure -> release
+```
+
+The Agent emits `agent.usage.reported` after model streaming. OpenAI-compatible
+providers request the terminal usage chunk, Anthropic consumes message usage
+events, and the deterministic Mock provider reports a stable estimate. Embedding
+responses carry provider token usage when available; compatible endpoints that
+omit it fall back to a character estimate. Tool calls, RAG retrieval, and
+hosted/API run units are recorded by Node from persisted stream events.
+
 ## Meters
 
 The initial data-driven catalog covers:
@@ -50,3 +65,5 @@ Delivery is a later notification concern; the threshold evidence remains durable
 4. Hard limits are checked against current period totals plus projected usage.
 5. Alert rows are idempotent across retries.
 6. Runtime ledger settlement must reconcile to the sum of its rated events.
+7. A failed Run with no consumed evidence releases its entire reservation.
+8. Consumed evidence is settled even when the Run later fails or disconnects.

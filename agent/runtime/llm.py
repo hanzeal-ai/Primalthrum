@@ -16,9 +16,16 @@ MOCK_EMBEDDING_DIMENSIONS = 8
 ChatMessage = dict[str, str]
 
 
+@dataclass
+class LLMUsage:
+    input_tokens: int = 0
+    output_tokens: int = 0
+
+
 class LLMProvider(Protocol):
     name: str
     model: str
+    usage: LLMUsage
 
     def stream_chat(self, messages: list[ChatMessage]) -> AsyncIterator[str]:
         ...
@@ -32,6 +39,7 @@ class ProviderRequestError(RuntimeError):
 class MockLLMProvider:
     model: str = "mock-chat"
     name: str = "mock"
+    usage: LLMUsage = field(default_factory=LLMUsage, init=False)
 
     def chat(self, messages: list[ChatMessage]) -> str:
         latest = messages[-1]["content"] if messages else ""
@@ -39,6 +47,10 @@ class MockLLMProvider:
 
     async def stream_chat(self, messages: list[ChatMessage]) -> AsyncIterator[str]:
         answer = self.chat(messages)
+        self.usage = LLMUsage(
+            input_tokens=_estimated_tokens("".join(message.get("content", "") for message in messages)),
+            output_tokens=_estimated_tokens(answer),
+        )
         for match in re.finditer(r"\S+\s*", answer):
             yield match.group(0)
 
@@ -52,6 +64,7 @@ class OpenAIChatProvider:
     transport: httpx.AsyncBaseTransport | None = field(default=None, repr=False)
     name: str = field(init=False)
     model: str = field(init=False)
+    usage: LLMUsage = field(default_factory=LLMUsage, init=False)
 
     def __post_init__(self) -> None:
         self.name = self.config.provider
@@ -60,11 +73,13 @@ class OpenAIChatProvider:
             raise ValueError(f"api_key is required for {self.name}")
 
     async def stream_chat(self, messages: list[ChatMessage]) -> AsyncIterator[str]:
+        self.usage = LLMUsage()
         base_url = self.config.base_url or "https://api.openai.com/v1"
         payload: dict[str, object] = {
             "model": self.model,
             "messages": messages,
             "stream": True,
+            "stream_options": {"include_usage": True},
         }
         if self.config.temperature is not None:
             payload["temperature"] = self.config.temperature
@@ -92,7 +107,9 @@ class OpenAIChatProvider:
                         data = line.removeprefix("data:").strip()
                         if data == "[DONE]":
                             break
-                        content = openai_delta(data)
+                        content, usage = openai_event(data)
+                        if usage is not None:
+                            self.usage = usage
                         if content:
                             yield content
         except httpx.HTTPStatusError as error:
@@ -109,6 +126,7 @@ class AnthropicChatProvider:
     transport: httpx.AsyncBaseTransport | None = field(default=None, repr=False)
     name: str = field(default="anthropic", init=False)
     model: str = field(init=False)
+    usage: LLMUsage = field(default_factory=LLMUsage, init=False)
 
     def __post_init__(self) -> None:
         self.model = self.config.model
@@ -116,6 +134,7 @@ class AnthropicChatProvider:
             raise ValueError("api_key is required for anthropic")
 
     async def stream_chat(self, messages: list[ChatMessage]) -> AsyncIterator[str]:
+        self.usage = LLMUsage()
         base_url = self.config.base_url or "https://api.anthropic.com/v1"
         system = "\n\n".join(
             message["content"] for message in messages
@@ -154,7 +173,12 @@ class AnthropicChatProvider:
                     async for line in response.aiter_lines():
                         if not line.startswith("data:"):
                             continue
-                        content = anthropic_delta(line.removeprefix("data:").strip())
+                        content, usage = anthropic_event(line.removeprefix("data:").strip())
+                        if usage is not None:
+                            self.usage = LLMUsage(
+                                input_tokens=usage.input_tokens or self.usage.input_tokens,
+                                output_tokens=usage.output_tokens or self.usage.output_tokens,
+                            )
                         if content:
                             yield content
         except httpx.HTTPStatusError as error:
@@ -176,22 +200,49 @@ def create_llm_provider(config: ModelProviderConfig) -> LLMProvider:
 
 
 def openai_delta(data: str) -> str:
+    return openai_event(data)[0]
+
+
+def openai_event(data: str) -> tuple[str, LLMUsage | None]:
     try:
         payload = json.loads(data)
-        return str(payload["choices"][0]["delta"].get("content") or "")
-    except (json.JSONDecodeError, KeyError, IndexError, TypeError):
-        return ""
+        usage = payload.get("usage")
+        parsed_usage = None
+        if isinstance(usage, dict):
+            parsed_usage = LLMUsage(
+                input_tokens=int(usage.get("prompt_tokens") or 0),
+                output_tokens=int(usage.get("completion_tokens") or 0),
+            )
+        choices = payload.get("choices") or []
+        content = str(choices[0]["delta"].get("content") or "") if choices else ""
+        return content, parsed_usage
+    except (json.JSONDecodeError, KeyError, IndexError, TypeError, ValueError):
+        return "", None
 
 
 def anthropic_delta(data: str) -> str:
+    return anthropic_event(data)[0]
+
+
+def anthropic_event(data: str) -> tuple[str, LLMUsage | None]:
     try:
         payload = json.loads(data)
-        if payload.get("type") != "content_block_delta":
-            return ""
-        delta = payload.get("delta", {})
-        return str(delta.get("text") or "")
-    except (json.JSONDecodeError, TypeError):
-        return ""
+        event_type = payload.get("type")
+        if event_type == "message_start":
+            usage = payload.get("message", {}).get("usage", {})
+            return "", LLMUsage(input_tokens=int(usage.get("input_tokens") or 0))
+        if event_type == "message_delta":
+            usage = payload.get("usage", {})
+            return "", LLMUsage(output_tokens=int(usage.get("output_tokens") or 0))
+        if event_type == "content_block_delta":
+            return str(payload.get("delta", {}).get("text") or ""), None
+        return "", None
+    except (json.JSONDecodeError, AttributeError, TypeError, ValueError):
+        return "", None
+
+
+def _estimated_tokens(text: str) -> int:
+    return max(1, (len(text) + 3) // 4)
 
 
 def mock_embedding(text: str) -> list[float]:

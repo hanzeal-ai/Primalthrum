@@ -4,6 +4,8 @@ import {
   type CostControlRecord,
   type MeterPriceRecord,
   type RatedUsageRecord,
+  type ResourceUsageTotals,
+  type UsageQuote,
   type UsagePeriodSummary,
   UsageRatingError,
 } from './usageRatingTypes';
@@ -95,6 +97,36 @@ export class UsageRatingRepository {
     return price;
   }
 
+  quote(input: {
+    meter: string;
+    quantity: number;
+    provider?: string;
+    model?: string;
+    occurredAt?: string;
+  }): UsageQuote {
+    validateNonNegativeInteger(input.quantity, 'quantity');
+    const meter = normalizeUsageKey(input.meter, 'meter');
+    const occurredAt = normalizeTimestamp(input.occurredAt ?? this.now().toISOString());
+    const price = this.findPrice(
+      meter,
+      input.provider?.trim() ?? '',
+      input.model?.trim() ?? '',
+      occurredAt,
+    );
+    if (!price) {
+      throw new UsageRatingError('METER_PRICE_NOT_FOUND', `no active price for meter ${meter}`);
+    }
+    const billableUnits = input.quantity === 0 ? 0 : Math.ceil(input.quantity / price.unitSize);
+    return {
+      meterPriceId: price.id,
+      meter,
+      quantity: input.quantity,
+      billableUnits,
+      credits: billableUnits * price.creditsPerUnit,
+      providerCostMicros: billableUnits * price.providerCostMicrosPerUnit,
+    };
+  }
+
   rate(input: {
     workspaceId: number;
     idempotencyKey: string;
@@ -106,26 +138,23 @@ export class UsageRatingRepository {
     resourceId?: string;
     metadata?: Record<string, unknown>;
     occurredAt?: string;
+    enforceBudget?: boolean;
   }): RatedUsageRecord {
     validateNonNegativeInteger(input.quantity, 'quantity');
     const idempotencyKey = normalizeUsageKey(input.idempotencyKey, 'idempotencyKey');
     const meter = normalizeUsageKey(input.meter, 'meter');
     const occurredAt = normalizeTimestamp(input.occurredAt ?? this.now().toISOString());
     const existing = this.findByKey(input.workspaceId, idempotencyKey);
-    if (existing) return validateReplay(existing, input, occurredAt);
+    if (existing) return validateReplay(existing, input, occurredAt, input.occurredAt !== undefined);
     const provider = input.provider?.trim() ?? '';
     const model = input.model?.trim() ?? '';
-    const price = this.findPrice(meter, provider, model, occurredAt);
-    if (!price) {
-      throw new UsageRatingError(
-        'METER_PRICE_NOT_FOUND',
-        `no active price for meter ${meter}`,
-      );
+    const quote = this.quote({ meter, provider, model, quantity: input.quantity, occurredAt });
+    const billableUnits = quote.billableUnits;
+    const credits = quote.credits;
+    const providerCostMicros = quote.providerCostMicros;
+    if (input.enforceBudget !== false) {
+      this.assertWithinBudget(input.workspaceId, credits, providerCostMicros, occurredAt);
     }
-    const billableUnits = input.quantity === 0 ? 0 : Math.ceil(input.quantity / price.unitSize);
-    const credits = billableUnits * price.creditsPerUnit;
-    const providerCostMicros = billableUnits * price.providerCostMicrosPerUnit;
-    this.assertWithinBudget(input.workspaceId, credits, providerCostMicros, occurredAt);
     this.db.run(`
       INSERT INTO rated_usage_events (
         workspace_id, idempotency_key, meter, provider, model, quantity,
@@ -135,7 +164,7 @@ export class UsageRatingRepository {
         ${sqlValue(input.workspaceId)}, ${sqlValue(idempotencyKey)},
         ${sqlValue(meter)}, ${sqlValue(provider)}, ${sqlValue(model)},
         ${sqlValue(input.quantity)}, ${sqlValue(billableUnits)}, ${sqlValue(credits)},
-        ${sqlValue(providerCostMicros)}, ${sqlValue(price.id)},
+        ${sqlValue(providerCostMicros)}, ${sqlValue(quote.meterPriceId)},
         ${sqlValue(input.resourceType ?? '')}, ${sqlValue(input.resourceId ?? '')},
         ${sqlValue(JSON.stringify(input.metadata ?? {}))}, ${sqlValue(occurredAt)}
       );
@@ -234,6 +263,46 @@ export class UsageRatingRepository {
       })),
       controls: this.controls(workspaceId),
     };
+  }
+
+  totalsForResource(
+    workspaceId: number,
+    resourceType: string,
+    resourceId: string,
+  ): ResourceUsageTotals {
+    const row = this.db.query<{
+      event_count: number;
+      quantity: number;
+      credits: number;
+      cost: number;
+    }>(`
+      SELECT COUNT(*) AS event_count, COALESCE(SUM(quantity), 0) AS quantity,
+        COALESCE(SUM(credits_charged), 0) AS credits,
+        COALESCE(SUM(provider_cost_micros), 0) AS cost
+      FROM rated_usage_events
+      WHERE workspace_id = ${sqlValue(workspaceId)}
+        AND resource_type = ${sqlValue(resourceType)}
+        AND resource_id = ${sqlValue(resourceId)};
+    `)[0];
+    return {
+      eventCount: Number(row?.event_count ?? 0),
+      quantity: Number(row?.quantity ?? 0),
+      credits: Number(row?.credits ?? 0),
+      providerCostMicros: Number(row?.cost ?? 0),
+    };
+  }
+
+  assertProjected(
+    workspaceId: number,
+    quotes: UsageQuote[],
+    occurredAt = this.now().toISOString(),
+  ): void {
+    this.assertWithinBudget(
+      workspaceId,
+      quotes.reduce((sum, quote) => sum + quote.credits, 0),
+      quotes.reduce((sum, quote) => sum + quote.providerCostMicros, 0),
+      normalizeTimestamp(occurredAt),
+    );
   }
 
   private findPrice(
@@ -401,13 +470,14 @@ function validateReplay(
   existing: RatedUsageRecord,
   input: { meter: string; quantity: number; provider?: string; model?: string },
   occurredAt: string,
+  compareOccurredAt: boolean,
 ): RatedUsageRecord {
   if (
     existing.meter !== input.meter
     || existing.quantity !== input.quantity
     || existing.provider !== (input.provider?.trim() ?? '')
     || existing.model !== (input.model?.trim() ?? '')
-    || existing.occurredAt !== occurredAt
+    || (compareOccurredAt && existing.occurredAt !== occurredAt)
   ) {
     throw new UsageRatingError(
       'USAGE_IDEMPOTENCY_CONFLICT',
