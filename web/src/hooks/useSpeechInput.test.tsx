@@ -87,7 +87,11 @@ describe('useSpeechInput', () => {
     await screen.findByRole('button', { name: 'stop' })
     fireEvent.click(screen.getByRole('button', { name: 'stop' }))
 
-    await waitFor(() => expect(api.transcribeAudio).toHaveBeenCalledWith(expect.any(Blob), 7))
+    await waitFor(() => expect(api.transcribeAudio).toHaveBeenCalledWith(
+      expect.any(Blob),
+      7,
+      expect.any(Number),
+    ))
     expect(await screen.findByText('voice transcript')).toBeTruthy()
     expect(stopTrack).toHaveBeenCalled()
   })

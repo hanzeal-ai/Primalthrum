@@ -20,6 +20,14 @@ responses carry provider token usage when available; compatible endpoints that
 omit it fall back to a character estimate. Tool calls, RAG retrieval, and
 hosted/API run units are recorded by Node from persisted stream events.
 
+Speech and storage use the same preflight contract through a reusable metered
+operation service. STT is billed by client-measured recording seconds, TTS by
+input characters, file storage by validated upload bytes, document Embedding by
+provider token usage, and RAG storage by indexed document bytes. The Web client
+sends a new stable idempotency key for each speech or upload operation. Provider
+or storage failures release their reservation; successful work settles the rated
+actual quantity.
+
 ## Meters
 
 The initial data-driven catalog covers:

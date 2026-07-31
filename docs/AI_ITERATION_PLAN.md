@@ -1877,8 +1877,11 @@ complete. Follow the same dependency and verification protocol used above.
   evidence, and settle aggregate actuals or release an untouched failure.
   OpenAI usage chunks, Anthropic usage events, Mock estimates, and Embedding token
   metadata are covered by provider, Agent SSE, Node HTTP, reconciliation, replay,
-  failed-run release, and preflight cost-cap tests. Speech, storage, customer
-  usage APIs, and external meter export remain in the next slice.
+  failed-run release, and preflight cost-cap tests. STT seconds, TTS characters,
+  file bytes, document Embedding tokens, and RAG index bytes now use the same
+  preflight/reserve/settle/release contract. Authorized customer APIs expose
+  period usage, meter breakdown, controls, and durable threshold alerts.
+  Asynchronous external meter export remains in the next slice.
 
 ### P19-01 Public Website And Conversion Onboarding
 

@@ -35,7 +35,10 @@ import { AgentEmbeddingClient } from './services/agentEmbeddingClient';
 import { AgentSpeechClient } from './services/agentSpeechClient';
 import { chunkDocumentText } from './services/documentChunker';
 import { DocumentIndexRepository } from './services/documentIndexRepository';
-import { parseDocumentUpload } from './services/documentUpload';
+import {
+  parseDocumentUpload,
+  type ParsedDocumentUpload,
+} from './services/documentUpload';
 import { DurableJobDispatcher } from './services/durableJobDispatcher';
 import { LocalDocumentStorage } from './services/fileStorage';
 import { checkServerReadiness } from './services/healthReadiness';
@@ -75,15 +78,19 @@ import { WorkspaceRepository } from './services/workspaceRepository';
 import { LocalSecretVault } from './services/localSecretVault';
 import { RuntimeProviderResolver } from './services/runtimeProviderResolver';
 import { RuntimeSpeechResolver } from './services/runtimeSpeechResolver';
-import { parseAudioPayload, parseSpeechText } from './services/speechPayload';
 import { BillingError, BillingRepository } from './services/billingRepository';
 import { PaymentLifecycleRepository } from './services/paymentLifecycleRepository';
 import { type PaymentProviderAdapter } from './services/paymentProvider';
 import { PaymentWebhookProcessor } from './services/paymentWebhookProcessor';
 import { registerBillingRoutes } from './routes/billingRoutes';
+import { registerSpeechRoutes } from './routes/speechRoutes';
 import { UsageRatingRepository } from './services/usageRatingRepository';
 import { RunUsageService } from './services/runUsageService';
 import { UsageRatingError } from './services/usageRatingTypes';
+import {
+  MeteredOperationService,
+  type MeteredOperation,
+} from './services/meteredOperationService';
 
 export interface AppOptions {
   agentBaseUrl?: string;
@@ -216,6 +223,10 @@ export function createApp(options: AppOptions = {}): Koa {
   const paymentAdapter = options.paymentAdapter;
   const usageRatingRepository = new UsageRatingRepository(db);
   const runUsageService = new RunUsageService(usageRatingRepository, billingRepository);
+  const meteredOperationService = new MeteredOperationService(
+    usageRatingRepository,
+    billingRepository,
+  );
   const publicAppUrl = (options.publicAppUrl ?? DEFAULT_PUBLIC_APP_URL).replace(/\/$/, '');
   for (const [planKey, priceRef] of Object.entries(options.paymentPriceRefs ?? {})) {
     if (priceRef.trim()) paymentRepository.configurePrice('stripe', planKey, priceRef.trim());
@@ -230,6 +241,10 @@ export function createApp(options: AppOptions = {}): Koa {
       if (!agent) throw new Error('agent not found');
       const existing = documentRepository.findByAgentDocument(agentId, documentId);
       if (!existing) throw new Error('document not found');
+      let embeddingOperation: MeteredOperation | null = null;
+      let embeddingCompleted = false;
+      let ragStorageOperation: MeteredOperation | null = null;
+      let ragStorageCompleted = false;
       try {
         const content = existing.storageRef
           ? documentStorage.read(existing.storageRef)
@@ -239,15 +254,56 @@ export function createApp(options: AppOptions = {}): Koa {
         const resolvedEmbedding = ragEnabled
           ? runtimeProviderResolver.resolve(agent.config, agent.workspaceId).embedding
           : null;
+        const estimatedEmbeddingTokens = Math.max(
+          1,
+          chunks.reduce((sum, chunk) => sum + Math.ceil(chunk.text.length / 4), 0),
+        );
+        if (resolvedEmbedding) {
+          embeddingOperation = meteredOperationService.begin({
+            workspaceId: agent.workspaceId,
+            idempotencyKey: `document:${documentId}:embedding:${existing.hash}`,
+            meter: 'embedding.tokens',
+            quantity: estimatedEmbeddingTokens,
+            provider: resolvedEmbedding.provider,
+            model: resolvedEmbedding.model,
+            resourceType: 'document.embedding',
+          });
+        }
         const embeddingBatch = resolvedEmbedding
           ? await embeddingClient.embed(resolvedEmbedding, chunks.map((chunk) => chunk.text))
           : null;
+        if (embeddingOperation && embeddingBatch) {
+          meteredOperationService.complete(
+            embeddingOperation,
+            { agentId, documentId, chunkCount: chunks.length },
+            embeddingBatch.inputTokens ?? estimatedEmbeddingTokens,
+          );
+          embeddingCompleted = true;
+        }
+        if (ragEnabled) {
+          ragStorageOperation = meteredOperationService.begin({
+            workspaceId: agent.workspaceId,
+            idempotencyKey: `document:${documentId}:rag-storage:${existing.hash}`,
+            meter: 'rag.storage_bytes',
+            quantity: existing.sizeBytes,
+            resourceType: 'document.rag-storage',
+          });
+        }
         const entries = documentIndexRepository.reindex(existing, chunks, {
           embeddings: embeddingBatch?.embeddings ?? [],
           embeddingProvider: embeddingBatch?.provider ?? '',
           embeddingModel: embeddingBatch?.model ?? '',
           vectorStore: ragEnabled ? agent.config.ragProvider : '',
         });
+        if (ragStorageOperation) {
+          meteredOperationService.complete(ragStorageOperation, {
+            agentId,
+            documentId,
+            vectorStore: agent.config.ragProvider,
+            indexEntryCount: entries.length,
+          });
+          ragStorageCompleted = true;
+        }
         const document = documentRepository.markIndexed(agentId, documentId);
         if (!document) throw new Error('document not found');
         return {
@@ -257,6 +313,12 @@ export function createApp(options: AppOptions = {}): Koa {
           vectorStore: ragEnabled ? agent.config.ragProvider : 'none',
         };
       } catch (error) {
+        if (embeddingOperation && !embeddingCompleted) {
+          releaseMeteredOperation(embeddingOperation);
+        }
+        if (ragStorageOperation && !ragStorageCompleted) {
+          releaseMeteredOperation(ragStorageOperation);
+        }
         documentRepository.markStatus(agentId, documentId, 'failed');
         throw error;
       }
@@ -289,6 +351,57 @@ export function createApp(options: AppOptions = {}): Koa {
 
   function currentUserId(ctx: Koa.Context): number {
     return Number(ctx.state.authSession?.user.id);
+  }
+
+  function releaseMeteredOperation(operation: MeteredOperation): void {
+    try {
+      meteredOperationService.release(operation);
+    } catch (error) {
+      logger.log({
+        level: 'warn',
+        code: 'METERED_OPERATION_RELEASE_SKIPPED',
+        message: error instanceof Error ? error.message : 'metered operation release failed',
+        context: { resourceType: operation.resourceType, resourceId: operation.resourceId },
+      });
+    }
+  }
+
+  function storeMeteredDocument(
+    ctx: Koa.Context,
+    agentId: number,
+    upload: ParsedDocumentUpload,
+  ) {
+    const operation = meteredOperationService.begin({
+      workspaceId: currentWorkspaceId(ctx),
+      idempotencyKey: normalizeIdempotencyKey(
+        ctx.get('idempotency-key') || randomUUID(),
+      ),
+      meter: 'file.storage_bytes',
+      quantity: upload.sizeBytes,
+      resourceType: 'document.storage',
+    });
+    let document: ReturnType<DocumentRepository['create']> | null = null;
+    let storageRef = '';
+    try {
+      document = documentRepository.create(agentId, upload);
+      const stored = documentStorage.save({
+        workspaceId: document.workspaceId,
+        agentId: document.agentId,
+        documentId: document.id,
+        filename: document.filename,
+        content: upload.content,
+      });
+      storageRef = stored.storageRef;
+      const result = documentRepository.attachStorageRef(agentId, document.id, storageRef)
+        ?? document;
+      meteredOperationService.complete(operation, { documentId: document.id });
+      return result;
+    } catch (error) {
+      if (storageRef) documentStorage.delete(storageRef);
+      if (document) documentRepository.deleteByAgentDocument(agentId, document.id);
+      releaseMeteredOperation(operation);
+      throw error;
+    }
   }
 
   function scopedAgent(
@@ -331,6 +444,15 @@ export function createApp(options: AppOptions = {}): Koa {
     stripeWebhookSecret: options.stripeWebhookSecret,
     usage: usageRatingRepository,
     webhooks: paymentWebhookProcessor,
+  });
+  registerSpeechRoutes(router, {
+    authorize,
+    capabilities: capabilitySettingsRepository,
+    currentWorkspaceId,
+    logger,
+    metering: meteredOperationService,
+    resolver: speechResolver,
+    speech: speechClient,
   });
 
   app.use(async (ctx, next) => {
@@ -795,28 +917,13 @@ export function createApp(options: AppOptions = {}): Koa {
         dataBase64: Buffer.from(content, 'utf8').toString('base64'),
         collection: input.collection,
       });
-      const created = documentRepository.create(
-        agentId,
-        upload,
-      );
-      const stored = documentStorage.save({
-        workspaceId: created.workspaceId,
-        agentId: created.agentId,
-        documentId: created.id,
-        filename: created.filename,
-        content: upload.content,
-      });
-      const withStorage = documentRepository.attachStorageRef(
-        agentId,
-        created.id,
-        stored.storageRef,
-      );
       ctx.status = 201;
-      ctx.body = withStorage ?? created;
+      ctx.body = storeMeteredDocument(ctx, agentId, upload);
     } catch (error) {
+      const quotaFailure = error instanceof BillingError || error instanceof UsageRatingError;
       sendApiError(ctx, logger, {
-        status: 400,
-        code: 'DOCUMENT_INVALID',
+        status: quotaFailure ? 402 : 400,
+        code: quotaFailure ? 'CREDIT_LIMIT_EXCEEDED' : 'DOCUMENT_INVALID',
         message: error instanceof Error ? error.message : 'failed to register document',
       });
     }
@@ -828,25 +935,13 @@ export function createApp(options: AppOptions = {}): Koa {
 
     try {
       const upload = parseDocumentUpload(ctx.request.body as Record<string, unknown>);
-      const created = documentRepository.create(agentId, upload);
-      const stored = documentStorage.save({
-        workspaceId: created.workspaceId,
-        agentId: created.agentId,
-        documentId: created.id,
-        filename: created.filename,
-        content: upload.content,
-      });
-      const withStorage = documentRepository.attachStorageRef(
-        agentId,
-        created.id,
-        stored.storageRef,
-      );
       ctx.status = 201;
-      ctx.body = withStorage ?? created;
+      ctx.body = storeMeteredDocument(ctx, agentId, upload);
     } catch (error) {
+      const quotaFailure = error instanceof BillingError || error instanceof UsageRatingError;
       sendApiError(ctx, logger, {
-        status: 400,
-        code: 'DOCUMENT_INVALID',
+        status: quotaFailure ? 402 : 400,
+        code: quotaFailure ? 'CREDIT_LIMIT_EXCEEDED' : 'DOCUMENT_INVALID',
         message: error instanceof Error ? error.message : 'failed to upload document',
       });
     }
@@ -1023,91 +1118,6 @@ export function createApp(options: AppOptions = {}): Koa {
 
   router.get('/api/skills', (ctx) => {
     ctx.body = listSkills();
-  });
-
-  router.post('/api/speech/transcriptions', async (ctx) => {
-    if (!authorize(ctx, 'agents.run')) return;
-    try {
-      const body = ctx.request.body as Record<string, unknown>;
-      const providerConfigId = parseOptionalPositiveInteger(body.providerConfigId);
-      if (providerConfigId === null) throw new Error('providerConfigId must be a positive integer');
-      const audio = parseAudioPayload({
-        filename: body.filename,
-        mimeType: body.mimeType,
-        audioBase64: body.audioBase64,
-      });
-      const provider = speechResolver.resolve(
-        'stt',
-        currentWorkspaceId(ctx),
-        providerConfigId,
-      );
-      capabilitySettingsRepository.assertEnabled(
-        capabilitySettingsRepository.snapshot(
-          currentWorkspaceId(ctx),
-          [`stt:${provider.provider}`],
-        ),
-      );
-      ctx.body = await speechClient.transcribe(provider, audio);
-    } catch (error) {
-      if (error instanceof CapabilityDisabledError) {
-        sendApiError(ctx, logger, {
-          status: 409,
-          code: 'CAPABILITY_DISABLED',
-          message: error.message,
-          details: { capabilities: error.capabilityKeys },
-        });
-        return;
-      }
-      const upstreamFailure = error instanceof Error
-        && error.message.startsWith('speech service returned HTTP');
-      sendApiError(ctx, logger, {
-        status: upstreamFailure ? 502 : 400,
-        code: upstreamFailure ? 'SPEECH_PROVIDER_FAILED' : 'SPEECH_REQUEST_INVALID',
-        message: error instanceof Error ? error.message : 'speech transcription failed',
-      });
-    }
-  });
-
-  router.post('/api/speech/synthesis', async (ctx) => {
-    if (!authorize(ctx, 'agents.run')) return;
-    try {
-      const body = ctx.request.body as Record<string, unknown>;
-      const providerConfigId = parseOptionalPositiveInteger(body.providerConfigId);
-      if (providerConfigId === null) throw new Error('providerConfigId must be a positive integer');
-      const provider = speechResolver.resolve(
-        'tts',
-        currentWorkspaceId(ctx),
-        providerConfigId,
-      );
-      capabilitySettingsRepository.assertEnabled(
-        capabilitySettingsRepository.snapshot(
-          currentWorkspaceId(ctx),
-          [`tts:${provider.provider}`],
-        ),
-      );
-      ctx.body = await speechClient.synthesize(
-        provider,
-        parseSpeechText(body.text),
-        typeof body.voice === 'string' && body.voice.trim() ? body.voice.trim() : 'alloy',
-      );
-    } catch (error) {
-      if (error instanceof CapabilityDisabledError) {
-        sendApiError(ctx, logger, {
-          status: 409,
-          code: 'CAPABILITY_DISABLED',
-          message: error.message,
-          details: { capabilities: error.capabilityKeys },
-        });
-        return;
-      }
-      const upstreamFailure = error instanceof Error
-        && error.message.startsWith('speech service returned HTTP');
-      sendApiError(ctx, logger, {
-        status: upstreamFailure ? 502 : 400,
-        code: upstreamFailure ? 'SPEECH_PROVIDER_FAILED' : 'SPEECH_REQUEST_INVALID',
-        message: error instanceof Error ? error.message : 'speech synthesis failed',
-      });
-    }
   });
 
   router.get('/api/capabilities', async (ctx) => {

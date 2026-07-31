@@ -1052,12 +1052,13 @@ test('speech APIs resolve encrypted STT and TTS provider configs', async () => {
   const tts = await createSpeechProvider('tts', 'gpt-4o-mini-tts');
   const transcriptionResponse = await fetch(`${baseUrl}/api/speech/transcriptions`, {
     method: 'POST',
-    headers: jsonAuthHeaders(),
+    headers: { ...jsonAuthHeaders(), 'idempotency-key': 'speech-stt-1' },
     body: JSON.stringify({
       providerConfigId: stt.id,
       filename: 'recording.webm',
       mimeType: 'audio/webm',
       audioBase64: Buffer.from('webm-audio').toString('base64'),
+      durationMs: 2500,
     }),
   });
   assert.equal(transcriptionResponse.status, 200);
@@ -1069,7 +1070,7 @@ test('speech APIs resolve encrypted STT and TTS provider configs', async () => {
 
   const synthesisResponse = await fetch(`${baseUrl}/api/speech/synthesis`, {
     method: 'POST',
-    headers: jsonAuthHeaders(),
+    headers: { ...jsonAuthHeaders(), 'idempotency-key': 'speech-tts-1' },
     body: JSON.stringify({
       providerConfigId: tts.id,
       text: 'The agent is ready.',
@@ -1083,6 +1084,20 @@ test('speech APIs resolve encrypted STT and TTS provider configs', async () => {
     mimeType: 'audio/mpeg',
     audioBase64: Buffer.from('speech-bytes').toString('base64'),
   });
+  const speechUsage = new SqliteDatabase(dbPath).query<{
+    meter: string;
+    quantity: number;
+    credits_charged: number;
+  }>(`
+    SELECT meter, quantity, credits_charged
+    FROM rated_usage_events
+    WHERE resource_type IN ('speech.transcription', 'speech.synthesis')
+    ORDER BY meter;
+  `);
+  assert.deepEqual(speechUsage, [
+    { meter: 'speech.synthesis_characters', quantity: 19, credits_charged: 15 },
+    { meter: 'speech.transcription_seconds', quantity: 3, credits_charged: 20 },
+  ]);
 
   const capabilitySettings = new CapabilitySettingsRepository(new SqliteDatabase(dbPath));
   capabilitySettings.set(1, 'tts:openai-compatible', false, 1);
@@ -1289,6 +1304,15 @@ test('document APIs register and list agent document metadata', async () => {
   assert.equal(documents[1]?.filename, 'owners.csv');
   assert.equal(documents[1]?.mimeType, 'text/csv');
   assert.equal(documents[1]?.sizeBytes, Buffer.byteLength(uploadContent));
+  const storageUsage = new SqliteDatabase(dbPath).query<{ quantity: number }>(`
+    SELECT quantity FROM rated_usage_events
+    WHERE resource_type = 'document.storage'
+    ORDER BY id DESC LIMIT 2;
+  `);
+  assert.deepEqual(
+    storageUsage.map((item) => Number(item.quantity)).sort((left, right) => left - right),
+    [document.sizeBytes, Buffer.byteLength(uploadContent)].sort((left, right) => left - right),
+  );
 
   const indexResponse = await fetch(
     `${baseUrl}/api/agents/${agent.id}/documents/${document.id}/index`,
@@ -1363,6 +1387,16 @@ test('document APIs register and list agent document metadata', async () => {
   assert.equal(persistedVector?.embedding_provider, 'mock');
   assert.equal(persistedVector?.embedding_model, 'mock-embedding');
   assert.equal(persistedVector?.vector_store, 'in-memory');
+  const indexUsage = db.query<{ resource_type: string; credits_charged: number }>(`
+    SELECT resource_type, credits_charged FROM rated_usage_events
+    WHERE resource_type IN ('document.embedding', 'document.rag-storage')
+      AND json_extract(metadata_json, '$.documentId') = ${sqlValue(document.id)}
+    ORDER BY resource_type;
+  `);
+  assert.deepEqual(indexUsage, [
+    { resource_type: 'document.embedding', credits_charged: 2 },
+    { resource_type: 'document.rag-storage', credits_charged: 3 },
+  ]);
   const matches = new DocumentIndexRepository(db).searchByAgent(
     agent.id,
     'Use the guide for retrieval',

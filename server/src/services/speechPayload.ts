@@ -42,6 +42,14 @@ export function parseSpeechText(value: unknown): string {
   return text;
 }
 
+export function parseAudioDurationSeconds(value: unknown): number {
+  const durationMs = Number(value);
+  if (!Number.isSafeInteger(durationMs) || durationMs <= 0 || durationMs > 60_000) {
+    throw new Error('durationMs must be an integer between 1 and 60000');
+  }
+  return Math.ceil(durationMs / 1000);
+}
+
 function requiredText(value: unknown, field: string): string {
   if (typeof value !== 'string' || !value.trim()) throw new Error(`${field} is required`);
   return value.trim();

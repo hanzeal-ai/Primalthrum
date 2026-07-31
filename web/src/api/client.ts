@@ -213,6 +213,7 @@ export async function createDocument(
 ): Promise<DocumentRecord> {
   return apiFetch<DocumentRecord>(`/api/agents/${agentId}/documents`, {
     method: 'POST',
+    headers: { 'Idempotency-Key': requestIdempotencyKey('document') },
     body: JSON.stringify(input),
   })
 }
@@ -228,6 +229,7 @@ export async function uploadDocument(
   }
   return apiFetch<DocumentRecord>(`/api/agents/${agentId}/documents/upload`, {
     method: 'POST',
+    headers: { 'Idempotency-Key': requestIdempotencyKey('document-upload') },
     body: JSON.stringify({
       filename: input.filename,
       mimeType: input.mimeType,
@@ -260,16 +262,19 @@ export async function getJob(jobId: number): Promise<JobRecord> {
 export async function transcribeAudio(
   audio: Blob,
   providerConfigId?: number,
+  durationMs = 1000,
 ): Promise<TranscriptionResult> {
   const bytes = new Uint8Array(await audio.arrayBuffer())
   const mimeType = audio.type.split(';')[0] || 'audio/webm'
   return apiFetch<TranscriptionResult>('/api/speech/transcriptions', {
     method: 'POST',
+    headers: { 'Idempotency-Key': requestIdempotencyKey('stt') },
     body: JSON.stringify({
       providerConfigId,
       filename: `recording.${audioExtension(mimeType)}`,
       mimeType,
       audioBase64: bytesToBase64(bytes),
+      durationMs,
     }),
   })
 }
@@ -280,8 +285,16 @@ export async function synthesizeSpeech(
 ): Promise<SpeechSynthesisResult> {
   return apiFetch<SpeechSynthesisResult>('/api/speech/synthesis', {
     method: 'POST',
+    headers: { 'Idempotency-Key': requestIdempotencyKey('tts') },
     body: JSON.stringify({ providerConfigId, text, voice: 'alloy' }),
   })
+}
+
+function requestIdempotencyKey(prefix: string): string {
+  const random = typeof crypto.randomUUID === 'function'
+    ? crypto.randomUUID()
+    : `${Date.now()}-${Math.random().toString(16).slice(2)}`
+  return `${prefix}:${random}`
 }
 
 export async function listProviders(): Promise<ProviderCatalog> {

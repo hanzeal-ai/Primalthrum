@@ -37,6 +37,7 @@ export function useSpeechInput(onTranscript: (transcript: string) => void) {
   const timeoutRef = useRef<number | null>(null)
   const transcriptRef = useRef(onTranscript)
   const mountedRef = useRef(true)
+  const recordingStartedAtRef = useRef(0)
   const [providerConfigId, setProviderConfigId] = useState<number | undefined>()
   const [listening, setListening] = useState(false)
   const [processing, setProcessing] = useState(false)
@@ -130,7 +131,8 @@ export function useSpeechInput(onTranscript: (transcript: string) => void) {
           return
         }
         setProcessing(true)
-        void transcribeAudio(audio, sttProviderConfigId)
+        const durationMs = Math.max(1, Math.round(performance.now() - recordingStartedAtRef.current))
+        void transcribeAudio(audio, sttProviderConfigId, durationMs)
           .then((result) => {
             if (mountedRef.current) transcriptRef.current(result.text)
           })
@@ -142,6 +144,7 @@ export function useSpeechInput(onTranscript: (transcript: string) => void) {
           })
       }
       recorder.start(250)
+      recordingStartedAtRef.current = performance.now()
       setListening(true)
       timeoutRef.current = window.setTimeout(stop, 60_000)
     } catch {
