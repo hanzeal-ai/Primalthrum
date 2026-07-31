@@ -17,6 +17,8 @@ import type {
   ParsedSseEvent,
   ProviderCatalog,
   ProviderConfigRecord,
+  RuntimeCapabilityCatalog,
+  RuntimeCapabilityRecord,
   SaveProviderConfigInput,
   SetupStatus,
   SkillInfo,
@@ -246,6 +248,24 @@ export async function updateProviderConfig(
     method: 'PUT',
     body: JSON.stringify(input),
   })
+}
+
+export async function listCapabilities(): Promise<RuntimeCapabilityCatalog> {
+  return apiFetch<RuntimeCapabilityCatalog>('/api/capabilities')
+}
+
+export async function updateCapabilitySetting(
+  kind: string,
+  name: string,
+  enabled: boolean,
+): Promise<RuntimeCapabilityRecord> {
+  return apiFetch<RuntimeCapabilityRecord>(
+    `/api/capabilities/${encodeURIComponent(kind)}/${encodeURIComponent(name)}`,
+    {
+      method: 'PUT',
+      body: JSON.stringify({ enabled }),
+    },
+  )
 }
 
 export async function listTools(): Promise<ToolInfo[]> {

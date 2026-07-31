@@ -1,5 +1,6 @@
 import {
   ArrowLeft,
+  Blocks,
   Cpu,
   KeyRound,
   Loader2,
@@ -36,6 +37,7 @@ interface ProviderForm {
 
 interface ProviderSettingsPanelProps {
   onClose: () => void
+  onOpenCapabilities: () => void
   onProvidersChange: (providers: ProviderConfigRecord[]) => void
 }
 
@@ -52,6 +54,7 @@ const EMPTY_FORM: ProviderForm = {
 
 export function ProviderSettingsPanel({
   onClose,
+  onOpenCapabilities,
   onProvidersChange,
 }: ProviderSettingsPanelProps) {
   const [providers, setProviders] = useState<ProviderConfigRecord[]>([])
@@ -159,7 +162,10 @@ export function ProviderSettingsPanel({
           </div>
           <div className="flex gap-1">
             {!formOpen ? (
-              <Button aria-label="刷新 Provider" onClick={() => void load()} size="icon" title="刷新" variant="ghost"><RefreshCcw /></Button>
+              <>
+                <Button aria-label="运行能力" onClick={onOpenCapabilities} size="icon" title="运行能力" variant="ghost"><Blocks /></Button>
+                <Button aria-label="刷新 Provider" onClick={() => void load()} size="icon" title="刷新" variant="ghost"><RefreshCcw /></Button>
+              </>
             ) : null}
             <Button aria-label="关闭 Provider 设置" onClick={onClose} size="icon" title="关闭" variant="ghost"><X /></Button>
           </div>

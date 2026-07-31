@@ -126,6 +126,25 @@ export interface SaveProviderConfigInput {
   secret?: string
 }
 
+export interface RuntimeCapabilityRecord {
+  kind: string
+  name: string
+  version: string
+  description: string
+  status: 'available' | 'planned'
+  hotPluggable: boolean
+  configSchema: Record<string, unknown>
+  permissions: string[]
+  dependencies: string[]
+  enabled: boolean
+}
+
+export interface RuntimeCapabilityCatalog {
+  schemaVersion: string
+  capabilities: RuntimeCapabilityRecord[]
+  health: Array<{ key: string; status: string }>
+}
+
 export interface ToolInfo {
   name: string
   description: string

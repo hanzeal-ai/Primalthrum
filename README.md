@@ -29,6 +29,11 @@ Conversation 和幂等键。客户端断线后可使用同一幂等键及 `Last-
 API Key 只允许首次写入或轮换，读取与编辑接口不会返回密钥明文；已配置的
 LLM 会立即出现在 Agent 创建对话的模型选项中。
 
+同一设置抽屉提供运行能力管理。LLM、Embedding、Tool、Skill、Memory、
+Cache、RAG、STT 和 TTS 使用统一版本化 manifest；可用能力支持工作区级
+启停，planned 能力保持只读。每次 Run 固化能力快照，因此设置变更只影响
+后续 Run。
+
 ## 快速启动
 
 ```bash

@@ -9,6 +9,7 @@ vi.mock('../../api/client', () => ({
   createDocument: vi.fn(),
   generateAgentProject: vi.fn(),
   indexDocument: vi.fn(),
+  listCapabilities: vi.fn(),
   listProviderConfigs: vi.fn().mockResolvedValue([]),
   listWorkspaces: vi.fn().mockResolvedValue([
     {
@@ -21,6 +22,7 @@ vi.mock('../../api/client', () => ({
     },
   ]),
   updateProviderConfig: vi.fn(),
+  updateCapabilitySetting: vi.fn(),
 }))
 
 describe('AgentBuilderPage', () => {

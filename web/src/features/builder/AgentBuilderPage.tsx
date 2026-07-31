@@ -28,6 +28,7 @@ import { Badge } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
 import { Progress } from '../../components/ui/progress'
 import { WorkspaceSwitcher } from '../workspaces/WorkspaceSwitcher'
+import { CapabilitySettingsPanel } from '../providers/CapabilitySettingsPanel'
 import { ProviderSettingsPanel } from '../providers/ProviderSettingsPanel'
 
 type BuilderStage = 'describe' | 'model' | 'rag' | 'knowledge' | 'review' | 'creating' | 'created'
@@ -87,7 +88,7 @@ export function AgentBuilderPage({ user, onLogout }: AgentBuilderPageProps) {
   const [draft, setDraft] = useState<BuilderDraft>(() => loadDraft(user.workspaceId))
   const [input, setInput] = useState('')
   const [providers, setProviders] = useState<ProviderConfigRecord[]>([])
-  const [providerSettingsOpen, setProviderSettingsOpen] = useState(false)
+  const [settingsView, setSettingsView] = useState<'providers' | 'capabilities' | null>(null)
   const [error, setError] = useState('')
   const messageEndRef = useRef<HTMLDivElement>(null)
 
@@ -276,7 +277,7 @@ export function AgentBuilderPage({ user, onLogout }: AgentBuilderPageProps) {
     <main className="builder-shell">
       <NavigationRail
         onLogout={onLogout}
-        onOpenProviderSettings={() => setProviderSettingsOpen(true)}
+        onOpenProviderSettings={() => setSettingsView('providers')}
         onReset={resetDraft}
         user={user}
       />
@@ -296,7 +297,7 @@ export function AgentBuilderPage({ user, onLogout }: AgentBuilderPageProps) {
               <Button
                 aria-label="Provider 设置"
                 className="md:hidden"
-                onClick={() => setProviderSettingsOpen(true)}
+                onClick={() => setSettingsView('providers')}
                 size="icon"
                 title="Provider 设置"
                 variant="ghost"
@@ -436,10 +437,17 @@ export function AgentBuilderPage({ user, onLogout }: AgentBuilderPageProps) {
       </section>
 
       <AgentStatusPanel agentName={agentName} completion={completion} draft={draft} />
-      {providerSettingsOpen ? (
+      {settingsView === 'providers' ? (
         <ProviderSettingsPanel
-          onClose={() => setProviderSettingsOpen(false)}
+          onClose={() => setSettingsView(null)}
+          onOpenCapabilities={() => setSettingsView('capabilities')}
           onProvidersChange={setProviders}
+        />
+      ) : null}
+      {settingsView === 'capabilities' ? (
+        <CapabilitySettingsPanel
+          onBack={() => setSettingsView('providers')}
+          onClose={() => setSettingsView(null)}
         />
       ) : null}
     </main>

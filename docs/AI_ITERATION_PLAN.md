@@ -1734,7 +1734,7 @@ complete. Follow the same dependency and verification protocol used above.
 
 ### P17-02 Hot-Pluggable Runtime Capabilities
 
-- Status: In Progress
+- Status: Done
 - Goal: Productionize manifests and lifecycle for LLM, embedding, STT, TTS,
   skill, tool, memory, cache, and RAG providers.
 - Dependencies: P17-01
@@ -1753,7 +1753,11 @@ complete. Follow the same dependency and verification protocol used above.
   next Run without mutating completed or already-started Runs. The 21-test server
   suite covers migration idempotency, catalog state, planned-provider rejection,
   between-run disable/enable behavior, upstream call count, and replay. Web
-  capability controls remain in P17-02C.
+  P17-02C adds a grouped runtime capability drawer linked from Provider settings.
+  It renders live health, dependencies, available switches, and read-only planned
+  states for all nine capability kinds. Component tests cover switch persistence
+  and planned-state protection. Desktop and 390x844 browser acceptance passed for
+  catalog loading, disable/restore, responsive scrolling, and zero console errors.
 
 ### P17-03 Voice, Attachments, And Knowledge Ingestion
 

@@ -41,7 +41,7 @@ describe('ProviderSettingsPanel', () => {
       .mockResolvedValueOnce([])
       .mockResolvedValueOnce([configuredProvider])
     const onProvidersChange = vi.fn()
-    render(<ProviderSettingsPanel onClose={vi.fn()} onProvidersChange={onProvidersChange} />)
+    render(<ProviderSettingsPanel onClose={vi.fn()} onOpenCapabilities={vi.fn()} onProvidersChange={onProvidersChange} />)
 
     expect(await screen.findByText('还没有模型 Provider')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '添加 Provider' }))
@@ -62,7 +62,7 @@ describe('ProviderSettingsPanel', () => {
   it('keeps an existing encrypted secret unless a replacement is entered', async () => {
     api.listProviderConfigs.mockResolvedValue([configuredProvider])
     api.updateProviderConfig.mockResolvedValue(configuredProvider)
-    render(<ProviderSettingsPanel onClose={vi.fn()} onProvidersChange={vi.fn()} />)
+    render(<ProviderSettingsPanel onClose={vi.fn()} onOpenCapabilities={vi.fn()} onProvidersChange={vi.fn()} />)
 
     fireEvent.click(await screen.findByRole('button', { name: '编辑 Production OpenAI' }))
     expect(screen.getByLabelText('API Key（留空则保持原密钥）')).toHaveProperty('value', '')
