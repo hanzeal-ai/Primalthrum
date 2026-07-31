@@ -39,6 +39,9 @@ The server checks Agent readiness through `${AGENT_BASE_URL}/ready`.
 - `primalthrum_http_requests_total`: request count labeled by method, normalized path, and status.
 - `primalthrum_http_request_duration_ms_sum`: total request duration in milliseconds with the same labels.
 - `primalthrum_process_uptime_seconds`: Node process uptime gauge.
+- `primalthrum_account_email_events_total`: unique signed Provider delivery events.
+- `primalthrum_account_email_outbox`: pending, retrying, dead-letter, bounce, and
+  complaint state gauges.
 
 Numeric path segments are normalized to `/:id` to avoid unbounded metric labels.
 

@@ -1923,8 +1923,13 @@ complete. Follow the same dependency and verification protocol used above.
   signup funnel. HTTP, database, and component tests cover denial, grant, replay,
   withdrawal, sensitive-property rejection, policy defaults, and post-consent
   page views. Desktop and 390px mobile browser acceptance passed without overflow
-  or console errors. Qualified legal approval and live transactional email
-  delivery remain open.
+  or console errors. Migration 021 upgrades transactional email to direct Resend
+  or compatible HTTP delivery with rendered verification/reset templates, stable
+  idempotency, Provider message IDs, retry classification, dead letters, signed
+  delivery/bounce/complaint Webhooks, immutable event evidence, and Prometheus
+  gauges. Contract, replay, failure, and configuration tests pass. Qualified
+  legal approval, sending-domain setup, and real mailbox delivery/bounce alert
+  verification remain open.
 
 ### P19-02 Billing, Usage, Team, And Settings UX
 

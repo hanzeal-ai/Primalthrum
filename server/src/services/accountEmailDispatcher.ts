@@ -1,6 +1,9 @@
 import { type StructuredLogger } from './logger';
 import { AccountEmailOutboxRepository } from './accountEmailOutboxRepository';
-import { type AccountEmailSender } from './accountEmailSender';
+import {
+  AccountEmailDeliveryError,
+  type AccountEmailSender,
+} from './accountEmailSender';
 
 export class AccountEmailDispatcher {
   private activeDrain: Promise<void> | null = null;
@@ -39,13 +42,38 @@ export class AccountEmailDispatcher {
       const message = this.outbox.claimNext();
       if (!message) return false;
       try {
-        await this.sender.send(message);
-        this.outbox.markDelivered(message.id);
+        const receipt = await this.sender.send(message);
+        this.outbox.markDelivered(message.id, receipt);
+        this.logger.log({
+          level: 'info',
+          code: 'ACCOUNT_EMAIL_ACCEPTED',
+          message: 'account email accepted by provider',
+          context: {
+            emailId: message.id,
+            template: message.template,
+            provider: receipt.provider,
+            providerMessageId: receipt.providerMessageId,
+          },
+        });
       } catch (error) {
         const detail = error instanceof Error ? error.message : 'account email delivery failed';
-        this.outbox.markFailed(message.id, message.attempts, detail);
-        this.logger.log({ level: 'warn', code: 'ACCOUNT_EMAIL_DELIVERY_FAILED', message: detail,
-          context: { emailId: message.id, template: message.template } });
+        const failure = this.outbox.markFailed(message.id, message.attempts, detail, {
+          retryable: error instanceof AccountEmailDeliveryError ? error.retryable : true,
+          retryAfterMs: error instanceof AccountEmailDeliveryError ? error.retryAfterMs : undefined,
+        });
+        this.logger.log({
+          level: failure.deadLettered ? 'error' : 'warn',
+          code: failure.deadLettered
+            ? 'ACCOUNT_EMAIL_DEAD_LETTERED'
+            : 'ACCOUNT_EMAIL_DELIVERY_FAILED',
+          message: detail,
+          context: {
+            emailId: message.id,
+            template: message.template,
+            attempts: message.attempts,
+            retryable: !failure.deadLettered,
+          },
+        });
       }
     }
     return true;

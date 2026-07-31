@@ -92,6 +92,10 @@ export const MIGRATIONS: Migration[] = [
     id: '020_privacy_consent_analytics',
     up: applyPrivacyConsentAnalytics,
   },
+  {
+    id: '021_transactional_email_delivery',
+    up: applyTransactionalEmailDelivery,
+  },
 ];
 
 export function runMigrations(db: DatabaseAdapter): void {
@@ -1235,6 +1239,46 @@ function applyPrivacyConsentAnalytics(db: DatabaseAdapter): void {
     BEFORE DELETE ON product_analytics_events
     BEGIN
       SELECT RAISE(ABORT, 'product analytics events are immutable');
+    END;
+  `);
+}
+
+function applyTransactionalEmailDelivery(db: DatabaseAdapter): void {
+  ensureColumn(db, 'account_email_outbox', 'provider', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, 'account_email_outbox', 'provider_message_id', "TEXT NOT NULL DEFAULT ''");
+  ensureColumn(db, 'account_email_outbox', 'accepted_at', 'TEXT');
+  ensureColumn(db, 'account_email_outbox', 'dead_lettered_at', 'TEXT');
+  ensureColumn(db, 'account_email_outbox', 'last_provider_status', "TEXT NOT NULL DEFAULT ''");
+  db.run(`
+    CREATE TABLE IF NOT EXISTS account_email_delivery_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      provider TEXT NOT NULL,
+      provider_event_id TEXT NOT NULL,
+      provider_message_id TEXT NOT NULL,
+      outbox_id INTEGER,
+      event_type TEXT NOT NULL
+        CHECK(event_type IN ('accepted', 'delivered', 'delayed', 'bounced', 'complained', 'rejected')),
+      occurred_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(provider, provider_event_id)
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS account_email_provider_message_idx
+      ON account_email_outbox(provider, provider_message_id)
+      WHERE provider_message_id <> '';
+    CREATE INDEX IF NOT EXISTS account_email_delivery_event_message_idx
+      ON account_email_delivery_events(provider, provider_message_id, id);
+
+    CREATE TRIGGER IF NOT EXISTS account_email_delivery_events_no_update
+    BEFORE UPDATE ON account_email_delivery_events
+    BEGIN
+      SELECT RAISE(ABORT, 'account email delivery events are immutable');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS account_email_delivery_events_no_delete
+    BEFORE DELETE ON account_email_delivery_events
+    BEGIN
+      SELECT RAISE(ABORT, 'account email delivery events are immutable');
     END;
   `);
 }

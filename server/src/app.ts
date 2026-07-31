@@ -102,6 +102,8 @@ import { type AccountEmailSender } from './services/accountEmailSender';
 import { AccountIdentityService } from './services/accountIdentityService';
 import { PrivacyAnalyticsRepository } from './services/privacyAnalyticsRepository';
 import { registerPrivacyRoutes } from './routes/privacyRoutes';
+import { registerAccountEmailRoutes } from './routes/accountEmailRoutes';
+import { type AccountEmailWebhookVerifier } from './services/accountEmailWebhook';
 
 export interface AppOptions {
   agentBaseUrl?: string;
@@ -116,6 +118,7 @@ export interface AppOptions {
   stripeWebhookSecret?: string;
   usageMeterExporter?: UsageMeterExporter;
   accountEmailSender?: AccountEmailSender;
+  accountEmailWebhookVerifier?: AccountEmailWebhookVerifier;
   exposeAccountEmailPreview?: boolean;
 }
 
@@ -509,6 +512,12 @@ export function createApp(options: AppOptions = {}): Koa {
     analytics: privacyAnalyticsRepository,
     logger,
   });
+  registerAccountEmailRoutes(router, {
+    outbox: accountEmailOutbox,
+    verifier: options.accountEmailWebhookVerifier,
+    logger,
+    metrics,
+  });
 
   app.use(async (ctx, next) => {
     const origin = ctx.get('origin');
@@ -564,7 +573,7 @@ export function createApp(options: AppOptions = {}): Koa {
 
   router.get('/metrics', (ctx) => {
     ctx.type = 'text/plain; version=0.0.4';
-    ctx.body = metrics.toPrometheusText();
+    ctx.body = metrics.toPrometheusText(accountEmailOutbox.summary());
   });
 
   router.get('/api/setup/status', (ctx) => {

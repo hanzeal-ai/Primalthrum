@@ -15,6 +15,8 @@ Use this checklist before tagging or deploying a commercial Primalthrum build.
 - No real provider keys are committed to the repository.
 - `.env.example` files contain placeholders only.
 - Provider config API responses redact `secretRef` and never return secret values.
+- Transactional email credentials and Webhook secrets are server-only and rotated
+  after any suspected exposure.
 - Backup archives are stored in an operator-controlled location.
 - Restore access is limited to trusted operators.
 
@@ -62,6 +64,10 @@ Confirm:
 - If voice is enabled, real STT/TTS credentials complete one microphone and playback round trip on each supported browser family.
 - Denied microphone permission leaves text input usable and displays an actionable error.
 - `/metrics` returns Prometheus text.
+- Registration verification and password reset reach real production mailboxes.
+- A signed Provider Webhook records delivered and test-bounce events exactly once.
+- `primalthrum_account_email_outbox{status="dead_lettered"}` is zero and bounce,
+  complaint, retry backlog, and dead-letter alerts are active.
 
 ## Known Limitations
 

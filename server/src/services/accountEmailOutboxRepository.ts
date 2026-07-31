@@ -1,9 +1,30 @@
 import { initializeSchema } from '../db/schema';
 import { SqliteDatabase, sqlValue } from '../db/sqlite';
-import { type AccountEmailMessage } from './accountEmailSender';
+import {
+  type AccountEmailDeliveryReceipt,
+  type AccountEmailMessage,
+} from './accountEmailSender';
 
 export interface ClaimedAccountEmail extends AccountEmailMessage {
   attempts: number;
+}
+
+export type AccountEmailProviderEventType =
+  | 'accepted'
+  | 'delivered'
+  | 'delayed'
+  | 'bounced'
+  | 'complained'
+  | 'rejected';
+
+export interface AccountEmailDeliverySummary {
+  pending: number;
+  delivering: number;
+  delivered: number;
+  retrying: number;
+  deadLettered: number;
+  bounced: number;
+  complained: number;
 }
 
 export class AccountEmailOutboxRepository {
@@ -30,7 +51,8 @@ export class AccountEmailOutboxRepository {
   supersedePending(userId: number, template: AccountEmailMessage['template']): void {
     this.db.run(`
       UPDATE account_email_outbox
-      SET status = 'superseded', updated_at = ${sqlValue(this.now().toISOString())}
+      SET status = 'superseded', payload_json = '{}',
+        updated_at = ${sqlValue(this.now().toISOString())}
       WHERE user_id = ${sqlValue(userId)} AND template = ${sqlValue(template)}
         AND status IN ('pending', 'failed');
     `);
@@ -57,6 +79,7 @@ export class AccountEmailOutboxRepository {
       WHERE id = (
         SELECT id FROM account_email_outbox
         WHERE status IN ('pending', 'failed')
+          AND dead_lettered_at IS NULL
           AND datetime(next_attempt_at) <= datetime(${sqlValue(now)})
         ORDER BY id LIMIT 1
       )
@@ -71,25 +94,48 @@ export class AccountEmailOutboxRepository {
     } : null;
   }
 
-  markDelivered(id: number): void {
+  markDelivered(id: number, receipt: AccountEmailDeliveryReceipt): void {
+    validateProviderIdentity(receipt.provider, receipt.providerMessageId);
     const now = this.now().toISOString();
     this.db.run(`
       UPDATE account_email_outbox SET status = 'delivered', last_error = '',
-        delivered_at = ${sqlValue(now)}, updated_at = ${sqlValue(now)}
+        payload_json = '{}',
+        provider = ${sqlValue(receipt.provider)},
+        provider_message_id = ${sqlValue(receipt.providerMessageId)},
+        accepted_at = ${sqlValue(now)}, delivered_at = ${sqlValue(now)},
+        last_provider_status = 'accepted', updated_at = ${sqlValue(now)}
       WHERE id = ${sqlValue(id)} AND status = 'delivering';
     `);
+    this.recordProviderEvent({
+      provider: receipt.provider,
+      providerEventId: `accepted:${id}`,
+      providerMessageId: receipt.providerMessageId,
+      eventType: 'accepted',
+      occurredAt: now,
+    });
   }
 
-  markFailed(id: number, attempts: number, error: string): void {
-    const delayMs = Math.min(3_600_000, 1000 * (2 ** Math.min(Math.max(attempts - 1, 0), 12)));
+  markFailed(
+    id: number,
+    attempts: number,
+    error: string,
+    options: { retryable?: boolean; retryAfterMs?: number; maxAttempts?: number } = {},
+  ): { deadLettered: boolean } {
+    const deadLettered = options.retryable === false || attempts >= (options.maxAttempts ?? 8);
+    const requestedDelayMs = options.retryAfterMs
+      ?? Math.min(3_600_000, 1000 * (2 ** Math.min(Math.max(attempts - 1, 0), 12)));
+    const delayMs = Math.min(Math.max(requestedDelayMs, 0), 3_600_000);
     const now = this.now();
     this.db.run(`
       UPDATE account_email_outbox SET status = 'failed',
         last_error = ${sqlValue(error.slice(0, 1000))},
         next_attempt_at = ${sqlValue(new Date(now.getTime() + delayMs).toISOString())},
+        dead_lettered_at = ${deadLettered ? sqlValue(now.toISOString()) : 'NULL'},
+        payload_json = ${deadLettered ? "'{}'" : 'payload_json'},
         updated_at = ${sqlValue(now.toISOString())}
       WHERE id = ${sqlValue(id)} AND status = 'delivering';
     `);
+    return { deadLettered };
   }
 
   nextAttemptDelayMs(): number | null {
@@ -98,8 +144,101 @@ export class AccountEmailOutboxRepository {
         (julianday(MIN(next_attempt_at)) - julianday(${sqlValue(this.now().toISOString())})) * 86400000
         AS INTEGER
       )) AS delay_ms
-      FROM account_email_outbox WHERE status IN ('pending', 'failed');
+      FROM account_email_outbox
+      WHERE status IN ('pending', 'failed') AND dead_lettered_at IS NULL;
     `)[0];
     return row?.delay_ms === null || row?.delay_ms === undefined ? null : Number(row.delay_ms);
+  }
+
+  recordProviderEvent(input: {
+    provider: string;
+    providerEventId: string;
+    providerMessageId: string;
+    eventType: AccountEmailProviderEventType;
+    occurredAt: string;
+  }): { duplicate: boolean; matched: boolean; outboxId: number | null } {
+    const existing = this.db.query<{
+      outbox_id: number | null;
+      provider_message_id: string;
+      event_type: AccountEmailProviderEventType;
+      occurred_at: string;
+    }>(`
+      SELECT outbox_id, provider_message_id, event_type, occurred_at
+      FROM account_email_delivery_events
+      WHERE provider = ${sqlValue(input.provider)}
+        AND provider_event_id = ${sqlValue(input.providerEventId)}
+      LIMIT 1;
+    `)[0];
+    if (existing) {
+      if (existing.provider_message_id !== input.providerMessageId
+        || existing.event_type !== input.eventType
+        || existing.occurred_at !== input.occurredAt) {
+        throw new Error('account email provider event idempotency conflict');
+      }
+      return {
+        duplicate: true,
+        matched: existing.outbox_id !== null,
+        outboxId: existing.outbox_id === null ? null : Number(existing.outbox_id),
+      };
+    }
+
+    const outbox = this.db.query<{ id: number }>(`
+      SELECT id FROM account_email_outbox
+      WHERE provider = ${sqlValue(input.provider)}
+        AND provider_message_id = ${sqlValue(input.providerMessageId)}
+      ORDER BY id DESC LIMIT 1;
+    `)[0];
+    const outboxId = outbox ? Number(outbox.id) : null;
+    this.db.run(`
+      INSERT INTO account_email_delivery_events (
+        provider, provider_event_id, provider_message_id, outbox_id,
+        event_type, occurred_at
+      ) VALUES (
+        ${sqlValue(input.provider)}, ${sqlValue(input.providerEventId)},
+        ${sqlValue(input.providerMessageId)}, ${sqlValue(outboxId)},
+        ${sqlValue(input.eventType)}, ${sqlValue(input.occurredAt)}
+      );
+    `);
+    if (outboxId !== null) {
+      this.db.run(`
+        UPDATE account_email_outbox
+        SET last_provider_status = ${sqlValue(input.eventType)},
+          updated_at = ${sqlValue(this.now().toISOString())}
+        WHERE id = ${sqlValue(outboxId)};
+      `);
+    }
+    return { duplicate: false, matched: outboxId !== null, outboxId };
+  }
+
+  summary(): AccountEmailDeliverySummary {
+    const row = this.db.query<Record<string, number>>(`
+      SELECT
+        SUM(CASE WHEN status = 'pending' THEN 1 ELSE 0 END) AS pending,
+        SUM(CASE WHEN status = 'delivering' THEN 1 ELSE 0 END) AS delivering,
+        SUM(CASE WHEN status = 'delivered' THEN 1 ELSE 0 END) AS delivered,
+        SUM(CASE WHEN status = 'failed' AND dead_lettered_at IS NULL THEN 1 ELSE 0 END) AS retrying,
+        SUM(CASE WHEN status = 'failed' AND dead_lettered_at IS NOT NULL THEN 1 ELSE 0 END) AS dead_lettered,
+        SUM(CASE WHEN last_provider_status = 'bounced' THEN 1 ELSE 0 END) AS bounced,
+        SUM(CASE WHEN last_provider_status = 'complained' THEN 1 ELSE 0 END) AS complained
+      FROM account_email_outbox;
+    `)[0] ?? {};
+    return {
+      pending: Number(row.pending ?? 0),
+      delivering: Number(row.delivering ?? 0),
+      delivered: Number(row.delivered ?? 0),
+      retrying: Number(row.retrying ?? 0),
+      deadLettered: Number(row.dead_lettered ?? 0),
+      bounced: Number(row.bounced ?? 0),
+      complained: Number(row.complained ?? 0),
+    };
+  }
+}
+
+function validateProviderIdentity(provider: string, providerMessageId: string): void {
+  if (!/^[a-z][a-z0-9_-]{0,31}$/.test(provider)) {
+    throw new Error('account email provider is invalid');
+  }
+  if (!providerMessageId || providerMessageId.length > 255) {
+    throw new Error('account email provider message id is invalid');
   }
 }

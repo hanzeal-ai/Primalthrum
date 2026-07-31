@@ -24,14 +24,19 @@ reset error.
 ## Transactional Email
 
 `account_email_outbox` is durable and request-independent. The dispatcher claims
-messages with a five-minute lease, records attempts and errors, retries with
-exponential delay, and uses `primalthrum-account-email-<id>` as the provider
-idempotency key. Configure production delivery with:
+messages with a five-minute lease, records Provider message IDs, attempts and
+errors, retries transient failures with exponential delay, and dead-letters
+permanent failures. It uses `primalthrum-account-email-<id>` as the Provider
+idempotency key. The signed delivery Webhook stores immutable delivery, delay,
+bounce, complaint, and rejection evidence without duplicating recipient data.
+Configure direct Resend delivery with:
 
-- `TRANSACTIONAL_EMAIL_URL`
-- `TRANSACTIONAL_EMAIL_TOKEN`
+- `TRANSACTIONAL_EMAIL_PROVIDER=resend`
+- `TRANSACTIONAL_EMAIL_API_KEY`
 - `TRANSACTIONAL_EMAIL_FROM`
+- `TRANSACTIONAL_EMAIL_WEBHOOK_SECRET`
 
 Development may return `emailPreviewUrl` to the local Web client. Production
-disables that field and fails startup unless all three external sender variables
-are configured.
+disables that field and fails startup unless the full sender and signed Webhook
+configuration is present. See `docs/TRANSACTIONAL_EMAIL.md` for the HTTP relay
+contract, retry classification, metrics, alerts, and live-delivery gate.

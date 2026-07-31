@@ -25,7 +25,8 @@ adds the customer to the installation's default Workspace.
 
 ## Remaining Release Gates
 
-- Transactional email provider credentials and live delivery verification.
+- Transactional email credentials, sending-domain DNS, and live mailbox/bounce
+  alert verification. The durable Resend/HTTP integration is implemented.
 - Abuse throttling, bot protection, and assisted account recovery.
 - Final privacy and terms review by qualified legal counsel.
 

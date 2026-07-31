@@ -3,7 +3,7 @@ import 'dotenv/config';
 import { createApp } from './src/app';
 import { StripePaymentAdapter } from './src/services/stripePaymentAdapter';
 import { HttpUsageMeterExporter } from './src/services/usageMeterExporter';
-import { HttpAccountEmailSender } from './src/services/accountEmailSender';
+import { createAccountEmailIntegration } from './src/services/accountEmailConfiguration';
 
 const port = Number(process.env.PORT ?? 3000);
 const agentBaseUrl = process.env.AGENT_BASE_URL ?? 'http://127.0.0.1:8000';
@@ -32,22 +32,7 @@ const usageMeterExporter = usageMeterExportUrl
       process.env.USAGE_METER_EXPORT_TOKEN?.trim(),
     )
   : undefined;
-const accountEmailUrl = process.env.TRANSACTIONAL_EMAIL_URL?.trim();
-const accountEmailToken = process.env.TRANSACTIONAL_EMAIL_TOKEN?.trim();
-const accountEmailFrom = process.env.TRANSACTIONAL_EMAIL_FROM?.trim();
-const isProduction = process.env.NODE_ENV === 'production';
-if (isProduction && (!accountEmailUrl || !accountEmailToken || !accountEmailFrom)) {
-  throw new Error(
-    'TRANSACTIONAL_EMAIL_URL, TRANSACTIONAL_EMAIL_TOKEN, and TRANSACTIONAL_EMAIL_FROM are required in production',
-  );
-}
-const accountEmailSender = accountEmailUrl
-  ? new HttpAccountEmailSender(
-      accountEmailUrl,
-      accountEmailToken,
-      accountEmailFrom,
-    )
-  : undefined;
+const accountEmail = createAccountEmailIntegration(process.env);
 
 const app = createApp({
   agentBaseUrl,
@@ -57,8 +42,9 @@ const app = createApp({
   publicAppUrl: process.env.PUBLIC_APP_URL,
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
   usageMeterExporter,
-  accountEmailSender,
-  exposeAccountEmailPreview: !isProduction,
+  accountEmailSender: accountEmail.sender,
+  accountEmailWebhookVerifier: accountEmail.webhookVerifier,
+  exposeAccountEmailPreview: accountEmail.exposePreview,
 });
 
 app.listen(port, () => {
