@@ -4,9 +4,15 @@ This document is the long-running execution plan for AI agents working on Primal
 
 ## Mission
 
-Build a platform for developing, generating, running, and iterating full agent projects.
+Build the commercial, multi-tenant Primalthrum Agent SaaS defined in
+`docs/COMMERCIAL_PRODUCT_SPEC.md`.
 
-The first complete product must let a user create a Research Agent from the web UI, configure memory/cache/tools/skills/RAG/model providers, generate a standalone agent project, index knowledge, run the agent through a stream API, and inspect run output.
+A customer must be able to discover the product on the public website, start a
+trial, create an Agent through voice or text conversation, resolve configuration
+choices inline, and immediately use the Agent in a hosted web application. The
+same product must enforce subscription entitlements, usage limits, tenant
+isolation, security, reliability, and commercial operations without requiring a
+terminal.
 
 ## Confirmed Boundaries
 
@@ -22,30 +28,25 @@ First version includes:
 - RAG on/off plus vector store provider selection.
 - Mock LLM and mock embedding path so the platform runs without API keys.
 
-First version excludes:
+P1-P14 describe the completed self-hosted foundation. They are retained as
+historical evidence, not as the current commercial scope.
 
-- Multi-user auth and RBAC.
-- Plugin marketplace.
-- Native desktop and mobile apps.
-- Visual graph editor.
-- Distributed execution.
-- Complex observability dashboards.
-- Per-call human approval.
-- Runtime replacement of modules during an active run.
+Commercial completion requires P15-P24 and includes:
 
-Commercial complete version includes later phases for:
+- Public website, pricing, documentation, security, status, and legal surfaces.
+- Multi-user workspaces, memberships, invitations, RBAC, and tenant isolation.
+- Conversational Agent creation with voice, text, inline decisions, and uploads.
+- Hosted Agent applications that do not depend on generated CLI projects.
+- Versioned preview, publish, audience policy, rollback, and API access.
+- Real model, embedding, speech, tool, skill, memory, cache, and RAG providers.
+- Trial, subscription, entitlements, credit, metering, invoice, and refund flows.
+- PostgreSQL, Redis, object storage, workers, observability, and production deploys.
+- Operator administration, support controls, abuse protection, and commercial
+  security and release gates.
 
-- Single-tenant self-hosted production deployment.
-- Architecture placeholders for future SaaS workspaces, users, and organizations.
-- Authentication and operator accounts.
-- Role-based access for platform administration.
-- Provider secret management without plaintext database storage.
-- Dangerous tool policy and approval workflow.
-- Production database migration path.
-- Background jobs for long-running generation, indexing, and runs.
-- File storage and backup/restore.
-- Audit logs and operational observability.
-- Security hardening and commercial release gates.
+Native desktop/mobile applications, a visual graph editor, and a plugin
+marketplace may follow the web SaaS launch, but web APIs and responsive design
+must keep those clients compatible.
 
 ## Current State
 
@@ -57,9 +58,10 @@ Completed foundation:
 - `server/src/db/` contains SQLite schema and CLI-backed DB wrapper.
 - `server/src/services/agentRepository.ts` stores agent metadata and config snapshots.
 - `server/src/generators/agentProjectGenerator.ts` writes a standalone LangGraph agent skeleton.
-- `web/` has an initial stream console, not the final four-view product.
+- `web/` has a five-step operator wizard, not the required conversational SaaS.
 
-Do not assume the current implementation is complete. Treat it as Phase 1 scaffolding.
+Do not assume the current implementation is commercially complete. Treat P1-P14
+as a tested foundation and use the P15-P24 queue for all new completion claims.
 
 ## Architecture Target
 
@@ -1624,6 +1626,161 @@ Field meanings:
   - release checklist is complete
 - Completion update: set `Status: Done` and update Commercial Definition of Done evidence.
 
+## Commercial SaaS Execution Queue
+
+The P15-P24 queue supersedes the old claim that P1-P14 alone are commercially
+complete. Follow the same dependency and verification protocol used above.
+
+### P15-01 Commercial Product Contract
+
+- Status: Done
+- Goal: Establish the authoritative SaaS product, billing, runtime, security, and
+  release contract.
+- Dependencies: P14-03
+- Outputs: `docs/COMMERCIAL_PRODUCT_SPEC.md`, updated roadmap and release gate.
+- Verification: required product surfaces, journeys, lifecycle, data domains,
+  stream events, commercial states, and release evidence are explicit.
+
+### P15-02 Conversational Builder Application
+
+- Status: Todo
+- Goal: Replace the stepper with a single-page text/voice Agent builder.
+- Dependencies: P15-01
+- Required behavior: inline choices, optional uploads, persisted draft state,
+  creation validation, direct `Open Agent` action, responsive layout.
+- Verification: lint, build, component tests, desktop/mobile browser acceptance.
+
+### P15-03 Hosted Agent Web Application
+
+- Status: Todo
+- Goal: Make every ready Agent directly usable at `/a/:agentSlug`.
+- Dependencies: P15-02
+- Required behavior: conversations, text, voice, attachments, stream rendering,
+  sources, tool activity, stop/retry, errors, and history.
+- Verification: direct URL refresh, authenticated and audience access, stream E2E.
+
+### P16-01 Workspace Membership And RBAC
+
+- Status: Todo
+- Goal: Implement workspace-scoped users, memberships, invitations, roles, and
+  server-side resource authorization.
+- Dependencies: P15-01
+- Verification: repository scope tests and cross-tenant denial E2E.
+
+### P16-02 Conversations, Agent Versions, And Deployments
+
+- Status: Todo
+- Goal: Persist conversations/messages and implement immutable Agent versions,
+  preview, publish, audience policy, and rollback.
+- Dependencies: P15-03, P16-01
+- Verification: migration, lifecycle, reconnect, replay, and rollback tests.
+
+### P17-01 Real Model And Canonical Stream Runtime
+
+- Status: Todo
+- Goal: Add real LLM/embedding adapters and canonical message delta stream events.
+- Dependencies: P16-02
+- Verification: mock and configured provider tests, reconnect and idempotency E2E.
+
+### P17-02 Hot-Pluggable Runtime Capabilities
+
+- Status: Todo
+- Goal: Productionize manifests and lifecycle for LLM, embedding, STT, TTS,
+  skill, tool, memory, cache, and RAG providers.
+- Dependencies: P17-01
+- Verification: compatibility, dependency, permission, health, enable/disable,
+  and between-run hot-plug tests.
+
+### P17-03 Voice, Attachments, And Knowledge Ingestion
+
+- Status: Todo
+- Goal: Deliver recording, transcription, optional speech playback, secure file
+  upload, document parsing, indexing, retrieval, and source rendering.
+- Dependencies: P17-02
+- Verification: browser permission, media, upload policy, worker, RAG, and mobile E2E.
+
+### P18-01 Plans, Trials, Entitlements, And Credit Ledger
+
+- Status: Todo
+- Goal: Implement configurable catalog, one-time trial grants, entitlement checks,
+  immutable usage events, credit reservation, settlement, and release.
+- Dependencies: P16-01
+- Verification: trial abuse, quota race, failed run, refund, and ledger invariants.
+
+### P18-02 Payment Adapter And Subscription Lifecycle
+
+- Status: Todo
+- Goal: Implement hosted checkout, payment customer mapping, signed idempotent
+  webhooks, invoices, upgrades, downgrades, renewal, dunning, cancellation, and refund.
+- Dependencies: P18-01
+- Verification: provider sandbox E2E and replay/out-of-order webhook tests.
+
+### P18-03 Usage Rating And Cost Controls
+
+- Status: Todo
+- Goal: Meter model, embedding, voice, tools, retrieval, storage, hosted, and API
+  usage with pricing, margin, threshold, and spending controls.
+- Dependencies: P17-03, P18-02
+- Verification: reconciliation, cost cap, threshold, and duplicate event tests.
+
+### P19-01 Public Website And Conversion Onboarding
+
+- Status: Todo
+- Goal: Deliver product, solution, template, pricing, security, docs, contact,
+  status, legal, auth, email verification, and onboarding surfaces.
+- Dependencies: P15-02, P18-01
+- Verification: SEO, accessibility, signup, trial activation, analytics consent,
+  and responsive browser E2E.
+
+### P19-02 Billing, Usage, Team, And Settings UX
+
+- Status: Todo
+- Goal: Deliver customer-facing subscription, invoice, payment, usage, credit,
+  member, provider, API key, retention, and security management.
+- Dependencies: P16-01, P18-03, P19-01
+- Verification: role matrix and all commercial lifecycle browser E2E.
+
+### P20-01 Operator Administration And Support
+
+- Status: Todo
+- Goal: Deliver audited operations for workspaces, users, subscriptions, usage,
+  payments, Agents, jobs, abuse, support access, flags, and system health.
+- Dependencies: P19-02
+- Verification: operator RBAC, audit, support expiry, and sensitive-data tests.
+
+### P21-01 Security, Privacy, And Compliance Baseline
+
+- Status: Todo
+- Goal: Complete threat model, MFA, session hardening, tenant isolation, upload
+  security, SSRF controls, secret management, privacy rights, retention, and legal docs.
+- Dependencies: P17-03, P18-03, P20-01
+- Verification: automated security matrix plus independent manual checklist evidence.
+
+### P22-01 Production Data And Infrastructure
+
+- Status: Todo
+- Goal: Make PostgreSQL, Redis, object storage, workers, managed secrets,
+  OpenTelemetry, deployment, migrations, backup, restore, rollback, and scaling real.
+- Dependencies: P21-01
+- Verification: production-like deploy, load, failure, restore, migration, and rollback tests.
+
+### P23-01 Full Commercial End-To-End Suite
+
+- Status: Todo
+- Goal: Automate website-to-trial-to-Agent-to-payment journeys and all billing,
+  tenant, runtime, voice, RAG, team, operator, and responsive acceptance.
+- Dependencies: P22-01
+- Verification: complete evidence matrix with no skipped critical requirement.
+
+### P24-01 Commercial Launch Gate
+
+- Status: Todo
+- Goal: Prove every requirement in `docs/COMMERCIAL_PRODUCT_SPEC.md` and release
+  a production-ready version with operator, legal, support, and incident readiness.
+- Dependencies: P23-01
+- Verification: requirement-by-requirement audit, clean deployment, smoke, security,
+  billing reconciliation, backup/restore, rollback, and production browser acceptance.
+
 ## Definition Of Done
 
 A task is done only when:
@@ -1635,11 +1792,12 @@ A task is done only when:
 - It keeps no-key mock mode working.
 - It updates this plan only when the roadmap or status actually changes.
 
-The project first version is done only when the full end-to-end scenario passes from Web and from generated standalone agent.
+The historical first version is done when its original Web and standalone Agent
+scenario passes. The active product goal is done only when P15-P24 pass.
 
 ## Commercial Definition Of Done
 
-The project is commercially complete only when all of these are true:
+The legacy self-hosted foundation is complete when all of these are true:
 
 - All P1-P14 executable tasks are `Done`.
 - A clean checkout can install, configure, run, and verify the product using documented commands.
@@ -1657,11 +1815,19 @@ The project is commercially complete only when all of these are true:
 - Full commercial smoke script exits 0 from a clean checkout.
 - Security and release checklists are complete.
 
-Until every item above is true, the product may be demo-ready or beta-ready, but it is not directly commercial-ready.
+These items do not prove commercial SaaS readiness.
 
-Current commercial readiness evidence, updated 2026-07-20:
+Current foundation readiness evidence, updated 2026-07-20:
 
 - All 47 P1-P14 tasks are `Done` after P14-03.
 - `scripts/commercial-smoke.sh` exits 0.
 - `docs/SECURITY_RELEASE_CHECKLIST.md` and `docs/RELEASE_GATE.md` define the final release gates.
 - `CHANGELOG.md` records version `1.0.0`.
+
+## Active Commercial SaaS Definition Of Done
+
+Primalthrum is commercially complete only when every P15-P24 task is `Done`, the
+complete release gate in `docs/COMMERCIAL_PRODUCT_SPEC.md` is proven with current
+evidence, and no explicit goal requirement remains incomplete or indirectly
+verified. Until then the product is a foundation, alpha, beta, or release
+candidate, but must not be represented as a mature commercial SaaS.

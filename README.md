@@ -1,6 +1,6 @@
 # Primalthrum
 
-Primalthrum 是一个研发 Agent 项目骨架：Python Agent 负责 LangGraph 执行，Node 服务端负责统一 API 与 SSE 代理，React + TypeScript + Vite 前端负责交互式研发控制台。
+Primalthrum 正在从研发 Agent 项目骨架演进为商业级多租户 Agent SaaS：用户通过语音或文字对话创建 Agent，并直接在托管 Web 页面中使用。Python Agent 负责 LangGraph 执行，Node 服务端负责平台、计费与统一流接口，React + TypeScript + Vite 负责官网和产品体验。
 
 当前产品版本：`1.0.0`
 
@@ -115,6 +115,9 @@ web/     React + TypeScript + Vite 研发控制台
 ```
 
 ## 扩展
+
+- [Commercial Product Specification](docs/COMMERCIAL_PRODUCT_SPEC.md): 商业官网、试用订阅、托管 Agent、计费、多租户、安全和发布门禁的目标合同。
+- [AI Iteration Plan](docs/AI_ITERATION_PLAN.md): P1-P14 原型历史与 P15-P24 商业 SaaS 执行队列。
 
 - [Provider Extension Guide](docs/PROVIDER_EXTENSION_GUIDE.md): 添加 Memory、Cache、RAG、LLM provider 的接口、注册和测试规则。
 - [Tool And Skill Authoring Guide](docs/TOOL_SKILL_AUTHORING_GUIDE.md): 添加工具、技能包和危险工具策略的规则。
