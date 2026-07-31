@@ -4,6 +4,9 @@ export interface RunRecord {
   id: number;
   agentId: number;
   agentVersionId: number | null;
+  idempotencyKey: string | null;
+  requestHash: string;
+  conversationId: number | null;
   workspaceId: number;
   input: string;
   status: string;
@@ -15,12 +18,17 @@ export interface CreateRunInput {
   agentId: number;
   input: string;
   agentVersionId?: number | null;
+  idempotencyKey?: string | null;
+  requestHash?: string;
 }
 
 interface RunRow {
   id: number;
   agent_id: number;
   agent_version_id: number | null;
+  idempotency_key: string | null;
+  request_hash: string;
+  conversation_id: number | null;
   workspace_id: number;
   input: string;
   status: string;
@@ -35,7 +43,15 @@ export class RunRepository {
     const normalized = normalizeRunInput(input);
 
     this.db.run(`
-      INSERT INTO runs (agent_id, agent_version_id, workspace_id, input, status)
+      INSERT INTO runs (
+        agent_id,
+        agent_version_id,
+        workspace_id,
+        input,
+        status,
+        idempotency_key,
+        request_hash
+      )
       VALUES (
         ${sqlValue(normalized.agentId)},
         ${sqlValue(normalized.agentVersionId ?? null)},
@@ -45,12 +61,24 @@ export class RunRepository {
           WHERE id = ${sqlValue(normalized.agentId)}
         ),
         ${sqlValue(normalized.input)},
-        'pending'
+        'pending',
+        ${sqlValue(normalized.idempotencyKey ?? null)},
+        ${sqlValue(normalized.requestHash ?? '')}
       );
     `);
 
-    const rows = this.db.query<RunRow>(`
-      SELECT id, agent_id, agent_version_id, workspace_id, input, status, started_at, ended_at
+    const rows = normalized.idempotencyKey
+      ? this.db.query<RunRow>(`
+          SELECT ${RUN_COLUMNS}
+          FROM runs
+          WHERE workspace_id = (
+            SELECT workspace_id FROM agents WHERE id = ${sqlValue(normalized.agentId)}
+          )
+            AND idempotency_key = ${sqlValue(normalized.idempotencyKey)}
+          LIMIT 1;
+        `)
+      : this.db.query<RunRow>(`
+      SELECT ${RUN_COLUMNS}
       FROM runs
       ORDER BY id DESC
       LIMIT 1;
@@ -65,7 +93,7 @@ export class RunRepository {
 
   findById(id: number): RunRecord | null {
     const rows = this.db.query<RunRow>(`
-      SELECT id, agent_id, agent_version_id, workspace_id, input, status, started_at, ended_at
+      SELECT ${RUN_COLUMNS}
       FROM runs
       WHERE id = ${sqlValue(id)}
       LIMIT 1;
@@ -76,6 +104,28 @@ export class RunRepository {
   findByIdInWorkspace(id: number, workspaceId: number): RunRecord | null {
     const run = this.findById(id);
     return run?.workspaceId === workspaceId ? run : null;
+  }
+
+  findByIdempotencyKey(workspaceId: number, idempotencyKey: string): RunRecord | null {
+    const rows = this.db.query<RunRow>(`
+      SELECT ${RUN_COLUMNS}
+      FROM runs
+      WHERE workspace_id = ${sqlValue(workspaceId)}
+        AND idempotency_key = ${sqlValue(idempotencyKey)}
+      LIMIT 1;
+    `);
+    return rows[0] ? toRunRecord(rows[0]) : null;
+  }
+
+  attachConversation(id: number, conversationId: number): RunRecord {
+    this.db.run(`
+      UPDATE runs
+      SET conversation_id = ${sqlValue(conversationId)}
+      WHERE id = ${sqlValue(id)};
+    `);
+    const updated = this.findById(id);
+    if (!updated) throw new Error(`run ${id} not found`);
+    return updated;
   }
 
   updateStatus(id: number, status: string, endedAt: string | null = null): RunRecord {
@@ -107,7 +157,17 @@ function normalizeRunInput(input: CreateRunInput): CreateRunInput {
     agentId,
     input: input.input.trim(),
     agentVersionId: normalizeOptionalVersionId(input.agentVersionId),
+    idempotencyKey: normalizeOptionalIdempotencyKey(input.idempotencyKey),
+    requestHash: typeof input.requestHash === 'string' ? input.requestHash : '',
   };
+}
+
+function normalizeOptionalIdempotencyKey(value: unknown): string | null {
+  if (value === undefined || value === null || value === '') return null;
+  if (typeof value !== 'string' || !/^[A-Za-z0-9._:-]{1,128}$/.test(value)) {
+    throw new Error('idempotencyKey has an invalid format');
+  }
+  return value;
 }
 
 function normalizeOptionalVersionId(value: unknown): number | null {
@@ -124,6 +184,9 @@ function toRunRecord(row: RunRow): RunRecord {
     id: Number(row.id),
     agentId: Number(row.agent_id),
     agentVersionId: row.agent_version_id === null ? null : Number(row.agent_version_id),
+    idempotencyKey: row.idempotency_key,
+    requestHash: row.request_hash,
+    conversationId: row.conversation_id === null ? null : Number(row.conversation_id),
     workspaceId: Number(row.workspace_id),
     input: row.input,
     status: row.status,
@@ -131,3 +194,16 @@ function toRunRecord(row: RunRow): RunRecord {
     endedAt: row.ended_at,
   };
 }
+const RUN_COLUMNS = [
+  'id',
+  'agent_id',
+  'agent_version_id',
+  'idempotency_key',
+  'request_hash',
+  'conversation_id',
+  'workspace_id',
+  'input',
+  'status',
+  'started_at',
+  'ended_at',
+].join(', ');

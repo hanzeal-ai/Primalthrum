@@ -63,10 +63,15 @@ export class StreamEventRepository {
   }
 
   listByRunId(runId: number): StreamEventRecord[] {
+    return this.listByRunIdAfter(runId);
+  }
+
+  listByRunIdAfter(runId: number, afterEventId = 0): StreamEventRecord[] {
     return this.db.query<StreamEventRow>(`
       SELECT id, run_id, event_type, node, payload_json, created_at
       FROM stream_events
       WHERE run_id = ${sqlValue(runId)}
+        AND id > ${sqlValue(afterEventId)}
       ORDER BY id ASC;
     `).map(toStreamEventRecord);
   }

@@ -18,8 +18,12 @@ agent  Python + FastAPI + LangGraph http://127.0.0.1:8000
 Web POST /api/stream
   -> Node POST /api/stream
   -> Agent POST /stream
-  <- text/event-stream
+  <- text/event-stream (canonical database event IDs)
 ```
+
+已保存 Agent 的流请求支持 `Idempotency-Key`，服务端通过响应头返回 Run、
+Conversation 和幂等键。客户端断线后可使用同一幂等键及 `Last-Event-ID`
+继续接收尚未消费的事件；终态 Run 会直接回放，不会重复调用模型。
 
 ## 快速启动
 

@@ -158,7 +158,10 @@ test('POST /api/stream can run by agentId and persist proxied events', async () 
 
   const response = await fetch(`${appBaseUrl}/api/stream`, {
     method: 'POST',
-    headers: jsonAuthHeaders(),
+    headers: {
+      ...jsonAuthHeaders(),
+      'idempotency-key': 'configured-stream-run-1',
+    },
     body: JSON.stringify({
       agentId: agent.id,
       versionId: preview.version.id,
@@ -173,6 +176,16 @@ test('POST /api/stream can run by agentId and persist proxied events', async () 
   assert.ok(conversationId > 0);
   const body = await response.text();
   assert.match(body, /event: agent\.node\.completed/);
+  const liveEventIds = [...body.matchAll(/^id: (\d+)$/gm)]
+    .map((match) => Number(match[1]));
+  assert.equal(liveEventIds.length, 5);
+  assert.ok(liveEventIds.every((id, index) => (
+    index === 0 || id > liveEventIds[index - 1]!
+  )));
+  assert.equal(
+    response.headers.get('x-primalthrum-idempotency-key'),
+    'configured-stream-run-1',
+  );
   assert.equal(upstreamPayloads.length, 1);
   assert.deepEqual(upstreamPayloads[0], {
     goal: 'Use the saved agent config',
@@ -203,11 +216,19 @@ test('POST /api/stream can run by agentId and persist proxied events', async () 
   const run = await runResponse.json() as {
     agentId: number;
     agentVersionId: number | null;
+    conversationId: number | null;
+    idempotencyKey: string | null;
     input: string;
+    status: string;
+    endedAt: string | null;
   };
   assert.equal(run.agentId, agent.id);
   assert.equal(run.agentVersionId, preview.version.id);
+  assert.equal(run.conversationId, conversationId);
+  assert.equal(run.idempotencyKey, 'configured-stream-run-1');
   assert.equal(run.input, 'Use the saved agent config');
+  assert.equal(run.status, 'completed');
+  assert.ok(run.endedAt);
 
   const eventsResponse = await fetch(`${appBaseUrl}/api/runs/${runId}/events`, {
     headers: authHeaders,
@@ -285,6 +306,61 @@ test('POST /api/stream can run by agentId and persist proxied events', async () 
       dangerous: false,
     },
   ]);
+
+  const replayResponse = await fetch(`${appBaseUrl}/api/stream`, {
+    method: 'POST',
+    headers: {
+      ...jsonAuthHeaders(),
+      'idempotency-key': 'configured-stream-run-1',
+    },
+    body: JSON.stringify({
+      agentId: agent.id,
+      versionId: preview.version.id,
+      input: 'Use the saved agent config',
+    }),
+  });
+  assert.equal(replayResponse.status, 200);
+  assert.equal(Number(replayResponse.headers.get('x-primalthrum-run-id')), runId);
+  assert.equal(
+    Number(replayResponse.headers.get('x-primalthrum-conversation-id')),
+    conversationId,
+  );
+  assert.equal(await replayResponse.text(), body);
+  assert.equal(upstreamPayloads.length, 1);
+
+  const reconnectResponse = await fetch(`${appBaseUrl}/api/runs/${runId}/stream`, {
+    headers: {
+      ...authHeaders,
+      'last-event-id': String(liveEventIds[0]),
+    },
+  });
+  assert.equal(reconnectResponse.status, 200);
+  const reconnectedBody = await reconnectResponse.text();
+  assert.doesNotMatch(
+    reconnectedBody,
+    new RegExp(`^id: ${liveEventIds[0]}$`, 'm'),
+  );
+  assert.deepEqual(
+    [...reconnectedBody.matchAll(/^id: (\d+)$/gm)].map((match) => Number(match[1])),
+    liveEventIds.slice(1),
+  );
+
+  const conflictResponse = await fetch(`${appBaseUrl}/api/stream`, {
+    method: 'POST',
+    headers: {
+      ...jsonAuthHeaders(),
+      'idempotency-key': 'configured-stream-run-1',
+    },
+    body: JSON.stringify({
+      agentId: agent.id,
+      versionId: preview.version.id,
+      input: 'A different request must not reuse the key',
+    }),
+  });
+  assert.equal(conflictResponse.status, 409);
+  const conflict = await conflictResponse.json() as { error: { code: string } };
+  assert.equal(conflict.error.code, 'RUN_IDEMPOTENCY_CONFLICT');
+  assert.equal(upstreamPayloads.length, 1);
 
   const db = new SqliteDatabase(join(rootDir, 'platform.sqlite'));
   db.run(`UPDATE agents SET status = 'generated' WHERE id = ${sqlValue(agent.id)};`);

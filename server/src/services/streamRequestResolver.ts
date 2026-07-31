@@ -29,6 +29,11 @@ export interface ResolvedStreamRequest {
   runId: number | null;
 }
 
+export interface StreamRunIdentity {
+  idempotencyKey: string;
+  requestHash: string;
+}
+
 export function resolveStreamRequest(
   body: unknown,
   agentRepository: AgentRepository,
@@ -36,6 +41,7 @@ export function resolveStreamRequest(
   workspaceId?: number,
   agentVersionRepository?: AgentVersionRepository,
   runtimeProviderResolver?: RuntimeProviderResolver,
+  runIdentity?: StreamRunIdentity,
 ): ResolvedStreamRequest {
   const candidate = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
   const agentId = Number(candidate.agentId);
@@ -68,6 +74,8 @@ export function resolveStreamRequest(
     const run = runRepository.create({
       agentId: agent.id,
       agentVersionId: version?.id,
+      idempotencyKey: runIdentity?.idempotencyKey,
+      requestHash: runIdentity?.requestHash,
       input,
     });
 

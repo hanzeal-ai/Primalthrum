@@ -1,6 +1,7 @@
 import Koa from 'koa';
 import Router from '@koa/router';
 import bodyParser from 'koa-bodyparser';
+import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 
 import { SqliteDatabase } from './db/sqlite';
@@ -36,9 +37,13 @@ import {
   type UpdateProviderConfigInput,
 } from './services/providerConfigRepository';
 import { listProviders, listSkills, listTools } from './services/discoveryCatalog';
-import { RunRepository, type CreateRunInput } from './services/runRepository';
+import {
+  RunRepository,
+  type CreateRunInput,
+  type RunRecord,
+} from './services/runRepository';
 import { SessionRepository } from './services/sessionRepository';
-import { pipeSseStream } from './services/sseRecorder';
+import { formatSseEvent, pipeSseStream } from './services/sseRecorder';
 import {
   StreamEventRepository,
   type CreateStreamEventInput,
@@ -90,6 +95,53 @@ function parseOptionalPositiveInteger(value: unknown): number | undefined | null
   const candidate = Array.isArray(value) ? value[0] : value;
   const parsed = Number(candidate);
   return Number.isInteger(parsed) && parsed > 0 ? parsed : null;
+}
+
+function normalizeIdempotencyKey(value: string): string {
+  const normalized = value.trim();
+  if (!/^[A-Za-z0-9._:-]{1,128}$/.test(normalized)) {
+    throw new Error('Idempotency-Key has an invalid format');
+  }
+  return normalized;
+}
+
+function streamRequestHash(body: Record<string, unknown>): string {
+  return createHash('sha256')
+    .update(JSON.stringify(canonicalValue(body)))
+    .digest('hex');
+}
+
+function canonicalValue(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(canonicalValue);
+  if (!value || typeof value !== 'object') return value;
+  return Object.fromEntries(
+    Object.entries(value as Record<string, unknown>)
+      .sort(([left], [right]) => left.localeCompare(right))
+      .map(([key, entry]) => [key, canonicalValue(entry)]),
+  );
+}
+
+function lastEventId(ctx: Koa.Context): number {
+  const value = ctx.get('last-event-id') || ctx.query.after;
+  const candidate = Array.isArray(value) ? value[0] : value;
+  const parsed = Number(candidate ?? 0);
+  return Number.isInteger(parsed) && parsed >= 0 ? parsed : 0;
+}
+
+function runStreamHeaders(run: RunRecord): Record<string, string> {
+  return {
+    'Content-Type': 'text/event-stream; charset=utf-8',
+    'Cache-Control': 'no-cache, no-transform',
+    Connection: 'keep-alive',
+    'X-Accel-Buffering': 'no',
+    'X-Primalthrum-Run-Id': String(run.id),
+    ...(run.conversationId
+      ? { 'X-Primalthrum-Conversation-Id': String(run.conversationId) }
+      : {}),
+    ...(run.idempotencyKey
+      ? { 'X-Primalthrum-Idempotency-Key': run.idempotencyKey }
+      : {}),
+  };
 }
 
 export function createApp(options: AppOptions = {}): Koa {
@@ -173,7 +225,14 @@ export function createApp(options: AppOptions = {}): Koa {
     const origin = ctx.get('origin');
     ctx.set('Access-Control-Allow-Origin', origin || '*');
     ctx.set('Access-Control-Allow-Credentials', 'true');
-    ctx.set('Access-Control-Allow-Headers', 'Content-Type, Accept, Authorization');
+    ctx.set(
+      'Access-Control-Allow-Headers',
+      'Content-Type, Accept, Authorization, Idempotency-Key, Last-Event-ID',
+    );
+    ctx.set(
+      'Access-Control-Expose-Headers',
+      'X-Primalthrum-Run-Id, X-Primalthrum-Conversation-Id, X-Primalthrum-Idempotency-Key',
+    );
     ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     ctx.set('Vary', 'Origin');
 
@@ -1000,6 +1059,24 @@ export function createApp(options: AppOptions = {}): Koa {
     ctx.body = toolAuditRepository.list(currentWorkspaceId(ctx), runId);
   });
 
+  function replayRunStream(
+    ctx: Koa.Context,
+    run: RunRecord,
+    afterEventId: number,
+  ): void {
+    ctx.respond = false;
+    const headers = runStreamHeaders(run);
+    ctx.res.writeHead(200, headers);
+    for (const event of streamEventRepository.listByRunIdAfter(run.id, afterEventId)) {
+      ctx.res.write(formatSseEvent({
+        eventType: event.eventType,
+        node: event.node,
+        payload: event.payload,
+      }, event.id));
+    }
+    ctx.res.end();
+  }
+
   async function handleStream(
     ctx: Koa.Context,
     publicAgentId?: number,
@@ -1009,19 +1086,71 @@ export function createApp(options: AppOptions = {}): Koa {
       ? agentRepository.findById(publicAgentId)
       : null;
     const workspaceId = publicAgent?.workspaceId ?? currentWorkspaceId(ctx);
+    const body = ctx.request.body as Record<string, unknown>;
+    const storedAgentId = parseOptionalPositiveInteger(body.agentId);
+    let runIdentity: { idempotencyKey: string; requestHash: string } | undefined;
+    if (storedAgentId) {
+      try {
+        runIdentity = {
+          idempotencyKey: normalizeIdempotencyKey(
+            ctx.get('idempotency-key') || randomUUID(),
+          ),
+          requestHash: streamRequestHash(body),
+        };
+      } catch (error) {
+        sendApiError(ctx, logger, {
+          status: 400,
+          code: 'RUN_INVALID',
+          message: error instanceof Error ? error.message : 'invalid idempotency key',
+        });
+        return;
+      }
+      const existing = runRepository.findByIdempotencyKey(
+        workspaceId,
+        runIdentity.idempotencyKey,
+      );
+      if (existing) {
+        if (existing.requestHash !== runIdentity.requestHash) {
+          sendApiError(ctx, logger, {
+            status: 409,
+            code: 'RUN_IDEMPOTENCY_CONFLICT',
+            message: 'idempotency key was already used for a different request',
+          });
+          return;
+        }
+        if (['pending', 'running'].includes(existing.status)) {
+          sendApiError(ctx, logger, {
+            status: 409,
+            code: 'RUN_IN_PROGRESS',
+            message: 'run is still in progress',
+          });
+          return;
+        }
+        replayRunStream(ctx, existing, lastEventId(ctx));
+        return;
+      }
+    }
+
     ctx.respond = false;
     const streamHeaders: Record<string, string> = {
       'Content-Type': 'text/event-stream; charset=utf-8',
       'Cache-Control': 'no-cache, no-transform',
       Connection: 'keep-alive',
       'X-Accel-Buffering': 'no',
+      ...(runIdentity
+        ? { 'X-Primalthrum-Idempotency-Key': runIdentity.idempotencyKey }
+        : {}),
     };
 
     const abortController = new AbortController();
-    ctx.req.on('close', () => abortController.abort());
+    ctx.res.once('close', () => {
+      if (!ctx.res.writableEnded) abortController.abort();
+    });
+    let currentRunId: number | null = null;
+    let finished = false;
+    let sawAgentError = false;
 
     try {
-      const body = ctx.request.body as Record<string, unknown>;
       const streamRequest = resolveStreamRequest(
         body,
         agentRepository,
@@ -1029,9 +1158,12 @@ export function createApp(options: AppOptions = {}): Koa {
         workspaceId,
         agentVersionRepository,
         runtimeProviderResolver,
+        runIdentity,
       );
+      currentRunId = streamRequest.runId;
       let conversationId: number | null = null;
       if (streamRequest.runId) {
+        runRepository.updateStatus(streamRequest.runId, 'running');
         const agentId = Number(body.agentId);
         const requestedConversationId = parseOptionalPositiveInteger(body.conversationId);
         if (requestedConversationId === null) {
@@ -1051,6 +1183,7 @@ export function createApp(options: AppOptions = {}): Koa {
           );
         }
         conversationId = conversation.id;
+        runRepository.attachConversation(streamRequest.runId, conversationId);
         conversationRepository.addMessage({
           conversationId,
           role: 'user',
@@ -1092,12 +1225,28 @@ export function createApp(options: AppOptions = {}): Koa {
       });
 
       if (!upstream.ok) {
-        ctx.res.write(
-          sse('agent.error', {
-            status: 'error',
-            message: `Agent service returned HTTP ${upstream.status}`,
-          }),
-        );
+        const payload = {
+          node: 'run',
+          status: 'error',
+          message: `Agent service returned HTTP ${upstream.status}`,
+        };
+        if (currentRunId) {
+          const created = streamEventRepository.create({
+            runId: currentRunId,
+            eventType: 'agent.error',
+            node: 'run',
+            payload,
+          });
+          ctx.res.write(formatSseEvent({
+            eventType: created.eventType,
+            node: created.node,
+            payload: created.payload,
+          }, created.id));
+          runRepository.updateStatus(currentRunId, 'failed', new Date().toISOString());
+          finished = true;
+        } else {
+          ctx.res.write(sse('agent.error', payload));
+        }
         return;
       }
 
@@ -1109,6 +1258,7 @@ export function createApp(options: AppOptions = {}): Koa {
               node: event.node,
               payload: event.payload,
             });
+            if (event.eventType === 'agent.error') sawAgentError = true;
             toolAuditRepository.recordStreamEvent(created);
             if (
               conversationId
@@ -1122,38 +1272,85 @@ export function createApp(options: AppOptions = {}): Koa {
                 sources: conversationSourcesFromPayload(event.payload.sources),
               });
             }
+            return created.id;
           }
         : undefined);
+      if (currentRunId) {
+        runRepository.updateStatus(
+          currentRunId,
+          sawAgentError ? 'failed' : 'completed',
+          new Date().toISOString(),
+        );
+      }
+      finished = true;
     } catch (error) {
       if (!abortController.signal.aborted) {
         if (!ctx.res.headersSent) {
           ctx.res.writeHead(error instanceof StreamRequestError ? error.status : 200, streamHeaders);
         }
 
-        if (error instanceof StreamRequestError) {
-          ctx.res.write(
-            sse('agent.error', {
-              status: 'error',
-              message: error.message,
-            }),
-          );
-          return;
+        const message = error instanceof StreamRequestError
+          ? error.message
+          : error instanceof Error ? error.message : 'Stream proxy failed';
+        const payload = { node: 'run', status: 'error', message };
+        if (currentRunId) {
+          const created = streamEventRepository.create({
+            runId: currentRunId,
+            eventType: 'agent.error',
+            node: 'run',
+            payload,
+          });
+          if (!ctx.res.writableEnded) {
+            ctx.res.write(formatSseEvent({
+              eventType: created.eventType,
+              node: created.node,
+              payload: created.payload,
+            }, created.id));
+          }
+        } else {
+          ctx.res.write(sse('agent.error', payload));
         }
-
-        ctx.res.write(
-          sse('agent.error', {
-            status: 'error',
-            message: error instanceof Error ? error.message : 'Stream proxy failed',
-          }),
-        );
       }
     } finally {
+      if (currentRunId && !finished) {
+        const status = abortController.signal.aborted ? 'cancelled' : 'failed';
+        if (status === 'cancelled') {
+          streamEventRepository.create({
+            runId: currentRunId,
+            eventType: 'agent.run.cancelled',
+            node: 'run',
+            payload: {
+              node: 'run',
+              status,
+              message: 'Agent run was cancelled after the client disconnected',
+            },
+          });
+        }
+        runRepository.updateStatus(currentRunId, status, new Date().toISOString());
+      }
       ctx.res.end();
     }
   }
 
   router.post('/api/stream', async (ctx) => handleStream(ctx));
   router.post('/api/stream/create-agent', async (ctx) => handleStream(ctx));
+
+  router.get('/api/runs/:id/stream', (ctx) => {
+    if (!authorize(ctx, 'agents.read')) return;
+    const run = runRepository.findByIdInWorkspace(
+      Number(ctx.params.id),
+      currentWorkspaceId(ctx),
+    );
+    if (!run) {
+      sendApiError(ctx, logger, {
+        status: 404,
+        code: 'RUN_NOT_FOUND',
+        message: 'run not found',
+      });
+      return;
+    }
+    replayRunStream(ctx, run, lastEventId(ctx));
+  });
 
   router.get('/api/public/agents/:slug', (ctx) => {
     const agent = agentRepository.findBySlug(ctx.params.slug);

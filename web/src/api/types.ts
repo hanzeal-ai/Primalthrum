@@ -183,6 +183,7 @@ export interface StreamPayload {
 }
 
 export interface ParsedSseEvent {
+  id?: number
   event: string
   data: StreamPayload
 }
@@ -205,6 +206,8 @@ export interface StoredAgentStreamRequest {
 export interface StreamResult {
   runId?: number
   conversationId?: number
+  idempotencyKey?: string
+  lastEventId?: number
 }
 
 export interface AuthUser {

@@ -52,6 +52,10 @@ export const MIGRATIONS: Migration[] = [
     id: '010_agent_versions_deployments',
     up: applyAgentVersionsAndDeployments,
   },
+  {
+    id: '011_run_idempotency',
+    up: applyRunIdempotency,
+  },
 ];
 
 export function runMigrations(db: DatabaseAdapter): void {
@@ -507,6 +511,17 @@ function applyAgentVersionsAndDeployments(db: DatabaseAdapter): void {
         FROM agent_deployments d
         WHERE d.agent_id = a.id AND d.environment = 'production'
       );
+  `);
+}
+
+function applyRunIdempotency(db: DatabaseAdapter): void {
+  ensureColumn(db, 'runs', 'idempotency_key', 'TEXT');
+  ensureColumn(db, 'runs', 'request_hash', `TEXT NOT NULL DEFAULT ''`);
+  ensureColumn(db, 'runs', 'conversation_id', 'INTEGER');
+  db.run(`
+    CREATE UNIQUE INDEX IF NOT EXISTS idx_runs_workspace_idempotency
+    ON runs(workspace_id, idempotency_key)
+    WHERE idempotency_key IS NOT NULL;
   `);
 }
 

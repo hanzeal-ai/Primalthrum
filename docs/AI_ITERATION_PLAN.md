@@ -1715,8 +1715,16 @@ complete. Follow the same dependency and verification protocol used above.
   typed runtime contract. HTTPS/loopback endpoint policy blocks credential
   forwarding to unsafe endpoints. Agent, server, and web suites cover provider
   protocol parsing, secret scope, configured payload resolution, and multi-delta
-  message completion. Canonical server event IDs, Run lifecycle, reconnect, and
-  idempotency remain in P17-01B.
+  message completion. P17-01B assigns every persisted SSE event its canonical
+  database ID, persists pending/running/completed/failed/cancelled Run lifecycle,
+  and binds Runs to conversations and idempotency keys. Repeating the same request
+  key replays terminal events without another model call, mismatched payloads are
+  rejected, and `Last-Event-ID` resumes from the next event. The hosted Web client
+  preserves the request key across bounded reconnect attempts and resumes without
+  duplicating displayed deltas. Server E2E and Web protocol tests cover increasing
+  IDs, replay boundaries, conflict handling, upstream call count, and request
+  headers. Provider configuration UI and responsive browser acceptance remain in
+  P17-01C.
 
 ### P17-02 Hot-Pluggable Runtime Capabilities
 

@@ -13,6 +13,7 @@ import type { ReactNode } from 'react'
 import { useEffect, useRef, useState } from 'react'
 
 import {
+  ApiError,
   createConversation,
   getAgentBySlug,
   getPublicAgentBySlug,
@@ -148,6 +149,8 @@ export function HostedAgentPage({
       : ''
     const assistantId = crypto.randomUUID()
     const controller = new AbortController()
+    const idempotencyKey = crypto.randomUUID()
+    let lastEventId = 0
     let streamError = ''
 
     abortRef.current = controller
@@ -163,56 +166,72 @@ export function HostedAgentPage({
     ])
 
     try {
-      const streamOptions: Parameters<typeof streamAgentRun>[1] = {
-        signal: controller.signal,
-        onEvent: ({ event, data }) => {
-            if (event === 'message.delta' && data.delta) {
-              setMessages((current) => current.map((item) => item.id === assistantId
-                ? { ...item, content: item.content + data.delta }
-                : item))
-              return
-            }
+      const onEvent: Parameters<typeof streamAgentRun>[1]['onEvent'] = ({ id, event, data }) => {
+        if (id) lastEventId = id
+        if (event === 'message.delta' && data.delta) {
+          setMessages((current) => current.map((item) => item.id === assistantId
+            ? { ...item, content: item.content + data.delta }
+            : item))
+          return
+        }
 
-            if (event === 'message.completed') {
-              setMessages((current) => current.map((item) => item.id === assistantId
-                ? {
-                    ...item,
-                    content: item.content || data.message || '',
-                    sources: data.sources,
-                    status: undefined,
-                  }
-                : item))
-              return
-            }
+        if (event === 'message.completed') {
+          setMessages((current) => current.map((item) => item.id === assistantId
+            ? {
+                ...item,
+                content: item.content || data.message || '',
+                sources: data.sources,
+                status: undefined,
+              }
+            : item))
+          return
+        }
 
-            if (event === 'agent.error') {
-              streamError = data.message || 'Agent 运行失败。'
-              return
-            }
+        if (event === 'agent.error' || event === 'agent.run.cancelled') {
+          streamError = data.message || 'Agent 运行失败。'
+          return
+        }
 
-            setActivities((current) => [...current, {
-              id: crypto.randomUUID(),
-              event,
-              payload: data,
-            }])
-        },
+        setActivities((current) => [...current, {
+          id: crypto.randomUUID(),
+          event,
+          payload: data,
+        }])
       }
       const streamInput = `${prompt}${attachmentContext}`
-      const result = access === 'public'
-        ? await streamPublicAgentRun(
-            slug,
-            { input: streamInput, conversationId: conversationId ?? undefined },
-            streamOptions,
-          )
-        : await streamAgentRun(
-            {
-              agentId: agent.id,
-              input: streamInput,
-              conversationId: conversationId ?? undefined,
-              versionId,
-            },
-            streamOptions,
-          )
+      let result: Awaited<ReturnType<typeof streamAgentRun>> | undefined
+      for (let attempt = 0; attempt < 3; attempt += 1) {
+        const streamOptions: Parameters<typeof streamAgentRun>[1] = {
+          signal: controller.signal,
+          idempotencyKey,
+          afterEventId: lastEventId || undefined,
+          onEvent,
+        }
+        try {
+          result = access === 'public'
+            ? await streamPublicAgentRun(
+                slug,
+                { input: streamInput, conversationId: conversationId ?? undefined },
+                streamOptions,
+              )
+            : await streamAgentRun(
+                {
+                  agentId: agent.id,
+                  input: streamInput,
+                  conversationId: conversationId ?? undefined,
+                  versionId,
+                },
+                streamOptions,
+              )
+          break
+        } catch (streamRequestError) {
+          if (attempt === 2 || !shouldReconnect(streamRequestError, controller.signal)) {
+            throw streamRequestError
+          }
+          await wait(150 * (attempt + 1), controller.signal)
+        }
+      }
+      if (!result) throw new Error('Agent stream could not be resumed.')
       if (result.conversationId) setConversationId(result.conversationId)
 
       if (streamError) throw new Error(streamError)
@@ -432,4 +451,24 @@ function statusLabel(status: NonNullable<ChatMessage['status']>): string {
 
 function errorMessage(error: unknown, fallback: string): string {
   return error instanceof Error ? error.message : fallback
+}
+
+function shouldReconnect(error: unknown, signal: AbortSignal): boolean {
+  if (signal.aborted) return false
+  if (!(error instanceof ApiError)) return true
+  return error.code === 'RUN_IN_PROGRESS' || error.status >= 500
+}
+
+function wait(durationMs: number, signal: AbortSignal): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const onAbort = () => {
+      window.clearTimeout(timeout)
+      reject(new DOMException('Aborted', 'AbortError'))
+    }
+    const timeout = window.setTimeout(() => {
+      signal.removeEventListener('abort', onAbort)
+      resolve()
+    }, durationMs)
+    signal.addEventListener('abort', onAbort, { once: true })
+  })
 }

@@ -260,13 +260,22 @@ export async function streamAgentRun(
   input: StreamAgentRequest,
   options: {
     signal?: AbortSignal
+    afterEventId?: number
+    idempotencyKey?: string
     onEvent: (event: ParsedSseEvent) => void
   },
 ): Promise<StreamResult> {
+  const idempotencyKey = options.idempotencyKey ?? crypto.randomUUID()
   const response = await fetch(apiUrl('/api/stream'), {
     method: 'POST',
     credentials: 'include',
-    headers: authHeaders({ 'Content-Type': 'application/json' }),
+    headers: authHeaders({
+      'Content-Type': 'application/json',
+      'Idempotency-Key': idempotencyKey,
+      ...(options.afterEventId
+        ? { 'Last-Event-ID': String(options.afterEventId) }
+        : {}),
+    }),
     body: JSON.stringify(input),
     signal: options.signal,
   })
@@ -283,13 +292,22 @@ export async function streamPublicAgentRun(
   input: { input: string; conversationId?: number },
   options: {
     signal?: AbortSignal
+    afterEventId?: number
+    idempotencyKey?: string
     onEvent: (event: ParsedSseEvent) => void
   },
 ): Promise<StreamResult> {
+  const idempotencyKey = options.idempotencyKey ?? crypto.randomUUID()
   const response = await fetch(apiUrl(`/api/public/agents/${encodeURIComponent(slug)}/stream`), {
     method: 'POST',
     credentials: 'include',
-    headers: { 'Content-Type': 'application/json' },
+    headers: {
+      'Content-Type': 'application/json',
+      'Idempotency-Key': idempotencyKey,
+      ...(options.afterEventId
+        ? { 'Last-Event-ID': String(options.afterEventId) }
+        : {}),
+    },
     body: JSON.stringify(input),
     signal: options.signal,
   })
@@ -298,6 +316,25 @@ export async function streamPublicAgentRun(
     throw await apiErrorFromResponse(response, 'Public stream request failed')
   }
 
+  return consumeStreamResponse(response, options.onEvent)
+}
+
+export async function replayAgentRun(
+  runId: number,
+  afterEventId: number,
+  options: {
+    signal?: AbortSignal
+    onEvent: (event: ParsedSseEvent) => void
+  },
+): Promise<StreamResult> {
+  const response = await fetch(apiUrl(`/api/runs/${runId}/stream`), {
+    credentials: 'include',
+    headers: authHeaders({ 'Last-Event-ID': String(afterEventId) }),
+    signal: options.signal,
+  })
+  if (!response.ok || !response.body) {
+    throw await apiErrorFromResponse(response, 'Run replay failed')
+  }
   return consumeStreamResponse(response, options.onEvent)
 }
 
@@ -312,6 +349,7 @@ async function consumeStreamResponse(
   const result: StreamResult = {
     runId: positiveHeader(response.headers.get('x-primalthrum-run-id')),
     conversationId: positiveHeader(response.headers.get('x-primalthrum-conversation-id')),
+    idempotencyKey: response.headers.get('x-primalthrum-idempotency-key') ?? undefined,
   }
   let buffer = ''
 
@@ -326,6 +364,7 @@ async function consumeStreamResponse(
     for (const block of blocks) {
       const parsed = parseSseBlock(block)
       if (parsed) {
+        if (parsed.id) result.lastEventId = parsed.id
         onEvent(parsed)
       }
     }
@@ -379,6 +418,9 @@ function parseSseBlock(block: string): ParsedSseEvent | null {
     .find((line) => line.startsWith('event:'))
     ?.replace('event:', '')
     .trim() ?? 'message'
+  const id = positiveHeader(
+    lines.find((line) => line.startsWith('id:'))?.replace('id:', '').trim() ?? null,
+  )
   const data = lines
     .filter((line) => line.startsWith('data:'))
     .map((line) => line.replace('data:', '').trim())
@@ -389,7 +431,7 @@ function parseSseBlock(block: string): ParsedSseEvent | null {
   }
 
   try {
-    return { event, data: JSON.parse(data) as StreamPayload }
+    return { id, event, data: JSON.parse(data) as StreamPayload }
   } catch {
     return null
   }

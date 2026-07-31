@@ -7,7 +7,7 @@ export interface ParsedSseEvent {
 export async function pipeSseStream(
   response: Response,
   downstream: NodeJS.WritableStream,
-  onEvent?: (event: ParsedSseEvent) => void,
+  onEvent?: (event: ParsedSseEvent) => number | undefined,
 ): Promise<void> {
   if (!response.body) {
     throw new Error('Agent stream response has no body');
@@ -23,16 +23,16 @@ export async function pipeSseStream(
       break;
     }
 
-    downstream.write(Buffer.from(value));
-
-    if (onEvent) {
+    if (!onEvent) {
+      downstream.write(Buffer.from(value));
+    } else {
       buffer += decoder.decode(value, { stream: true });
       const blocks = buffer.split('\n\n');
       buffer = blocks.pop() ?? '';
       for (const block of blocks) {
         const parsed = parseSseBlock(block);
         if (parsed) {
-          onEvent(parsed);
+          downstream.write(formatSseEvent(parsed, onEvent(parsed)));
         }
       }
     }
@@ -42,9 +42,19 @@ export async function pipeSseStream(
     buffer += decoder.decode();
     const parsed = parseSseBlock(buffer);
     if (parsed) {
-      onEvent(parsed);
+      downstream.write(formatSseEvent(parsed, onEvent(parsed)));
     }
   }
+}
+
+export function formatSseEvent(event: ParsedSseEvent, id?: number): string {
+  return [
+    ...(id ? [`id: ${id}`] : []),
+    `event: ${event.eventType}`,
+    `data: ${JSON.stringify(event.payload)}`,
+    '',
+    '',
+  ].join('\n');
 }
 
 function parseSseBlock(block: string): ParsedSseEvent | null {
