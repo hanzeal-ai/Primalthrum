@@ -6,6 +6,110 @@
   color: #18181b;
 }
 
+.hosted-shell {
+  display: grid;
+  width: 100%;
+  min-width: 0;
+  min-height: 100vh;
+  height: 100vh;
+  overflow: hidden;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  background: #fff;
+  color: #18181b;
+}
+
+.hosted-header {
+  display: flex;
+  min-width: 0;
+  min-height: 68px;
+  align-items: center;
+  gap: 12px;
+  border-bottom: 1px solid #e4e4e7;
+  padding: 12px 24px;
+}
+
+.hosted-chat {
+  min-width: 0;
+  overflow-y: auto;
+  padding: 32px 24px;
+}
+
+.hosted-composer-wrap {
+  min-width: 0;
+  border-top: 1px solid #e4e4e7;
+  background: rgb(255 255 255 / 96%);
+  padding: 14px 24px 18px;
+}
+
+.hosted-message {
+  display: flex;
+  max-width: 88%;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.hosted-message-user {
+  margin-left: auto;
+  flex-direction: row-reverse;
+}
+
+.hosted-avatar {
+  display: grid;
+  width: 30px;
+  height: 30px;
+  flex: 0 0 30px;
+  place-items: center;
+  border-radius: 50%;
+  background: #eff6ff;
+  color: #1d4ed8;
+}
+
+.hosted-message-user .hosted-avatar {
+  background: #2563eb;
+  color: #fff;
+}
+
+.hosted-avatar svg {
+  width: 15px;
+  height: 15px;
+}
+
+.hosted-bubble {
+  border-radius: 8px;
+  background: #fafafa;
+  padding: 11px 14px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 14px;
+  line-height: 1.65;
+}
+
+.hosted-message-user .hosted-bubble {
+  background: #eff6ff;
+}
+
+.hosted-activity {
+  margin-left: 40px;
+  border: 1px solid #e4e4e7;
+  border-radius: 8px;
+  background: #fafafa;
+  padding: 12px 14px;
+}
+
+.hosted-activity summary {
+  display: flex;
+  cursor: pointer;
+  align-items: center;
+  gap: 7px;
+  font-size: 12px;
+  font-weight: 500;
+}
+
+.hosted-activity summary svg {
+  width: 14px;
+  height: 14px;
+}
+
 .builder-rail {
   position: sticky;
   top: 0;
@@ -174,6 +278,21 @@
 }
 
 @media (max-width: 639px) {
+  .hosted-header,
+  .hosted-chat,
+  .hosted-composer-wrap {
+    padding-left: 14px;
+    padding-right: 14px;
+  }
+
+  .hosted-message {
+    max-width: 96%;
+  }
+
+  .hosted-activity {
+    margin-left: 0;
+  }
+
   .builder-shell {
     display: block;
   }

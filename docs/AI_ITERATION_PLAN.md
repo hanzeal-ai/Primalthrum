@@ -1643,21 +1643,29 @@ complete. Follow the same dependency and verification protocol used above.
 
 ### P15-02 Conversational Builder Application
 
-- Status: Todo
+- Status: Done
 - Goal: Replace the stepper with a single-page text/voice Agent builder.
 - Dependencies: P15-01
 - Required behavior: inline choices, optional uploads, persisted draft state,
   creation validation, direct `Open Agent` action, responsive layout.
 - Verification: lint, build, component tests, desktop/mobile browser acceptance.
+- Evidence: the complete choice flow passed the web component test; lint and
+  production build passed; browser acceptance passed at 1440x900 and 390x844,
+  including creation, direct open, and zero mobile horizontal overflow.
 
 ### P15-03 Hosted Agent Web Application
 
-- Status: Todo
+- Status: In Progress
 - Goal: Make every ready Agent directly usable at `/a/:agentSlug`.
 - Dependencies: P15-02
 - Required behavior: conversations, text, voice, attachments, stream rendering,
   sources, tool activity, stop/retry, errors, and history.
 - Verification: direct URL refresh, authenticated and audience access, stream E2E.
+- Current evidence: authenticated direct URL, local history restoration, text and
+  attachment input, voice control, canonical stream rendering, activity, stop,
+  retry, and error states are implemented. Browser E2E passed through the Node
+  proxy and LangGraph runtime. Server-persisted conversations, source rendering,
+  and unauthenticated audience policy remain open.
 
 ### P16-01 Workspace Membership And RBAC
 

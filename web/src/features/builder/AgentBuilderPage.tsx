@@ -371,10 +371,13 @@ export function AgentBuilderPage({ user, onLogout }: AgentBuilderPageProps) {
                   <div className="grid size-9 place-items-center rounded-md bg-emerald-600 text-white"><Check /></div>
                   <div className="min-w-0 flex-1">
                     <h2 className="font-medium">{draft.createdAgent.name}</h2>
-                    <p className="mt-1 text-sm text-zinc-600">已生成独立源码，网页使用入口将在下一里程碑接通。</p>
+                    <p className="mt-1 text-sm text-zinc-600">独立源码和网页入口已生成，可以直接开始对话。</p>
                   </div>
                 </div>
-                <Button className="mt-5" disabled title="Hosted Agent 页面正在接入">
+                <Button
+                  className="mt-5"
+                  onClick={() => window.location.assign(`/a/${draft.createdAgent?.slug}`)}
+                >
                   打开 Agent
                 </Button>
               </div>
@@ -488,7 +491,9 @@ function AgentStatusPanel({ agentName, completion, draft }: {
         <div className="grid size-11 place-items-center rounded-md bg-emerald-100 text-emerald-700"><Bot /></div>
         <div className="min-w-0">
           <p className="truncate text-sm font-medium">{agentName}</p>
-          <p className="mt-1 text-xs text-zinc-500">{draft.stage === 'describe' ? '等待描述' : '正在准备'}</p>
+          <p className="mt-1 text-xs text-zinc-500">
+            {draft.stage === 'describe' ? '等待描述' : draft.stage === 'created' ? '已可使用' : '正在准备'}
+          </p>
         </div>
       </div>
       <div className="mt-6 space-y-4 border-y py-5 text-sm">

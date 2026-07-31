@@ -102,11 +102,13 @@ export interface StreamPayload {
   node?: string
   agent?: string
   message?: string
+  delta?: string
   status?: RunStatus | string
   tools?: string[]
   plan?: string[]
   artifacts?: string[]
   checks?: string[]
+  sources?: Array<{ title: string; url?: string }>
 }
 
 export interface ParsedSseEvent {

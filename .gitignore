@@ -151,3 +151,4 @@ __pycache__/
 .ruff_cache/
 data/
 generated-agents/
+agent/.primalthrum/

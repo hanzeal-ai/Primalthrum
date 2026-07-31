@@ -1,4 +1,4 @@
-import { Mic, Paperclip, Send, Square } from 'lucide-react'
+import { CircleStop, Loader2, Mic, Paperclip, Send, Square } from 'lucide-react'
 import type { ChangeEvent, KeyboardEvent } from 'react'
 import { useRef } from 'react'
 
@@ -8,19 +8,23 @@ import { useSpeechInput } from '../../hooks/useSpeechInput'
 
 interface ChatComposerProps {
   disabled?: boolean
+  busy?: boolean
   placeholder: string
   value: string
   onChange: (value: string) => void
   onFiles?: (files: File[]) => void
+  onStop?: () => void
   onSubmit: () => void
 }
 
 export function ChatComposer({
   disabled = false,
+  busy = false,
   placeholder,
   value,
   onChange,
   onFiles,
+  onStop,
   onSubmit,
 }: ChatComposerProps) {
   const fileInputRef = useRef<HTMLInputElement>(null)
@@ -92,15 +96,28 @@ export function ChatComposer({
             {speech.listening ? '正在聆听...' : '支持语音与文字'}
           </span>
         </div>
-        <Button
-          aria-label="发送"
-          disabled={disabled || !value.trim()}
-          onClick={onSubmit}
-          size="icon"
-          type="button"
-        >
-          <Send />
-        </Button>
+        {busy && onStop ? (
+          <Button
+            aria-label="停止生成"
+            className="bg-red-600 hover:bg-red-700"
+            onClick={onStop}
+            size="icon"
+            title="停止生成"
+            type="button"
+          >
+            <CircleStop />
+          </Button>
+        ) : (
+          <Button
+            aria-label="发送"
+            disabled={disabled || !value.trim()}
+            onClick={onSubmit}
+            size="icon"
+            type="button"
+          >
+            {busy ? <Loader2 className="animate-spin" /> : <Send />}
+          </Button>
+        )}
       </div>
     </div>
   )

@@ -254,6 +254,16 @@ export function createApp(options: AppOptions = {}): Koa {
     }
   });
 
+  router.get('/api/agents/slug/:slug', (ctx) => {
+    const agent = agentRepository.findBySlug(ctx.params.slug);
+    if (!agent) {
+      ctx.status = 404;
+      ctx.body = { error: 'agent not found' };
+      return;
+    }
+    ctx.body = agent;
+  });
+
   router.get('/api/agents/:id', (ctx) => {
     const agent = agentRepository.findById(Number(ctx.params.id));
     if (!agent) {

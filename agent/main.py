@@ -35,6 +35,7 @@ class AgentState(TypedDict):
     artifacts: list[str]
     checks: list[str]
     cache_event: dict[str, str] | None
+    answer: str
     message: str
     status: str
 
@@ -134,6 +135,33 @@ def scaffold_agent(state: AgentState) -> dict[str, Any]:
     }
 
 
+def respond(state: AgentState) -> dict[str, Any]:
+    runtime = create_runtime(
+        AgentRuntimeConfig(
+            agent_name=state["agent"],
+            enabled_tools=state["tools"],
+            enabled_skills=state["skills"],
+            memory_provider=state["runtime"]["memory_provider"],
+            cache_provider=state["runtime"]["cache_provider"],
+            rag_provider=state["runtime"]["rag_provider"],
+            llm_provider=state["runtime"].get("llm_provider", "mock"),
+        )
+    )
+    answer = runtime.llm.chat(
+        [
+            {
+                "role": "system",
+                "content": f"You are {state['agent']}. Answer the user's request directly.",
+            },
+            {"role": "user", "content": state["goal"]},
+        ]
+    )
+    return {
+        "answer": answer,
+        "message": "Generated assistant response",
+    }
+
+
 def verify_agent(state: AgentState) -> dict[str, Any]:
     checks = [
         "goal is non-empty",
@@ -152,12 +180,14 @@ def build_graph():
     graph.add_node("intake", intake)
     graph.add_node("design_graph", design_graph)
     graph.add_node("scaffold_agent", scaffold_agent)
+    graph.add_node("respond", respond)
     graph.add_node("verify_agent", verify_agent)
 
     graph.set_entry_point("intake")
     graph.add_edge("intake", "design_graph")
     graph.add_edge("design_graph", "scaffold_agent")
-    graph.add_edge("scaffold_agent", "verify_agent")
+    graph.add_edge("scaffold_agent", "respond")
+    graph.add_edge("respond", "verify_agent")
     graph.add_edge("verify_agent", END)
     return graph.compile()
 
@@ -193,6 +223,7 @@ async def stream_graph(request: AgentRequest) -> AsyncIterator[str]:
         "artifacts": [],
         "checks": [],
         "cache_event": None,
+        "answer": "",
         "message": "",
         "status": "queued",
     }
@@ -212,6 +243,28 @@ async def stream_graph(request: AgentRequest) -> AsyncIterator[str]:
             cache_event = patch.get("cache_event")
             if isinstance(cache_event, dict):
                 yield sse(f"agent.cache.{cache_event['status']}", cache_event)
+                await asyncio.sleep(0)
+
+            answer = patch.get("answer")
+            if isinstance(answer, str) and answer:
+                yield sse(
+                    "message.delta",
+                    {
+                        "node": node,
+                        "agent": initial_state["agent"],
+                        "delta": answer,
+                        "status": "running",
+                    },
+                )
+                yield sse(
+                    "message.completed",
+                    {
+                        "node": node,
+                        "agent": initial_state["agent"],
+                        "message": answer,
+                        "status": "done",
+                    },
+                )
                 await asyncio.sleep(0)
 
             payload = {

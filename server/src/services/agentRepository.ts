@@ -136,7 +136,7 @@ export class AgentRepository {
     return updated;
   }
 
-  private findBySlug(slug: string): AgentRecord | null {
+  findBySlug(slug: string): AgentRecord | null {
     const rows = this.db.query<AgentRow>(`
       SELECT
         a.id,

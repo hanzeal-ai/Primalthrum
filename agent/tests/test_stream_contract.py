@@ -77,7 +77,13 @@ class StreamContractTest(unittest.TestCase):
         events = sse_event_names(response.text)
         self.assertEqual(events[0], "agent.run.started")
         self.assertIn("agent.node.completed", events)
+        self.assertIn("message.delta", events)
+        self.assertIn("message.completed", events)
         self.assertEqual(events[-1], "agent.run.completed")
+
+        messages = sse_messages(response.text)
+        delta = next(payload for event, payload in messages if event == "message.delta")
+        self.assertEqual(delta["delta"], "mock response: Create a research agent")
 
         payloads = sse_payloads(response.text)
         self.assertGreaterEqual(len(payloads), 5)

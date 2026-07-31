@@ -453,6 +453,14 @@ test('POST /api/agents persists an agent config in SQLite metadata', async () =>
   assert.equal(listed.length, 1);
   assert.equal(listed[0]?.slug, 'research-agent');
   assert.equal(listed[0]?.workspaceId, 1);
+
+  const slugResponse = await fetch(`${baseUrl}/api/agents/slug/${created.slug}`, {
+    headers: authHeaders,
+  });
+  assert.equal(slugResponse.status, 200);
+  const bySlug = await slugResponse.json() as { id: number; slug: string };
+  assert.equal(bySlug.id, created.id);
+  assert.equal(bySlug.slug, created.slug);
 });
 
 test('POST /api/agents/:id/generate writes a standalone agent project', async () => {

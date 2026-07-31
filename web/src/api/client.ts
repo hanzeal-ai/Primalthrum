@@ -100,6 +100,10 @@ export async function listAgents(): Promise<AgentRecord[]> {
   return apiFetch<AgentRecord[]>('/api/agents')
 }
 
+export async function getAgentBySlug(slug: string): Promise<AgentRecord> {
+  return apiFetch<AgentRecord>(`/api/agents/slug/${encodeURIComponent(slug)}`)
+}
+
 export async function createAgent(input: CreateAgentInput): Promise<AgentRecord> {
   return apiFetch<AgentRecord>('/api/agents', {
     method: 'POST',
