@@ -53,6 +53,20 @@ workspace idempotency key represents one provider or platform measurement. A
 replay with the same meter, quantity, provider, model, and timestamp returns the
 original record; changed evidence is rejected.
 
+## External Meter Export
+
+Migration 018 creates one `usage_meter_exports` outbox row for every immutable
+rated event and backfills existing evidence. When `USAGE_METER_EXPORT_URL` is
+configured, a background dispatcher posts pending events to that endpoint. The
+request uses `primalthrum-usage-<event-id>` as its stable `Idempotency-Key` and
+optionally sends `USAGE_METER_EXPORT_TOKEN` as a Bearer token.
+
+External delivery does not participate in the customer request transaction.
+Failures retain the event, error, attempt count, and exponentially delayed next
+attempt; an unreferenced timer wakes the dispatcher when it becomes due. A
+five-minute delivery lease lets another process recover interrupted work.
+Successfully delivered rows are terminal and are not sent again.
+
 ## Cost Controls
 
 `workspace_cost_controls` supports optional monthly credit and provider-cost
@@ -84,3 +98,5 @@ All endpoints are workspace-scoped and use server-side billing permissions.
 6. Runtime ledger settlement must reconcile to the sum of its rated events.
 7. A failed Run with no consumed evidence releases its entire reservation.
 8. Consumed evidence is settled even when the Run later fails or disconnects.
+9. Every rated event has one durable export row per destination.
+10. External delivery never blocks or rolls back local rating and settlement.

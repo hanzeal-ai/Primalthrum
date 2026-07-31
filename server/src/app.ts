@@ -91,6 +91,9 @@ import {
   MeteredOperationService,
   type MeteredOperation,
 } from './services/meteredOperationService';
+import { UsageExportOutboxRepository } from './services/usageExportOutboxRepository';
+import { UsageExportDispatcher } from './services/usageExportDispatcher';
+import { type UsageMeterExporter } from './services/usageMeterExporter';
 
 export interface AppOptions {
   agentBaseUrl?: string;
@@ -103,6 +106,7 @@ export interface AppOptions {
   paymentPriceRefs?: Record<string, string>;
   publicAppUrl?: string;
   stripeWebhookSecret?: string;
+  usageMeterExporter?: UsageMeterExporter;
 }
 
 const DEFAULT_AGENT_BASE_URL = 'http://127.0.0.1:8000';
@@ -221,7 +225,21 @@ export function createApp(options: AppOptions = {}): Koa {
     billingRepository,
   );
   const paymentAdapter = options.paymentAdapter;
-  const usageRatingRepository = new UsageRatingRepository(db);
+  const usageExportOutboxRepository = new UsageExportOutboxRepository(db);
+  let usageExportDispatcher: UsageExportDispatcher | undefined;
+  const usageRatingRepository = new UsageRatingRepository(
+    db,
+    undefined,
+    () => usageExportDispatcher?.kick(),
+  );
+  if (options.usageMeterExporter) {
+    usageExportDispatcher = new UsageExportDispatcher(
+      usageExportOutboxRepository,
+      options.usageMeterExporter,
+      logger,
+    );
+    usageExportDispatcher.kick();
+  }
   const runUsageService = new RunUsageService(usageRatingRepository, billingRepository);
   const meteredOperationService = new MeteredOperationService(
     usageRatingRepository,

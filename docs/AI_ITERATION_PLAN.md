@@ -1861,7 +1861,7 @@ complete. Follow the same dependency and verification protocol used above.
 
 ### P18-03 Usage Rating And Cost Controls
 
-- Status: In Progress
+- Status: Done
 - Goal: Meter model, embedding, voice, tools, retrieval, storage, hosted, and API
   usage with pricing, margin, threshold, and spending controls.
 - Dependencies: P17-03, P18-02
@@ -1881,7 +1881,12 @@ complete. Follow the same dependency and verification protocol used above.
   file bytes, document Embedding tokens, and RAG index bytes now use the same
   preflight/reserve/settle/release contract. Authorized customer APIs expose
   period usage, meter breakdown, controls, and durable threshold alerts.
-  Asynchronous external meter export remains in the next slice.
+  Migration 018 adds a durable outbox for every immutable rated event, including
+  migration backfill. The optional HTTP exporter drains it outside request
+  processing with stable idempotency headers, bounded timeouts, delivery leases,
+  exponential retry wakeups, startup recovery, and batch continuation. Tests
+  cover enqueue replay, exactly-once completion, retained failures, retry timing,
+  and the external HTTP contract.
 
 ### P19-01 Public Website And Conversion Onboarding
 

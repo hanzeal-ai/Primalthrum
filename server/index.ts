@@ -2,6 +2,7 @@ import 'dotenv/config';
 
 import { createApp } from './src/app';
 import { StripePaymentAdapter } from './src/services/stripePaymentAdapter';
+import { HttpUsageMeterExporter } from './src/services/usageMeterExporter';
 
 const port = Number(process.env.PORT ?? 3000);
 const agentBaseUrl = process.env.AGENT_BASE_URL ?? 'http://127.0.0.1:8000';
@@ -23,6 +24,13 @@ const paymentPriceRefs = Object.fromEntries(
     ['enterprise', process.env.STRIPE_PRICE_ENTERPRISE],
   ].filter((entry): entry is [string, string] => Boolean(entry[1]?.trim())),
 );
+const usageMeterExportUrl = process.env.USAGE_METER_EXPORT_URL?.trim();
+const usageMeterExporter = usageMeterExportUrl
+  ? new HttpUsageMeterExporter(
+      usageMeterExportUrl,
+      process.env.USAGE_METER_EXPORT_TOKEN?.trim(),
+    )
+  : undefined;
 
 const app = createApp({
   agentBaseUrl,
@@ -31,6 +39,7 @@ const app = createApp({
   paymentPriceRefs,
   publicAppUrl: process.env.PUBLIC_APP_URL,
   stripeWebhookSecret: process.env.STRIPE_WEBHOOK_SECRET,
+  usageMeterExporter,
 });
 
 app.listen(port, () => {

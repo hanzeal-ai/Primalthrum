@@ -80,6 +80,10 @@ export const MIGRATIONS: Migration[] = [
     id: '017_usage_rating_cost_controls',
     up: applyUsageRatingCostControls,
   },
+  {
+    id: '018_usage_meter_export_outbox',
+    up: applyUsageMeterExportOutbox,
+  },
 ];
 
 export function runMigrations(db: DatabaseAdapter): void {
@@ -1078,6 +1082,39 @@ function applyUsageRatingCostControls(db: DatabaseAdapter): void {
       ('2026-08-default', 'file.storage_bytes', 1048576, 2, 0),
       ('2026-08-default', 'hosted.runs', 1, 10, 0),
       ('2026-08-default', 'api.runs', 1, 10, 0);
+  `);
+}
+
+function applyUsageMeterExportOutbox(db: DatabaseAdapter): void {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS usage_meter_exports (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      rated_usage_event_id INTEGER NOT NULL,
+      destination TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending'
+        CHECK(status IN ('pending', 'delivering', 'delivered', 'failed')),
+      attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts >= 0),
+      next_attempt_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      last_error TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      delivered_at TEXT,
+      UNIQUE(rated_usage_event_id, destination),
+      FOREIGN KEY(rated_usage_event_id) REFERENCES rated_usage_events(id) ON DELETE RESTRICT
+    );
+
+    CREATE INDEX IF NOT EXISTS usage_meter_exports_dispatch_idx
+      ON usage_meter_exports(destination, status, next_attempt_at, id);
+
+    CREATE TRIGGER IF NOT EXISTS rated_usage_enqueue_meter_export
+    AFTER INSERT ON rated_usage_events
+    BEGIN
+      INSERT OR IGNORE INTO usage_meter_exports (rated_usage_event_id, destination)
+      VALUES (NEW.id, 'primary');
+    END;
+
+    INSERT OR IGNORE INTO usage_meter_exports (rated_usage_event_id, destination)
+    SELECT id, 'primary' FROM rated_usage_events;
   `);
 }
 

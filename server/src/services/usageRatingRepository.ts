@@ -54,6 +54,7 @@ export class UsageRatingRepository {
   constructor(
     private readonly db: SqliteDatabase,
     private readonly now: () => Date = () => new Date(),
+    private readonly onUsageRated?: () => void,
   ) {
     initializeSchema(db);
   }
@@ -173,6 +174,7 @@ export class UsageRatingRepository {
     this.createThresholdAlerts(input.workspaceId, occurredAt);
     const created = this.findByKey(input.workspaceId, idempotencyKey);
     if (!created) throw new Error('rated usage event could not be loaded');
+    this.onUsageRated?.();
     return created;
   }
 
