@@ -37,7 +37,9 @@ Cache、RAG、STT 和 TTS 使用统一版本化 manifest；可用能力支持工
 知识文件通过受控上传协议写入，当前支持 UTF-8 TXT、Markdown、JSON 和
 CSV。服务端在落库前校验扩展名与 MIME、Base64、内容格式和 2 MiB 上限，
 并记录规范 MIME 与字节数；浏览器端同时限制单次最多 4 个文件和 2 MiB
-总大小。
+总大小。索引请求进入可恢复的持久化 Job 队列；文档按确定性重叠窗口分块，
+启用 RAG 时由所选 Embedding Provider 生成向量，并连同模型及向量库标识
+持久化，供运行时按兼容配置检索。
 
 ## 快速启动
 
@@ -88,6 +90,9 @@ curl -N http://127.0.0.1:8000/stream \
   -H 'content-type: application/json' \
   -d '{"agent":"ResearchAgent","goal":"Create a research agent","tools":["planner"]}'
 ```
+
+`POST /internal/embeddings` 仅供 Node 服务端批量生成索引和查询向量，生产
+部署应将 Agent 服务放在受信任的内部网络，不直接暴露该接口。
 
 事件格式：
 

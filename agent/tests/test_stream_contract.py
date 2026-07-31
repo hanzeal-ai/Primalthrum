@@ -127,6 +127,31 @@ class StreamContractTest(unittest.TestCase):
         self.assertEqual(payloads[-1]["status"], "done")
         self.assertEqual(payloads[-1]["agent"], "ResearchAgent")
 
+    def test_internal_embeddings_returns_validated_batch_metadata(self) -> None:
+        client = TestClient(app)
+
+        response = client.post(
+            "/internal/embeddings",
+            json={
+                "embedding": {"provider": "mock", "model": "mock-embedding"},
+                "texts": ["first chunk", "second chunk"],
+            },
+        )
+
+        self.assertEqual(response.status_code, 200)
+        body = response.json()
+        self.assertEqual(body["provider"], "mock")
+        self.assertEqual(body["model"], "mock-embedding")
+        self.assertEqual(body["dimensions"], 8)
+        self.assertEqual(len(body["embeddings"]), 2)
+        self.assertTrue(all(len(vector) == 8 for vector in body["embeddings"]))
+
+        invalid = client.post(
+            "/internal/embeddings",
+            json={"texts": ["valid", "   "]},
+        )
+        self.assertEqual(invalid.status_code, 400)
+
     def test_stream_emits_cache_miss_then_hit_for_sqlite_cache(self) -> None:
         client = TestClient(app)
 

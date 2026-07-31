@@ -64,6 +64,10 @@ export const MIGRATIONS: Migration[] = [
     id: '013_document_upload_metadata',
     up: applyDocumentUploadMetadata,
   },
+  {
+    id: '014_document_vector_metadata',
+    up: applyDocumentVectorMetadata,
+  },
 ];
 
 export function runMigrations(db: DatabaseAdapter): void {
@@ -552,6 +556,13 @@ function applyWorkspaceCapabilities(db: DatabaseAdapter): void {
 function applyDocumentUploadMetadata(db: DatabaseAdapter): void {
   ensureColumn(db, 'documents', 'mime_type', `TEXT NOT NULL DEFAULT 'text/plain'`);
   ensureColumn(db, 'documents', 'size_bytes', 'INTEGER NOT NULL DEFAULT 0');
+}
+
+function applyDocumentVectorMetadata(db: DatabaseAdapter): void {
+  ensureColumn(db, 'document_index_entries', 'embedding_json', `TEXT NOT NULL DEFAULT '[]'`);
+  ensureColumn(db, 'document_index_entries', 'embedding_provider', `TEXT NOT NULL DEFAULT ''`);
+  ensureColumn(db, 'document_index_entries', 'embedding_model', `TEXT NOT NULL DEFAULT ''`);
+  ensureColumn(db, 'document_index_entries', 'vector_store', `TEXT NOT NULL DEFAULT ''`);
 }
 
 function ensureColumn(

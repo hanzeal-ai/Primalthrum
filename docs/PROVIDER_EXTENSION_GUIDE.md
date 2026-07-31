@@ -7,7 +7,8 @@ Each provider must satisfy the matching Protocol and have a stable `name`.
 
 | Type | Protocol file | Required methods |
 | --- | --- | --- |
-| LLM | `agent/runtime/llm.py` | `chat(messages)`, `embed(texts)` |
+| LLM | `agent/runtime/llm.py` | `stream_chat(messages)` |
+| Embedding | `agent/runtime/embeddings.py` | `embed(texts)` |
 | Memory | `agent/runtime/memory.py` | `write_summary(run_id, summary)`, `list_summaries()` |
 | Cache | `agent/runtime/cache.py` | `get(key)`, `set(key, value)` |
 | RAG | `agent/runtime/rag.py` | `upsert(document_id, text)`, `retrieve(query, top_k)` |
@@ -60,3 +61,7 @@ if config.memory_provider == "example":
 - Normalize cache keys before storing values.
 - Keep mock providers deterministic so smoke tests are stable.
 - Add or update discovery metadata when the provider should appear in the Web builder.
+- Keep Embedding output count, dimensions, and numeric values stable within one batch;
+  the Agent validates these invariants before the Server persists vectors.
+- The Server calls `POST /internal/embeddings` for durable indexing. Keep that route
+  private to the trusted service network in production.

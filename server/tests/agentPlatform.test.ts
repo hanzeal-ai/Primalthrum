@@ -16,6 +16,8 @@ import { InProcessJobWorker } from '../src/services/inProcessJobWorker';
 import { JobRepository } from '../src/services/jobRepository';
 import { LocalDocumentStorage } from '../src/services/fileStorage';
 import { DocumentIndexRepository } from '../src/services/documentIndexRepository';
+import { chunkDocumentText } from '../src/services/documentChunker';
+import { AgentEmbeddingClient } from '../src/services/agentEmbeddingClient';
 import { parseDocumentUpload } from '../src/services/documentUpload';
 import { DurableJobDispatcher } from '../src/services/durableJobDispatcher';
 import { createBackup, restoreBackup } from '../src/services/backupService';
@@ -27,6 +29,7 @@ import { RuntimeProviderResolver } from '../src/services/runtimeProviderResolver
 const execFileAsync = promisify(execFile);
 
 let server: Server;
+let agentRuntimeServer: Server;
 let baseUrl = '';
 let rootDir = '';
 let dbPath = '';
@@ -37,7 +40,33 @@ before(async () => {
   rootDir = mkdtempSync(join(tmpdir(), 'primalthrum-platform-'));
   dbPath = join(rootDir, 'platform.sqlite');
   documentStorageDir = join(rootDir, 'documents');
+  agentRuntimeServer = createServer((request, response) => {
+    if (request.method !== 'POST' || request.url !== '/internal/embeddings') {
+      response.writeHead(404).end();
+      return;
+    }
+    let body = '';
+    request.on('data', (chunk) => {
+      body += chunk.toString();
+    });
+    request.on('end', () => {
+      const payload = JSON.parse(body) as { texts: string[] };
+      response.writeHead(200, { 'content-type': 'application/json' });
+      response.end(JSON.stringify({
+        provider: 'mock',
+        model: 'mock-embedding',
+        dimensions: 2,
+        embeddings: payload.texts.map((_, index) => [1, index]),
+      }));
+    });
+  });
+  await new Promise<void>((resolve) => {
+    agentRuntimeServer.listen(0, '127.0.0.1', resolve);
+  });
+  const agentAddress = agentRuntimeServer.address();
+  assert(agentAddress && typeof agentAddress === 'object');
   const app = createApp({
+    agentBaseUrl: `http://127.0.0.1:${agentAddress.port}`,
     dbPath,
     documentStorageDir,
     generatedAgentsDir: join(rootDir, 'generated-agents'),
@@ -52,6 +81,7 @@ before(async () => {
 
 after(async () => {
   await new Promise<void>((resolve) => server.close(() => resolve()));
+  await new Promise<void>((resolve) => agentRuntimeServer.close(() => resolve()));
   rmSync(rootDir, { recursive: true, force: true });
 });
 
@@ -148,6 +178,57 @@ test('document upload validation enforces type encoding content and size', () =>
     mimeType: 'text/plain',
     dataBase64: Buffer.alloc(2 * 1024 * 1024 + 1, 65).toString('base64'),
   }), /exceeds/);
+});
+
+test('document chunking is deterministic and preserves bounded overlap', () => {
+  const content = Array.from({ length: 700 }, (_, index) => `token-${index}`).join(' ');
+  const chunks = chunkDocumentText(9, content, {
+    maxCharacters: 500,
+    overlapCharacters: 50,
+  });
+
+  assert.ok(chunks.length > 2);
+  assert.deepEqual(
+    chunks.map((chunk, index) => chunk.chunkId),
+    chunks.map((_, index) => `9:${index}`),
+  );
+  assert.ok(chunks.every((chunk) => Array.from(chunk.text).length <= 500));
+  assert.equal(
+    Array.from(chunks[0]!.text).slice(-50).join(''),
+    Array.from(chunks[1]!.text).slice(0, 50).join(''),
+  );
+});
+
+test('agent embedding client validates batch responses', async () => {
+  const embeddingServer = createServer((request, response) => {
+    if (request.method !== 'POST' || request.url !== '/internal/embeddings') {
+      response.writeHead(404).end();
+      return;
+    }
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({
+      provider: 'mock',
+      model: 'mock-embedding',
+      dimensions: 2,
+      embeddings: [[1, 0], [0, 1]],
+    }));
+  });
+  await new Promise<void>((resolve) => embeddingServer.listen(0, '127.0.0.1', resolve));
+  const address = embeddingServer.address();
+  assert(address && typeof address === 'object');
+
+  try {
+    const result = await new AgentEmbeddingClient(
+      `http://127.0.0.1:${address.port}`,
+    ).embed(
+      { provider: 'mock', model: 'mock-embedding' },
+      ['first', 'second'],
+    );
+    assert.equal(result.dimensions, 2);
+    assert.deepEqual(result.embeddings, [[1, 0], [0, 1]]);
+  } finally {
+    await new Promise<void>((resolve) => embeddingServer.close(() => resolve()));
+  }
 });
 
 test('schema migrations are ordered and idempotent', () => {
@@ -983,6 +1064,7 @@ test('document APIs register and list agent document metadata', async () => {
     body: JSON.stringify({
       name: 'Document Agent',
       description: 'Document registry demo',
+      ragProvider: 'in-memory',
     }),
   });
   const agent = await createAgentResponse.json() as { id: number; workspaceId: number };
@@ -1106,7 +1188,12 @@ test('document APIs register and list agent document metadata', async () => {
   type CompletedIndexJob = {
     status: string;
     attempts: number;
-    result: { document?: typeof document; indexEntryCount?: number };
+    result: {
+      document?: typeof document;
+      indexEntryCount?: number;
+      embeddingDimensions?: number;
+      vectorStore?: string;
+    };
   };
   let completedJob: CompletedIndexJob | null = null;
   for (let attempt = 0; attempt < 20; attempt += 1) {
@@ -1120,6 +1207,8 @@ test('document APIs register and list agent document metadata', async () => {
   assert.equal(completedJob?.status, 'succeeded');
   assert.equal(completedJob?.attempts, 1);
   assert.equal(completedJob?.result.indexEntryCount, 1);
+  assert.equal(completedJob?.result.embeddingDimensions, 2);
+  assert.equal(completedJob?.result.vectorStore, 'in-memory');
   const indexed = completedJob?.result.document;
   assert.equal(indexed?.id, document.id);
   assert.equal(indexed?.indexStatus, 'indexed');
@@ -1130,12 +1219,50 @@ test('document APIs register and list agent document metadata', async () => {
     WHERE document_id = ${sqlValue(document.id)};
   `);
   assert.equal(Number(indexedEntries[0]?.count ?? 0), 1);
+  const persistedVector = db.query<{
+    embedding_json: string;
+    embedding_provider: string;
+    embedding_model: string;
+    vector_store: string;
+  }>(`
+    SELECT embedding_json, embedding_provider, embedding_model, vector_store
+    FROM document_index_entries
+    WHERE document_id = ${sqlValue(document.id)};
+  `)[0];
+  assert.deepEqual(JSON.parse(persistedVector?.embedding_json ?? '[]'), [1, 0]);
+  assert.equal(persistedVector?.embedding_provider, 'mock');
+  assert.equal(persistedVector?.embedding_model, 'mock-embedding');
+  assert.equal(persistedVector?.vector_store, 'in-memory');
   const matches = new DocumentIndexRepository(db).searchByAgent(
     agent.id,
     'Use the guide for retrieval',
   );
   assert.equal(matches[0]?.title, 'guide.md');
   assert.ok((matches[0]?.score ?? 0) > 0);
+
+  const indexRepository = new DocumentIndexRepository(db);
+  indexRepository.reindex(document, [
+    { chunkId: `${document.id}:0`, text: 'Vector result A' },
+    { chunkId: `${document.id}:1`, text: 'Vector result B' },
+  ], {
+    embeddings: [[1, 0], [0, 1]],
+    embeddingProvider: 'mock',
+    embeddingModel: 'mock-embedding',
+    vectorStore: 'in-memory',
+  });
+  const vectorMatches = indexRepository.searchByAgent(
+    agent.id,
+    'semantic query',
+    2,
+    {
+      queryEmbedding: [0.9, 0.1],
+      embeddingProvider: 'mock',
+      embeddingModel: 'mock-embedding',
+      vectorStore: 'in-memory',
+    },
+  );
+  assert.equal(vectorMatches[0]?.chunkId, `${document.id}:0`);
+  assert.equal(vectorMatches[0]?.embeddingModel, 'mock-embedding');
 
   const reindexResponse = await fetch(
     `${baseUrl}/api/agents/${agent.id}/documents/${document.id}/index`,

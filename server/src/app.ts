@@ -31,6 +31,8 @@ import {
   DocumentRepository,
   type CreateDocumentInput,
 } from './services/documentRepository';
+import { AgentEmbeddingClient } from './services/agentEmbeddingClient';
+import { chunkDocumentText } from './services/documentChunker';
 import { DocumentIndexRepository } from './services/documentIndexRepository';
 import { parseDocumentUpload } from './services/documentUpload';
 import { DurableJobDispatcher } from './services/durableJobDispatcher';
@@ -182,28 +184,55 @@ export function createApp(options: AppOptions = {}): Koa {
     providerConfigRepository,
     new LocalSecretVault(db),
   );
+  const embeddingClient = new AgentEmbeddingClient(agentBaseUrl);
   const capabilitySettingsRepository = new CapabilitySettingsRepository(db);
   const toolAuditRepository = new ToolAuditRepository(db);
   const jobRepository = new JobRepository(db);
   const jobDispatcher = new DurableJobDispatcher(jobRepository, {
-    'document.index': (payload) => {
+    'document.index': async (payload) => {
       const agentId = Number(payload.agentId);
       const documentId = Number(payload.documentId);
+      const agent = agentRepository.findById(agentId);
+      if (!agent) throw new Error('agent not found');
       const existing = documentRepository.findByAgentDocument(agentId, documentId);
       if (!existing) throw new Error('document not found');
       try {
         const content = existing.storageRef
           ? documentStorage.read(existing.storageRef)
           : '';
-        const entries = documentIndexRepository.reindex(existing, content);
+        const chunks = chunkDocumentText(existing.id, content);
+        const ragEnabled = !['none', 'null'].includes(agent.config.ragProvider);
+        const resolvedEmbedding = ragEnabled
+          ? runtimeProviderResolver.resolve(agent.config, agent.workspaceId).embedding
+          : null;
+        const embeddingBatch = resolvedEmbedding
+          ? await embeddingClient.embed(resolvedEmbedding, chunks.map((chunk) => chunk.text))
+          : null;
+        const entries = documentIndexRepository.reindex(existing, chunks, {
+          embeddings: embeddingBatch?.embeddings ?? [],
+          embeddingProvider: embeddingBatch?.provider ?? '',
+          embeddingModel: embeddingBatch?.model ?? '',
+          vectorStore: ragEnabled ? agent.config.ragProvider : '',
+        });
         const document = documentRepository.markIndexed(agentId, documentId);
         if (!document) throw new Error('document not found');
-        return { document, indexEntryCount: entries.length };
+        return {
+          document,
+          indexEntryCount: entries.length,
+          embeddingDimensions: embeddingBatch?.dimensions ?? 0,
+          vectorStore: ragEnabled ? agent.config.ragProvider : 'none',
+        };
       } catch (error) {
         documentRepository.markStatus(agentId, documentId, 'failed');
         throw error;
       }
     },
+  }, (error) => {
+    logger.log({
+      level: 'error',
+      code: 'JOB_DISPATCH_FAILED',
+      message: error instanceof Error ? error.message : 'job dispatcher failed',
+    });
   });
   jobDispatcher.resume();
 

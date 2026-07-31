@@ -1,6 +1,7 @@
 import { initializeSchema } from '../db/schema';
 import { SqliteDatabase, sqlValue } from '../db/sqlite';
 import { type DocumentRecord } from './documentRepository';
+import { type DocumentChunk } from './documentChunker';
 
 export interface DocumentIndexEntry {
   id: number;
@@ -9,6 +10,24 @@ export interface DocumentIndexEntry {
   documentId: number;
   chunkId: string;
   text: string;
+  embedding: number[];
+  embeddingProvider: string;
+  embeddingModel: string;
+  vectorStore: string;
+}
+
+export interface DocumentVectorMetadata {
+  embeddings: number[][];
+  embeddingProvider: string;
+  embeddingModel: string;
+  vectorStore: string;
+}
+
+export interface RagSearchOptions {
+  queryEmbedding?: number[];
+  embeddingProvider?: string;
+  embeddingModel?: string;
+  vectorStore?: string;
 }
 
 export interface RagSearchResult extends DocumentIndexEntry {
@@ -23,6 +42,10 @@ interface DocumentIndexEntryRow {
   document_id: number;
   chunk_id: string;
   text: string;
+  embedding_json: string;
+  embedding_provider: string;
+  embedding_model: string;
+  vector_store: string;
 }
 
 interface RagSearchRow extends DocumentIndexEntryRow {
@@ -34,25 +57,40 @@ export class DocumentIndexRepository {
     initializeSchema(db);
   }
 
-  reindex(document: DocumentRecord, content: string): DocumentIndexEntry[] {
+  reindex(
+    document: DocumentRecord,
+    chunks: DocumentChunk[],
+    metadata: DocumentVectorMetadata,
+  ): DocumentIndexEntry[] {
+    if (metadata.embeddings.length !== 0 && metadata.embeddings.length !== chunks.length) {
+      throw new Error('embedding count must match chunk count');
+    }
     this.deleteByDocument(document.id);
-    const chunks = chunkText(String(document.id), content);
 
-    for (const chunk of chunks) {
+    for (const [index, chunk] of chunks.entries()) {
+      const embedding = metadata.embeddings[index] ?? [];
       this.db.run(`
         INSERT INTO document_index_entries (
           workspace_id,
           agent_id,
           document_id,
           chunk_id,
-          text
+          text,
+          embedding_json,
+          embedding_provider,
+          embedding_model,
+          vector_store
         )
         VALUES (
           ${sqlValue(document.workspaceId)},
           ${sqlValue(document.agentId)},
           ${sqlValue(document.id)},
           ${sqlValue(chunk.chunkId)},
-          ${sqlValue(chunk.text)}
+          ${sqlValue(chunk.text)},
+          ${sqlValue(JSON.stringify(embedding))},
+          ${sqlValue(metadata.embeddingProvider)},
+          ${sqlValue(metadata.embeddingModel)},
+          ${sqlValue(metadata.vectorStore)}
         );
       `);
     }
@@ -71,36 +109,51 @@ export class DocumentIndexRepository {
 
   listByDocument(documentId: number): DocumentIndexEntry[] {
     return this.db.query<DocumentIndexEntryRow>(`
-      SELECT id, workspace_id, agent_id, document_id, chunk_id, text
-      FROM document_index_entries
+      SELECT ${INDEX_COLUMNS}
+      FROM document_index_entries e
       WHERE document_id = ${sqlValue(documentId)}
       ORDER BY id ASC;
     `).map(toDocumentIndexEntry);
   }
 
-  searchByAgent(agentId: number, query: string, limit = 3): RagSearchResult[] {
+  searchByAgent(
+    agentId: number,
+    query: string,
+    limit = 3,
+    options: RagSearchOptions = {},
+  ): RagSearchResult[] {
     const queryTokens = tokens(query);
+    const filters = [
+      `e.agent_id = ${sqlValue(agentId)}`,
+      `d.status = 'indexed'`,
+    ];
+    if (options.embeddingProvider) {
+      filters.push(`e.embedding_provider = ${sqlValue(options.embeddingProvider)}`);
+    }
+    if (options.embeddingModel) {
+      filters.push(`e.embedding_model = ${sqlValue(options.embeddingModel)}`);
+    }
+    if (options.vectorStore) {
+      filters.push(`e.vector_store = ${sqlValue(options.vectorStore)}`);
+    }
     const rows = this.db.query<RagSearchRow>(`
       SELECT
-        e.id,
-        e.workspace_id,
-        e.agent_id,
-        e.document_id,
-        e.chunk_id,
-        e.text,
+        ${INDEX_COLUMNS},
         d.filename AS title
       FROM document_index_entries e
       JOIN documents d ON d.id = e.document_id
-      WHERE e.agent_id = ${sqlValue(agentId)} AND d.status = 'indexed'
+      WHERE ${filters.join(' AND ')}
       ORDER BY e.id ASC;
     `);
 
     return rows
-      .map((row) => ({
-        ...toDocumentIndexEntry(row),
-        title: row.title,
-        score: overlapScore(queryTokens, tokens(row.text)),
-      }))
+      .map((row) => {
+        const entry = toDocumentIndexEntry(row);
+        const score = options.queryEmbedding?.length && entry.embedding.length
+          ? cosineSimilarity(options.queryEmbedding, entry.embedding)
+          : overlapScore(queryTokens, tokens(row.text));
+        return { ...entry, title: row.title, score };
+      })
       .sort((left, right) => right.score - left.score || left.id - right.id)
       .slice(0, Math.max(1, limit));
   }
@@ -114,6 +167,19 @@ export class DocumentIndexRepository {
     return Number(rows[0]?.count ?? 0);
   }
 }
+
+const INDEX_COLUMNS = [
+  'e.id',
+  'e.workspace_id',
+  'e.agent_id',
+  'e.document_id',
+  'e.chunk_id',
+  'e.text',
+  'e.embedding_json',
+  'e.embedding_provider',
+  'e.embedding_model',
+  'e.vector_store',
+].join(', ');
 
 function tokens(value: string): Set<string> {
   const normalized = value.toLowerCase();
@@ -130,21 +196,20 @@ function overlapScore(query: Set<string>, candidate: Set<string>): number {
   return score;
 }
 
-function chunkText(documentId: string, content: string): Array<{
-  chunkId: string;
-  text: string;
-}> {
-  const words = content.split(/\s+/).filter(Boolean);
-  if (words.length === 0) {
-    return [];
+function cosineSimilarity(left: number[], right: number[]): number {
+  if (left.length !== right.length || !left.length) return 0;
+  let numerator = 0;
+  let leftMagnitude = 0;
+  let rightMagnitude = 0;
+  for (let index = 0; index < left.length; index += 1) {
+    const leftValue = left[index] ?? 0;
+    const rightValue = right[index] ?? 0;
+    numerator += leftValue * rightValue;
+    leftMagnitude += leftValue * leftValue;
+    rightMagnitude += rightValue * rightValue;
   }
-
-  return [
-    {
-      chunkId: `${documentId}:0`,
-      text: words.join(' '),
-    },
-  ];
+  if (!leftMagnitude || !rightMagnitude) return 0;
+  return numerator / Math.sqrt(leftMagnitude * rightMagnitude);
 }
 
 function toDocumentIndexEntry(row: DocumentIndexEntryRow): DocumentIndexEntry {
@@ -155,5 +220,9 @@ function toDocumentIndexEntry(row: DocumentIndexEntryRow): DocumentIndexEntry {
     documentId: Number(row.document_id),
     chunkId: row.chunk_id,
     text: row.text,
+    embedding: JSON.parse(row.embedding_json) as number[],
+    embeddingProvider: row.embedding_provider,
+    embeddingModel: row.embedding_model,
+    vectorStore: row.vector_store,
   };
 }

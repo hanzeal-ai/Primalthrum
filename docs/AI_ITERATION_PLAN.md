@@ -1781,8 +1781,14 @@ complete. Follow the same dependency and verification protocol used above.
   The Web client polls the authorized
   Job API to a terminal state before exposing the indexed document. Server and
   Web tests cover queue acceptance, retry, startup recovery, status polling, and
-  prior document workflows. Embedding-backed retrieval, STT/TTS adapters, and
-  full browser media/upload E2E remain in P17-03C through P17-03D.
+  prior document workflows. P17-03C1 adds deterministic overlapping document
+  chunks, an internal validated batch Embedding API, an async-capable durable Job
+  dispatcher, and migration 014 for vectors plus provider/model/vector-store
+  compatibility metadata. Agent and Server suites cover batch validation,
+  chunking, migration idempotency, vector persistence, and cosine ranking.
+  Runtime query embedding and source injection, selectable vector-store UX,
+  STT/TTS adapters, and full browser media/upload E2E remain in P17-03C2 through
+  P17-03D.
 
 ### P18-01 Plans, Trials, Entitlements, And Credit Ledger
 

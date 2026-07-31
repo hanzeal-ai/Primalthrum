@@ -1,11 +1,12 @@
 import asyncio
 import hashlib
 import json
+import math
 import time
 from collections.abc import AsyncIterator
 from typing import Any, TypedDict
 
-from fastapi import FastAPI
+from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse, StreamingResponse
 from langgraph.config import get_stream_writer
@@ -14,6 +15,7 @@ from pydantic import BaseModel, Field, SecretStr
 
 from runtime import AgentRuntimeConfig, ModelProviderConfig, create_runtime
 from runtime.capabilities import capability_health, capability_manifests
+from runtime.embeddings import create_embedding_provider
 from runtime.llm import ProviderRequestError
 
 
@@ -41,6 +43,13 @@ class AgentRequest(BaseModel):
     )
     context: str = ""
     sources: list[dict[str, Any]] = Field(default_factory=list)
+
+
+class EmbeddingBatchRequest(BaseModel):
+    embedding: RuntimeModelRequest = Field(
+        default_factory=lambda: RuntimeModelRequest(model="mock-embedding")
+    )
+    texts: list[str] = Field(..., min_length=1, max_length=128)
 
 
 class AgentState(TypedDict):
@@ -402,6 +411,39 @@ async def capabilities() -> dict[str, Any]:
         "schemaVersion": "1.0",
         "capabilities": [manifest.to_dict() for manifest in manifests],
         "health": capability_health(),
+    }
+
+
+@app.post("/internal/embeddings")
+async def embeddings(request: EmbeddingBatchRequest) -> dict[str, Any]:
+    texts = [text.strip() for text in request.texts]
+    if any(not text for text in texts):
+        raise HTTPException(status_code=400, detail="embedding texts cannot be empty")
+    if sum(len(text) for text in texts) > 250_000:
+        raise HTTPException(status_code=413, detail="embedding batch is too large")
+
+    try:
+        provider = create_embedding_provider(model_provider_config(request.embedding))
+        vectors = await asyncio.to_thread(provider.embed, texts)
+    except ProviderRequestError as error:
+        raise HTTPException(status_code=502, detail=str(error)) from error
+    except (KeyError, ValueError) as error:
+        raise HTTPException(status_code=400, detail=str(error)) from error
+
+    if len(vectors) != len(texts):
+        raise HTTPException(status_code=502, detail="embedding provider returned the wrong count")
+    dimensions = len(vectors[0]) if vectors else 0
+    if dimensions <= 0 or any(
+        len(vector) != dimensions or any(not math.isfinite(value) for value in vector)
+        for vector in vectors
+    ):
+        raise HTTPException(status_code=502, detail="embedding provider returned invalid vectors")
+
+    return {
+        "provider": provider.name,
+        "model": provider.model,
+        "dimensions": dimensions,
+        "embeddings": vectors,
     }
 
 
