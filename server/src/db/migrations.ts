@@ -76,6 +76,10 @@ export const MIGRATIONS: Migration[] = [
     id: '016_payment_lifecycle',
     up: applyPaymentLifecycle,
   },
+  {
+    id: '017_usage_rating_cost_controls',
+    up: applyUsageRatingCostControls,
+  },
 ];
 
 export function runMigrations(db: DatabaseAdapter): void {
@@ -953,6 +957,127 @@ function applyPaymentLifecycle(db: DatabaseAdapter): void {
       ON billing_invoices(workspace_id, created_at DESC);
     CREATE INDEX IF NOT EXISTS billing_refunds_workspace_idx
       ON billing_refunds(workspace_id, created_at DESC);
+  `);
+}
+
+function applyUsageRatingCostControls(db: DatabaseAdapter): void {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS pricing_versions (
+      key TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active',
+      effective_from TEXT NOT NULL,
+      effective_to TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS meter_prices (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      pricing_version_key TEXT NOT NULL,
+      meter TEXT NOT NULL,
+      provider TEXT NOT NULL DEFAULT '*',
+      model TEXT NOT NULL DEFAULT '*',
+      unit_size INTEGER NOT NULL CHECK(unit_size > 0),
+      credits_per_unit INTEGER NOT NULL CHECK(credits_per_unit >= 0),
+      provider_cost_micros_per_unit INTEGER NOT NULL DEFAULT 0
+        CHECK(provider_cost_micros_per_unit >= 0),
+      active INTEGER NOT NULL DEFAULT 1,
+      metadata_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(pricing_version_key, meter, provider, model),
+      FOREIGN KEY(pricing_version_key) REFERENCES pricing_versions(key)
+    );
+
+    CREATE TABLE IF NOT EXISTS rated_usage_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      idempotency_key TEXT NOT NULL,
+      meter TEXT NOT NULL,
+      provider TEXT NOT NULL DEFAULT '',
+      model TEXT NOT NULL DEFAULT '',
+      quantity INTEGER NOT NULL CHECK(quantity >= 0),
+      billable_units INTEGER NOT NULL CHECK(billable_units >= 0),
+      credits_charged INTEGER NOT NULL CHECK(credits_charged >= 0),
+      provider_cost_micros INTEGER NOT NULL DEFAULT 0 CHECK(provider_cost_micros >= 0),
+      meter_price_id INTEGER NOT NULL,
+      resource_type TEXT NOT NULL DEFAULT '',
+      resource_id TEXT NOT NULL DEFAULT '',
+      metadata_json TEXT NOT NULL DEFAULT '{}',
+      occurred_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      UNIQUE(workspace_id, idempotency_key),
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+      FOREIGN KEY(meter_price_id) REFERENCES meter_prices(id)
+    );
+
+    CREATE TABLE IF NOT EXISTS workspace_cost_controls (
+      workspace_id INTEGER PRIMARY KEY,
+      monthly_credit_limit INTEGER CHECK(monthly_credit_limit IS NULL OR monthly_credit_limit >= 0),
+      monthly_provider_cost_micros_limit INTEGER
+        CHECK(monthly_provider_cost_micros_limit IS NULL OR monthly_provider_cost_micros_limit >= 0),
+      hard_limit INTEGER NOT NULL DEFAULT 1,
+      overage_enabled INTEGER NOT NULL DEFAULT 0,
+      alert_thresholds_json TEXT NOT NULL DEFAULT '[50,80,100]',
+      updated_by_user_id INTEGER,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+      FOREIGN KEY(updated_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS cost_alerts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      period_key TEXT NOT NULL,
+      threshold_percent INTEGER NOT NULL,
+      metric TEXT NOT NULL,
+      current_value INTEGER NOT NULL,
+      limit_value INTEGER NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      delivered_at TEXT,
+      UNIQUE(workspace_id, period_key, threshold_percent, metric),
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+    );
+
+    CREATE TRIGGER IF NOT EXISTS rated_usage_events_no_update
+    BEFORE UPDATE ON rated_usage_events
+    BEGIN
+      SELECT RAISE(ABORT, 'rated usage events are immutable');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS rated_usage_events_no_delete
+    BEFORE DELETE ON rated_usage_events
+    BEGIN
+      SELECT RAISE(ABORT, 'rated usage events are immutable');
+    END;
+
+    CREATE INDEX IF NOT EXISTS rated_usage_workspace_period_idx
+      ON rated_usage_events(workspace_id, occurred_at, meter);
+    CREATE INDEX IF NOT EXISTS rated_usage_resource_idx
+      ON rated_usage_events(workspace_id, resource_type, resource_id);
+  `);
+
+  db.run(`
+    INSERT OR IGNORE INTO pricing_versions (key, name, effective_from)
+    VALUES ('2026-08-default', 'Initial commercial pricing', '2026-01-01T00:00:00.000Z');
+
+    INSERT OR IGNORE INTO meter_prices (
+      pricing_version_key, meter, unit_size, credits_per_unit,
+      provider_cost_micros_per_unit
+    ) VALUES
+      ('2026-08-default', 'llm.input_tokens', 1000, 10, 1500),
+      ('2026-08-default', 'llm.output_tokens', 1000, 30, 6000),
+      ('2026-08-default', 'embedding.tokens', 1000, 2, 100),
+      ('2026-08-default', 'speech.transcription_seconds', 60, 20, 6000),
+      ('2026-08-default', 'speech.synthesis_characters', 1000, 15, 15000),
+      ('2026-08-default', 'tool.calls', 1, 5, 0),
+      ('2026-08-default', 'rag.retrievals', 1, 2, 0),
+      ('2026-08-default', 'rag.storage_bytes', 1048576, 3, 0),
+      ('2026-08-default', 'file.storage_bytes', 1048576, 2, 0),
+      ('2026-08-default', 'hosted.runs', 1, 10, 0),
+      ('2026-08-default', 'api.runs', 1, 10, 0);
   `);
 }
 

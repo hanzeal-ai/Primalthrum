@@ -1861,11 +1861,18 @@ complete. Follow the same dependency and verification protocol used above.
 
 ### P18-03 Usage Rating And Cost Controls
 
-- Status: Todo
+- Status: In Progress
 - Goal: Meter model, embedding, voice, tools, retrieval, storage, hosted, and API
   usage with pricing, margin, threshold, and spending controls.
 - Dependencies: P17-03, P18-02
 - Verification: reconciliation, cost cap, threshold, and duplicate event tests.
+- Evidence: migration 017 and the first rating-engine slice add effective-dated
+  pricing versions, provider/model-specific meter prices, immutable rated usage
+  evidence, integer provider cost, workspace monthly controls, and idempotent
+  threshold alerts. Tests cover wildcard and model-specific pricing, unit
+  rounding, replay/conflict behavior, immutable evidence, credit hard stops,
+  provider-cost hard stops, period summaries, and 50/80/100 alert deduplication.
+  Run reservation/settlement and remaining meter producers are the next slice.
 
 ### P19-01 Public Website And Conversion Onboarding
 

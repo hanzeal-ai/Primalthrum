@@ -142,6 +142,7 @@ scripts/commercial-smoke.sh
 
 账本生命周期与不变量见 [Billing Entitlements And Credit Ledger](docs/BILLING_LEDGER.md)。
 Stripe 配置、Webhook 和沙箱发布门禁见 [Stripe Payments And Subscription Lifecycle](docs/STRIPE_PAYMENTS.md)。
+版本化计量价格、供应商成本与预算控制见 [Usage Rating And Cost Controls](docs/USAGE_RATING.md)。
 
 分段执行：
 
