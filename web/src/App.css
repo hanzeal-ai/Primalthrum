@@ -466,6 +466,17 @@
   outline: none;
 }
 
+.choice-button:disabled {
+  cursor: not-allowed;
+  background: #fafafa;
+  opacity: 0.68;
+}
+
+.choice-button:disabled:hover {
+  border-color: #e4e4e7;
+  box-shadow: none;
+}
+
 .choice-button > span {
   min-width: 0;
   flex: 1;

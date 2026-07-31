@@ -122,6 +122,7 @@ def _storage_manifests() -> list[CapabilityManifest]:
         CapabilityManifest("cache", "memory", "1.0.0", "Run-scoped in-process cache."),
         CapabilityManifest("cache", "sqlite", "1.0.0", "Persistent SQLite cache.", config_schema=path_schema),
         CapabilityManifest("rag", "none", "1.0.0", "Retrieval disabled."),
+        CapabilityManifest("rag", "sqlite", "1.0.0", "Persistent built-in SQLite vector retrieval provider."),
         CapabilityManifest("rag", "in-memory", "1.0.0", "In-memory vector retrieval provider."),
         CapabilityManifest("rag", "chroma", "1.0.0", "Chroma vector retrieval provider.", status="planned"),
     ]

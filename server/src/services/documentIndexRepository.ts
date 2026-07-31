@@ -158,6 +158,27 @@ export class DocumentIndexRepository {
       .slice(0, Math.max(1, limit));
   }
 
+  hasCompatibleVectors(
+    agentId: number,
+    options: Required<Pick<
+      RagSearchOptions,
+      'embeddingProvider' | 'embeddingModel' | 'vectorStore'
+    >>,
+  ): boolean {
+    const rows = this.db.query<{ count: number }>(`
+      SELECT COUNT(*) AS count
+      FROM document_index_entries e
+      JOIN documents d ON d.id = e.document_id
+      WHERE e.agent_id = ${sqlValue(agentId)}
+        AND d.status = 'indexed'
+        AND e.embedding_provider = ${sqlValue(options.embeddingProvider)}
+        AND e.embedding_model = ${sqlValue(options.embeddingModel)}
+        AND e.vector_store = ${sqlValue(options.vectorStore)}
+        AND e.embedding_json <> '[]';
+    `);
+    return Number(rows[0]?.count ?? 0) > 0;
+  }
+
   private countByDocument(documentId: number): number {
     const rows = this.db.query<{ count: number }>(`
       SELECT COUNT(*) AS count

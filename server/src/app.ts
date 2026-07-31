@@ -1360,10 +1360,32 @@ export function createApp(options: AppOptions = {}): Koa {
 
         const agent = agentRepository.findByIdInWorkspace(agentId, workspaceId);
         if (agent && !['none', 'null'].includes(streamRequest.payload.rag_provider)) {
-          const matches = documentIndexRepository.searchByAgent(
+          const vectorOptions = {
+            embeddingProvider: streamRequest.payload.embedding.provider,
+            embeddingModel: streamRequest.payload.embedding.model,
+            vectorStore: streamRequest.payload.rag_provider,
+          };
+          const hasVectors = documentIndexRepository.hasCompatibleVectors(
             agentId,
-            String(body.input ?? ''),
+            vectorOptions,
           );
+          const queryEmbedding = hasVectors
+            ? await embeddingClient.embed(
+                streamRequest.payload.embedding,
+                [String(body.input ?? '')],
+              )
+            : null;
+          const matches = queryEmbedding
+            ? documentIndexRepository.searchByAgent(
+                agentId,
+                String(body.input ?? ''),
+                3,
+                {
+                  ...vectorOptions,
+                  queryEmbedding: queryEmbedding.embeddings[0],
+                },
+              )
+            : [];
           if (matches.length) {
             streamRequest.payload.context = matches
               .map((match) => `[${match.title}] ${match.text}`)

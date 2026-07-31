@@ -1786,9 +1786,17 @@ complete. Follow the same dependency and verification protocol used above.
   dispatcher, and migration 014 for vectors plus provider/model/vector-store
   compatibility metadata. Agent and Server suites cover batch validation,
   chunking, migration idempotency, vector persistence, and cosine ranking.
-  Runtime query embedding and source injection, selectable vector-store UX,
-  STT/TTS adapters, and full browser media/upload E2E remain in P17-03C2 through
-  P17-03D.
+  P17-03C2 adds the available `rag:sqlite` capability while retaining the legacy
+  in-memory adapter and planned Chroma entry. Runs generate a query embedding only
+  when compatible indexed vectors exist, filter retrieval by vector store,
+  Embedding Provider, and model, and inject ranked context plus source metadata.
+  The Agent emits `agent.rag.retrieved`, and hosted chat already renders persisted
+  message sources. Builder vector-store choices now come from the live capability
+  catalog; enabled RAG asks for a configured Embedding Provider while planned
+  stores remain disabled. Agent, Server, and Web suites cover the full
+  upload/index/query/source contract. Desktop and 390x844 browser acceptance
+  passed with no horizontal overflow. STT/TTS adapters and full browser
+  media/upload E2E remain in P17-03D.
 
 ### P18-01 Plans, Trials, Entitlements, And Credit Ledger
 

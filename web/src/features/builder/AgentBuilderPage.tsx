@@ -19,6 +19,7 @@ import {
   createAgent,
   generateAgentProject,
   indexDocument,
+  listCapabilities,
   listProviderConfigs,
   uploadDocument,
 } from '../../api/client'
@@ -36,7 +37,7 @@ import { WorkspaceSwitcher } from '../workspaces/WorkspaceSwitcher'
 import { CapabilitySettingsPanel } from '../providers/CapabilitySettingsPanel'
 import { ProviderSettingsPanel } from '../providers/ProviderSettingsPanel'
 
-type BuilderStage = 'describe' | 'model' | 'rag' | 'knowledge' | 'review' | 'creating' | 'created'
+type BuilderStage = 'describe' | 'model' | 'rag' | 'embedding' | 'knowledge' | 'review' | 'creating' | 'created'
 
 interface BuilderMessage {
   id: string
@@ -57,10 +58,18 @@ interface BuilderDraft {
   stage: BuilderStage
   description: string
   model: ModelChoice | null
-  ragProvider: 'none' | 'in-memory' | null
+  ragProvider: string | null
+  embedding: ModelChoice | null
   files: DraftFile[]
   messages: BuilderMessage[]
   createdAgent: AgentRecord | null
+}
+
+interface RagChoice {
+  name: string
+  description: string
+  status: 'available' | 'planned'
+  enabled: boolean
 }
 
 interface AgentBuilderPageProps {
@@ -68,13 +77,14 @@ interface AgentBuilderPageProps {
   onLogout: () => Promise<void>
 }
 
-const STORAGE_KEY_PREFIX = 'primalthrum.builder-draft.v3'
+const STORAGE_KEY_PREFIX = 'primalthrum.builder-draft.v4'
 
 const INITIAL_DRAFT: BuilderDraft = {
   stage: 'describe',
   description: '',
   model: null,
   ragProvider: null,
+  embedding: null,
   files: [],
   messages: [
     {
@@ -90,6 +100,7 @@ export function AgentBuilderPage({ user, onLogout }: AgentBuilderPageProps) {
   const [draft, setDraft] = useState<BuilderDraft>(() => loadDraft(user.workspaceId))
   const [input, setInput] = useState('')
   const [providers, setProviders] = useState<ProviderConfigRecord[]>([])
+  const [ragChoices, setRagChoices] = useState<RagChoice[]>(DEFAULT_RAG_CHOICES)
   const [settingsView, setSettingsView] = useState<'providers' | 'capabilities' | null>(null)
   const [error, setError] = useState('')
   const messageEndRef = useRef<HTMLDivElement>(null)
@@ -105,7 +116,26 @@ export function AgentBuilderPage({ user, onLogout }: AgentBuilderPageProps) {
       .catch(() => setProviders([]))
   }, [])
 
+  useEffect(() => {
+    void listCapabilities()
+      .then((catalog) => {
+        const choices = catalog.capabilities
+          .filter((capability) => capability.kind === 'rag')
+          .filter((capability) => ['sqlite', 'chroma', 'none'].includes(capability.name))
+          .map((capability) => ({
+            name: capability.name,
+            description: capability.description,
+            status: capability.status,
+            enabled: capability.enabled,
+          }))
+          .sort((left, right) => ragChoiceOrder(left.name) - ragChoiceOrder(right.name))
+        if (choices.length) setRagChoices(choices)
+      })
+      .catch(() => setRagChoices(DEFAULT_RAG_CHOICES))
+  }, [])
+
   const modelChoices = useMemo(() => configuredModels(providers), [providers])
+  const embeddingChoices = useMemo(() => configuredEmbeddings(providers), [providers])
   const completion = stageProgress(draft.stage)
   const agentName = inferAgentName(draft.description)
 
@@ -162,20 +192,35 @@ export function AgentBuilderPage({ user, onLogout }: AgentBuilderPageProps) {
     }))
   }
 
-  function chooseRag(ragProvider: 'none' | 'in-memory') {
+  function chooseRag(ragProvider: string) {
+    const disabled = ragProvider === 'none'
     setDraft((current) => ({
       ...current,
       ragProvider,
+      embedding: disabled ? MOCK_EMBEDDING_CHOICE : null,
+      stage: disabled ? 'knowledge' : 'embedding',
+      messages: [
+        ...current.messages,
+        message('user', disabled ? '暂时不启用知识库' : `使用 ${ragLabel(ragProvider)}`),
+        message(
+          'assistant',
+          disabled
+            ? '好的。你仍然可以上传示例资料，或者直接跳过。'
+            : '向量库已启用。请选择用于索引和检索的 Embedding 模型。',
+        ),
+      ],
+    }))
+  }
+
+  function chooseEmbedding(choice: ModelChoice) {
+    setDraft((current) => ({
+      ...current,
+      embedding: choice,
       stage: 'knowledge',
       messages: [
         ...current.messages,
-        message('user', ragProvider === 'none' ? '暂时不启用知识库' : '启用内置向量知识库'),
-        message(
-          'assistant',
-          ragProvider === 'none'
-            ? '好的。你仍然可以上传示例资料，或者直接跳过。'
-            : '知识库已启用。上传 TXT、Markdown、JSON 或 CSV 资料，也可以暂时跳过。',
-        ),
+        message('user', `使用 ${choice.label}`),
+        message('assistant', 'Embedding 模型已配置。上传 TXT、Markdown、JSON 或 CSV 资料，也可以暂时跳过。'),
       ],
     }))
   }
@@ -212,7 +257,7 @@ export function AgentBuilderPage({ user, onLogout }: AgentBuilderPageProps) {
   }
 
   async function createConfiguredAgent() {
-    if (!draft.model || !draft.ragProvider) return
+    if (!draft.model || !draft.ragProvider || !draft.embedding) return
     setError('')
     setDraft((current) => ({
       ...current,
@@ -235,7 +280,11 @@ export function AgentBuilderPage({ user, onLogout }: AgentBuilderPageProps) {
             model: draft.model.model,
             providerConfigId: draft.model.providerConfigId,
           },
-          embedding: { provider: 'mock', model: 'mock-embedding' },
+          embedding: {
+            provider: draft.embedding.provider,
+            model: draft.embedding.model,
+            providerConfigId: draft.embedding.providerConfigId,
+          },
         },
       })
 
@@ -332,15 +381,37 @@ export function AgentBuilderPage({ user, onLogout }: AgentBuilderPageProps) {
 
             {draft.stage === 'rag' ? (
               <ChoiceBlock title="选择知识库方式">
-                <ChoiceButton onClick={() => chooseRag('in-memory')}>
-                  <Database />
-                  <span><strong>启用内置向量库</strong><small>适合当前工作区快速验证</small></span>
-                  <ChevronRight />
-                </ChoiceButton>
-                <ChoiceButton onClick={() => chooseRag('none')}>
-                  <span><strong>暂时跳过</strong><small>之后可以在 Agent 设置中启用</small></span>
-                  <ChevronRight />
-                </ChoiceButton>
+                {ragChoices.map((choice) => {
+                  const unavailable = choice.status !== 'available' || !choice.enabled
+                  return (
+                    <ChoiceButton
+                      disabled={unavailable}
+                      key={choice.name}
+                      onClick={() => chooseRag(choice.name)}
+                    >
+                      {choice.name !== 'none' ? <Database /> : null}
+                      <span>
+                        <strong>{ragChoiceLabel(choice.name)}</strong>
+                        <small>{unavailable ? '计划中，暂不可用' : ragChoiceDescription(choice.name)}</small>
+                      </span>
+                      {unavailable ? <Badge variant="secondary">计划中</Badge> : <ChevronRight />}
+                    </ChoiceButton>
+                  )
+                })}
+              </ChoiceBlock>
+            ) : null}
+
+            {draft.stage === 'embedding' ? (
+              <ChoiceBlock title="选择 Embedding 模型">
+                {embeddingChoices.map((choice) => (
+                  <ChoiceButton key={`${choice.provider}:${choice.model}`} onClick={() => chooseEmbedding(choice)}>
+                    <span>
+                      <strong>{choice.label}</strong>
+                      <small>{choice.provider} / {choice.model}</small>
+                    </span>
+                    <ChevronRight />
+                  </ChoiceButton>
+                ))}
               </ChoiceBlock>
             ) : null}
 
@@ -378,6 +449,7 @@ export function AgentBuilderPage({ user, onLogout }: AgentBuilderPageProps) {
                   <SummaryItem label="模型" value={draft.model?.label ?? '未选择'} />
                   <SummaryItem label="记忆" value="SQLite 长期记忆" />
                   <SummaryItem label="知识库" value={ragLabel(draft.ragProvider)} />
+                  <SummaryItem label="Embedding" value={draft.embedding?.label ?? '未选择'} />
                   <SummaryItem label="工具" value="文件读取" />
                   <SummaryItem label="资料" value={`${draft.files.length} 个文件`} />
                 </div>
@@ -512,9 +584,13 @@ function ChoiceBlock({ title, children }: { title: string; children: React.React
   )
 }
 
-function ChoiceButton({ children, onClick }: { children: React.ReactNode; onClick: () => void }) {
+function ChoiceButton({ children, disabled = false, onClick }: {
+  children: React.ReactNode
+  disabled?: boolean
+  onClick: () => void
+}) {
   return (
-    <button className="choice-button" onClick={onClick} type="button">
+    <button className="choice-button" disabled={disabled} onClick={onClick} type="button">
       {children}
     </button>
   )
@@ -590,6 +666,45 @@ function configuredModels(providers: ProviderConfigRecord[]): ModelChoice[] {
   return choices.length ? choices : [{ label: 'Mock Chat（本地演示）', provider: 'mock', model: 'mock-chat' }]
 }
 
+const MOCK_EMBEDDING_CHOICE: ModelChoice = {
+  label: 'Mock Embedding（本地演示）',
+  provider: 'mock',
+  model: 'mock-embedding',
+}
+
+const DEFAULT_RAG_CHOICES: RagChoice[] = [
+  {
+    name: 'sqlite',
+    description: 'Persistent built-in SQLite vector retrieval provider.',
+    status: 'available',
+    enabled: true,
+  },
+  {
+    name: 'chroma',
+    description: 'Chroma vector store adapter.',
+    status: 'planned',
+    enabled: false,
+  },
+  {
+    name: 'none',
+    description: 'RAG disabled.',
+    status: 'available',
+    enabled: true,
+  },
+]
+
+function configuredEmbeddings(providers: ProviderConfigRecord[]): ModelChoice[] {
+  const choices = providers
+    .filter((provider) => provider.type === 'embedding')
+    .map((provider) => ({
+      label: provider.name,
+      provider: String(provider.config.provider ?? 'mock'),
+      model: String(provider.config.model ?? 'mock-embedding'),
+      providerConfigId: provider.id,
+    }))
+  return choices.length ? choices : [MOCK_EMBEDDING_CHOICE]
+}
+
 function canManageProviders(role: string): boolean {
   return role === 'owner' || role === 'admin'
 }
@@ -621,13 +736,31 @@ function inferAgentName(description: string): string {
 }
 
 function ragLabel(value: BuilderDraft['ragProvider']): string {
-  if (value === 'in-memory') return '内置向量库'
+  if (value === 'sqlite') return '内置 SQLite 向量库'
+  if (value === 'in-memory') return '内置向量库（兼容）'
+  if (value === 'chroma') return 'Chroma'
   if (value === 'none') return '未启用'
   return '待选择'
 }
 
+function ragChoiceLabel(name: string): string {
+  if (name === 'sqlite') return '内置 SQLite 向量库'
+  if (name === 'chroma') return 'Chroma'
+  return '暂时不启用'
+}
+
+function ragChoiceDescription(name: string): string {
+  if (name === 'sqlite') return '持久化保存，适合本地与单节点部署'
+  if (name === 'none') return '之后可以创建新版本启用'
+  return '外部向量数据库'
+}
+
+function ragChoiceOrder(name: string): number {
+  return { sqlite: 0, chroma: 1, none: 2 }[name] ?? 99
+}
+
 function stageProgress(stage: BuilderStage): number {
-  return { describe: 10, model: 30, rag: 50, knowledge: 70, review: 90, creating: 95, created: 100 }[stage]
+  return { describe: 10, model: 30, rag: 50, embedding: 60, knowledge: 75, review: 90, creating: 95, created: 100 }[stage]
 }
 
 function errorMessage(error: unknown, fallback: string): string {

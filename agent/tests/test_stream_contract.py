@@ -90,6 +90,7 @@ class StreamContractTest(unittest.TestCase):
         events = sse_event_names(response.text)
         self.assertEqual(events[0], "agent.run.started")
         self.assertIn("agent.node.completed", events)
+        self.assertIn("agent.rag.retrieved", events)
         self.assertIn("message.delta", events)
         self.assertIn("message.completed", events)
         self.assertEqual(events[-1], "agent.run.completed")
@@ -123,7 +124,8 @@ class StreamContractTest(unittest.TestCase):
         self.assertGreaterEqual(len(payloads), 5)
         self.assertEqual(payloads[0]["node"], "run")
         self.assertEqual(payloads[0]["status"], "running")
-        self.assertEqual(payloads[1]["node"], "intake")
+        self.assertEqual(payloads[1]["node"], "retrieve")
+        self.assertEqual(payloads[1]["sourceCount"], 1)
         self.assertEqual(payloads[-1]["status"], "done")
         self.assertEqual(payloads[-1]["agent"], "ResearchAgent")
 

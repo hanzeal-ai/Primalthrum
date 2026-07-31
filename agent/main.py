@@ -294,6 +294,20 @@ async def stream_graph(request: AgentRequest) -> AsyncIterator[str]:
         },
     )
 
+    if initial_state["context"] and initial_state["sources"]:
+        yield sse(
+            "agent.rag.retrieved",
+            {
+                "node": "retrieve",
+                "agent": initial_state["agent"],
+                "provider": request.rag_provider,
+                "sourceCount": len(initial_state["sources"]),
+                "sources": initial_state["sources"],
+                "message": "Retrieved knowledge context",
+                "status": "done",
+            },
+        )
+
     try:
         stream = compiled_graph.astream(
             initial_state,

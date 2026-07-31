@@ -121,6 +121,7 @@ class RuntimeRegistryTest(unittest.TestCase):
                 "skill:research",
                 "memory:sqlite",
                 "cache:sqlite",
+                "rag:sqlite",
                 "rag:in-memory",
             }.issubset(keys)
         )
@@ -219,6 +220,17 @@ class RuntimeRegistryTest(unittest.TestCase):
         self.assertEqual(runtime.tools.names(), [])
         self.assertEqual(runtime.skills.names(), [])
         self.assertEqual(runtime.rag.retrieve("anything"), [])
+
+        sqlite_runtime = create_runtime(
+            AgentRuntimeConfig(
+                agent_name="ResearchAgent",
+                enabled_tools=[],
+                enabled_skills=[],
+                rag_provider="sqlite",
+            )
+        )
+        self.assertEqual(sqlite_runtime.rag.name, "sqlite")
+        self.assertEqual(sqlite_runtime.rag.retrieve("server-managed"), [])
 
     def test_sqlite_memory_persists_summaries_by_path(self) -> None:
         with TemporaryDirectory() as temp_dir:

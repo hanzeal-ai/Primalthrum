@@ -8,7 +8,27 @@ vi.mock('../../api/client', () => ({
   createAgent: vi.fn(),
   generateAgentProject: vi.fn(),
   indexDocument: vi.fn(),
-  listCapabilities: vi.fn(),
+  listCapabilities: vi.fn().mockResolvedValue({
+    schemaVersion: '1.0',
+    capabilities: [
+      {
+        kind: 'rag', name: 'sqlite', version: '1.0.0',
+        description: 'Built-in vectors.', status: 'available', hotPluggable: true,
+        configSchema: { type: 'object' }, permissions: [], dependencies: [], enabled: true,
+      },
+      {
+        kind: 'rag', name: 'chroma', version: '1.0.0',
+        description: 'Chroma.', status: 'planned', hotPluggable: true,
+        configSchema: { type: 'object' }, permissions: [], dependencies: [], enabled: false,
+      },
+      {
+        kind: 'rag', name: 'none', version: '1.0.0',
+        description: 'Disabled.', status: 'available', hotPluggable: true,
+        configSchema: { type: 'object' }, permissions: [], dependencies: [], enabled: true,
+      },
+    ],
+    health: [],
+  }),
   listProviderConfigs: vi.fn().mockResolvedValue([]),
   listWorkspaces: vi.fn().mockResolvedValue([
     {
@@ -60,7 +80,10 @@ describe('AgentBuilderPage', () => {
     fireEvent.click(screen.getByRole('button', { name: /Mock Chat/ }))
 
     expect(await screen.findByRole('heading', { name: '选择知识库方式' })).toBeTruthy()
-    fireEvent.click(screen.getByRole('button', { name: /启用内置向量库/ }))
+    fireEvent.click(screen.getByRole('button', { name: /内置 SQLite 向量库/ }))
+
+    expect(await screen.findByRole('heading', { name: '选择 Embedding 模型' })).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /Mock Embedding/ }))
 
     expect(await screen.findByRole('heading', { name: '资料' })).toBeTruthy()
     const supplement = screen.getByRole('textbox', { name: '消息' })

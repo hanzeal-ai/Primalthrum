@@ -48,6 +48,23 @@ before(async () => {
       }));
       return;
     }
+    if (req.method === 'POST' && req.url === '/internal/embeddings') {
+      let body = '';
+      req.on('data', (chunk) => {
+        body += chunk.toString();
+      });
+      req.on('end', () => {
+        const payload = JSON.parse(body) as { texts: string[] };
+        res.writeHead(200, { 'content-type': 'application/json' });
+        res.end(JSON.stringify({
+          provider: 'mock',
+          model: 'mock-embedding',
+          dimensions: 2,
+          embeddings: payload.texts.map(() => [1, 0]),
+        }));
+      });
+      return;
+    }
     if (req.method === 'POST' && req.url === '/stream') {
       let body = '';
       req.on('data', (chunk) => {
@@ -83,6 +100,7 @@ before(async () => {
   const app = createApp({
     agentBaseUrl: `http://127.0.0.1:${agentAddress.port}`,
     dbPath: join(rootDir, 'platform.sqlite'),
+    documentStorageDir: join(rootDir, 'documents'),
     generatedAgentsDir: join(rootDir, 'generated-agents'),
   });
   appServer = app.listen(0);
@@ -204,6 +222,37 @@ test('POST /api/stream can run by agentId and persist proxied events', async () 
   assert.equal(agentResponse.status, 201);
   const agent = await agentResponse.json() as { id: number; slug: string };
 
+  const uploadResponse = await fetch(
+    `${appBaseUrl}/api/agents/${agent.id}/documents/upload`,
+    {
+      method: 'POST',
+      headers: jsonAuthHeaders(),
+      body: JSON.stringify({
+        filename: 'private-guide.md',
+        mimeType: 'text/markdown',
+        dataBase64: Buffer.from('Private launch date is 2030-05-20.').toString('base64'),
+      }),
+    },
+  );
+  assert.equal(uploadResponse.status, 201);
+  const document = await uploadResponse.json() as { id: number };
+  const indexResponse = await fetch(
+    `${appBaseUrl}/api/agents/${agent.id}/documents/${document.id}/index`,
+    { method: 'POST', headers: authHeaders },
+  );
+  assert.equal(indexResponse.status, 202);
+  const indexJob = await indexResponse.json() as { job: { id: number } };
+  let indexStatus = '';
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    const response = await fetch(`${appBaseUrl}/api/jobs/${indexJob.job.id}`, {
+      headers: authHeaders,
+    });
+    indexStatus = (await response.json() as { status: string }).status;
+    if (indexStatus === 'succeeded') break;
+    await new Promise((resolve) => setTimeout(resolve, 25));
+  }
+  assert.equal(indexStatus, 'succeeded');
+
   const versionResponse = await fetch(`${appBaseUrl}/api/agents/${agent.id}/versions`, {
     method: 'POST',
     headers: authHeaders,
@@ -262,6 +311,12 @@ test('POST /api/stream can run by agentId and persist proxied events', async () 
       provider: 'mock',
       model: 'mock-embedding',
     },
+    context: '[private-guide.md] Private launch date is 2030-05-20.',
+    sources: [{
+      title: 'private-guide.md',
+      documentId: document.id,
+      chunkId: `${document.id}:0`,
+    }],
   });
 
   const runResponse = await fetch(`${appBaseUrl}/api/runs/${runId}`, {

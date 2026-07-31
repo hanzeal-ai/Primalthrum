@@ -61,6 +61,7 @@ def create_runtime(config: AgentRuntimeConfig) -> AgentRuntime:
     rag_registry = Registry[RagProvider]()
     rag_registry.register("null", NullRagProvider())
     rag_registry.register("none", NullRagProvider())
+    rag_registry.register("sqlite", NullRagProvider(name="sqlite"))
     rag_registry.register("in-memory", InMemoryRagProvider())
 
     tools = Registry[ToolDefinition]()

@@ -113,6 +113,11 @@ export function listProviders(): ProviderCatalog {
         status: 'available',
       },
       {
+        name: 'sqlite',
+        description: 'Persistent built-in SQLite vector retrieval provider.',
+        status: 'available',
+      },
+      {
         name: 'chroma',
         description: 'Chroma vector store adapter.',
         status: 'planned',
