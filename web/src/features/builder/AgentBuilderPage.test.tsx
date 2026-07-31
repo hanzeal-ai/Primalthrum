@@ -6,7 +6,6 @@ import { AgentBuilderPage } from './AgentBuilderPage'
 vi.mock('../../api/client', () => ({
   createProviderConfig: vi.fn(),
   createAgent: vi.fn(),
-  createDocument: vi.fn(),
   generateAgentProject: vi.fn(),
   indexDocument: vi.fn(),
   listCapabilities: vi.fn(),
@@ -23,6 +22,7 @@ vi.mock('../../api/client', () => ({
   ]),
   updateProviderConfig: vi.fn(),
   updateCapabilitySetting: vi.fn(),
+  uploadDocument: vi.fn(),
 }))
 
 describe('AgentBuilderPage', () => {

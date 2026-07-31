@@ -26,6 +26,7 @@ import type {
   StreamPayload,
   StreamResult,
   ToolInfo,
+  UploadDocumentInput,
   WorkspaceRecord,
 } from './types'
 
@@ -210,6 +211,26 @@ export async function createDocument(
   return apiFetch<DocumentRecord>(`/api/agents/${agentId}/documents`, {
     method: 'POST',
     body: JSON.stringify(input),
+  })
+}
+
+export async function uploadDocument(
+  agentId: number,
+  input: UploadDocumentInput,
+): Promise<DocumentRecord> {
+  const bytes = new TextEncoder().encode(input.content)
+  if (!bytes.length) throw new ApiError('文件不能为空。', 400, 'DOCUMENT_INVALID')
+  if (bytes.length > 2 * 1024 * 1024) {
+    throw new ApiError('文件不能超过 2 MiB。', 400, 'DOCUMENT_INVALID')
+  }
+  return apiFetch<DocumentRecord>(`/api/agents/${agentId}/documents/upload`, {
+    method: 'POST',
+    body: JSON.stringify({
+      filename: input.filename,
+      mimeType: input.mimeType,
+      dataBase64: bytesToBase64(bytes),
+      collection: input.collection,
+    }),
   })
 }
 
@@ -522,4 +543,13 @@ function authHeaders(
 
 function storeSessionToken(token: string): void {
   window.localStorage.setItem(SESSION_TOKEN_KEY, token)
+}
+
+function bytesToBase64(bytes: Uint8Array): string {
+  let binary = ''
+  const chunkSize = 32_768
+  for (let offset = 0; offset < bytes.length; offset += chunkSize) {
+    binary += String.fromCharCode(...bytes.subarray(offset, offset + chunkSize))
+  }
+  return window.btoa(binary)
 }

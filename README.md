@@ -34,6 +34,11 @@ Cache、RAG、STT 和 TTS 使用统一版本化 manifest；可用能力支持工
 启停，planned 能力保持只读。每次 Run 固化能力快照，因此设置变更只影响
 后续 Run。
 
+知识文件通过受控上传协议写入，当前支持 UTF-8 TXT、Markdown、JSON 和
+CSV。服务端在落库前校验扩展名与 MIME、Base64、内容格式和 2 MiB 上限，
+并记录规范 MIME 与字节数；浏览器端同时限制单次最多 4 个文件和 2 MiB
+总大小。
+
 ## 快速启动
 
 ```bash

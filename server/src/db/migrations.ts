@@ -60,6 +60,10 @@ export const MIGRATIONS: Migration[] = [
     id: '012_workspace_capabilities',
     up: applyWorkspaceCapabilities,
   },
+  {
+    id: '013_document_upload_metadata',
+    up: applyDocumentUploadMetadata,
+  },
 ];
 
 export function runMigrations(db: DatabaseAdapter): void {
@@ -543,6 +547,11 @@ function applyWorkspaceCapabilities(db: DatabaseAdapter): void {
       FOREIGN KEY(updated_by_user_id) REFERENCES users(id) ON DELETE SET NULL
     );
   `);
+}
+
+function applyDocumentUploadMetadata(db: DatabaseAdapter): void {
+  ensureColumn(db, 'documents', 'mime_type', `TEXT NOT NULL DEFAULT 'text/plain'`);
+  ensureColumn(db, 'documents', 'size_bytes', 'INTEGER NOT NULL DEFAULT 0');
 }
 
 function ensureColumn(

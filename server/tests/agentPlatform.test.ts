@@ -16,6 +16,7 @@ import { InProcessJobWorker } from '../src/services/inProcessJobWorker';
 import { JobRepository } from '../src/services/jobRepository';
 import { LocalDocumentStorage } from '../src/services/fileStorage';
 import { DocumentIndexRepository } from '../src/services/documentIndexRepository';
+import { parseDocumentUpload } from '../src/services/documentUpload';
 import { createBackup, restoreBackup } from '../src/services/backupService';
 import { type AgentConfig } from '../src/services/agentRepository';
 import { LocalSecretVault } from '../src/services/localSecretVault';
@@ -106,6 +107,46 @@ test('schema bootstrap creates the default local workspace', () => {
       `${tableName} should include workspace_id`,
     );
   }
+});
+
+test('document upload validation enforces type encoding content and size', () => {
+  const content = '{"name":"Primalthrum"}';
+  const parsed = parseDocumentUpload({
+    filename: 'config.json',
+    mimeType: 'application/json; charset=utf-8',
+    dataBase64: Buffer.from(content).toString('base64'),
+    collection: 'product',
+  });
+  assert.equal(parsed.content, content);
+  assert.equal(parsed.mimeType, 'application/json');
+  assert.equal(parsed.sizeBytes, Buffer.byteLength(content));
+  assert.equal(parsed.collection, 'product');
+
+  assert.throws(() => parseDocumentUpload({
+    filename: 'payload.exe',
+    mimeType: 'text/plain',
+    dataBase64: Buffer.from('unsafe').toString('base64'),
+  }), /not supported/);
+  assert.throws(() => parseDocumentUpload({
+    filename: 'guide.md',
+    mimeType: 'application/json',
+    dataBase64: Buffer.from('{}').toString('base64'),
+  }), /does not match/);
+  assert.throws(() => parseDocumentUpload({
+    filename: 'broken.json',
+    mimeType: 'application/json',
+    dataBase64: Buffer.from('{').toString('base64'),
+  }), /JSON document is invalid/);
+  assert.throws(() => parseDocumentUpload({
+    filename: 'bad.txt',
+    mimeType: 'text/plain',
+    dataBase64: 'not base64',
+  }), /dataBase64 is invalid/);
+  assert.throws(() => parseDocumentUpload({
+    filename: 'large.txt',
+    mimeType: 'text/plain',
+    dataBase64: Buffer.alloc(2 * 1024 * 1024 + 1, 65).toString('base64'),
+  }), /exceeds/);
 });
 
 test('schema migrations are ordered and idempotent', () => {
@@ -937,6 +978,8 @@ test('document APIs register and list agent document metadata', async () => {
     indexStatus: string;
     collection: string;
     storageRef: string;
+    mimeType: string;
+    sizeBytes: number;
   };
   assert.ok(document.id > 0);
   assert.equal(document.agentId, agent.id);
@@ -951,12 +994,57 @@ test('document APIs register and list agent document metadata', async () => {
     '# Guide\nUse this document for retrieval.',
   );
 
+  const uploadContent = 'topic,owner\nRAG,Platform';
+  const uploadResponse = await fetch(
+    `${baseUrl}/api/agents/${agent.id}/documents/upload`,
+    {
+      method: 'POST',
+      headers: jsonAuthHeaders(),
+      body: JSON.stringify({
+        filename: 'owners.csv',
+        mimeType: 'text/csv',
+        dataBase64: Buffer.from(uploadContent).toString('base64'),
+        collection: 'research',
+      }),
+    },
+  );
+  assert.equal(uploadResponse.status, 201);
+  const uploaded = await uploadResponse.json() as {
+    mimeType: string;
+    sizeBytes: number;
+    storageRef: string;
+  };
+  assert.equal(uploaded.mimeType, 'text/csv');
+  assert.equal(uploaded.sizeBytes, Buffer.byteLength(uploadContent));
+  assert.equal(
+    new LocalDocumentStorage(documentStorageDir).read(uploaded.storageRef),
+    uploadContent,
+  );
+
+  const rejectedUpload = await fetch(
+    `${baseUrl}/api/agents/${agent.id}/documents/upload`,
+    {
+      method: 'POST',
+      headers: jsonAuthHeaders(),
+      body: JSON.stringify({
+        filename: 'owners.csv',
+        mimeType: 'application/json',
+        dataBase64: Buffer.from(uploadContent).toString('base64'),
+      }),
+    },
+  );
+  assert.equal(rejectedUpload.status, 400);
+
   const listResponse = await fetch(`${baseUrl}/api/agents/${agent.id}/documents`, {
     headers: authHeaders,
   });
   assert.equal(listResponse.status, 200);
   const documents = await listResponse.json() as Array<typeof document>;
-  assert.deepEqual(documents, [document]);
+  assert.equal(documents.length, 2);
+  assert.deepEqual(documents[0], document);
+  assert.equal(documents[1]?.filename, 'owners.csv');
+  assert.equal(documents[1]?.mimeType, 'text/csv');
+  assert.equal(documents[1]?.sizeBytes, Buffer.byteLength(uploadContent));
 
   const indexResponse = await fetch(
     `${baseUrl}/api/agents/${agent.id}/documents/${document.id}/index`,

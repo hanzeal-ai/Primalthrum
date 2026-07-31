@@ -7,6 +7,8 @@ export interface CreateDocumentInput {
   filename: string;
   content?: string;
   collection?: string;
+  mimeType?: string;
+  sizeBytes?: number;
 }
 
 export interface DocumentRecord {
@@ -18,6 +20,8 @@ export interface DocumentRecord {
   indexStatus: string;
   collection: string;
   storageRef: string;
+  mimeType: string;
+  sizeBytes: number;
 }
 
 interface DocumentRow {
@@ -29,6 +33,8 @@ interface DocumentRow {
   status: string;
   collection: string;
   storage_ref: string;
+  mime_type: string;
+  size_bytes: number;
 }
 
 export class DocumentRepository {
@@ -43,7 +49,9 @@ export class DocumentRepository {
     const hash = hashDocumentIdentity({ agentId, filename, collection, content });
 
     this.db.run(`
-      INSERT INTO documents (agent_id, workspace_id, filename, hash, status, collection)
+      INSERT INTO documents (
+        agent_id, workspace_id, filename, hash, status, collection, mime_type, size_bytes
+      )
       VALUES (
         ${sqlValue(agentId)},
         (
@@ -54,12 +62,14 @@ export class DocumentRepository {
         ${sqlValue(filename)},
         ${sqlValue(hash)},
         'registered',
-        ${sqlValue(collection)}
+        ${sqlValue(collection)},
+        ${sqlValue(input.mimeType?.trim() || 'text/plain')},
+        ${sqlValue(normalizeSizeBytes(input.sizeBytes, content))}
       );
     `);
 
     const rows = this.db.query<DocumentRow>(`
-      SELECT id, agent_id, workspace_id, filename, hash, status, collection, storage_ref
+      SELECT ${DOCUMENT_COLUMNS}
       FROM documents
       WHERE agent_id = ${sqlValue(agentId)} AND hash = ${sqlValue(hash)}
       ORDER BY id DESC
@@ -73,7 +83,7 @@ export class DocumentRepository {
 
   listByAgent(agentId: number): DocumentRecord[] {
     return this.db.query<DocumentRow>(`
-      SELECT id, agent_id, workspace_id, filename, hash, status, collection, storage_ref
+      SELECT ${DOCUMENT_COLUMNS}
       FROM documents
       WHERE agent_id = ${sqlValue(agentId)}
       ORDER BY id ASC;
@@ -82,7 +92,7 @@ export class DocumentRepository {
 
   findByAgentDocument(agentId: number, documentId: number): DocumentRecord | null {
     const rows = this.db.query<DocumentRow>(`
-      SELECT id, agent_id, workspace_id, filename, hash, status, collection, storage_ref
+      SELECT ${DOCUMENT_COLUMNS}
       FROM documents
       WHERE agent_id = ${sqlValue(agentId)} AND id = ${sqlValue(documentId)}
       LIMIT 1;
@@ -98,7 +108,7 @@ export class DocumentRepository {
     `);
 
     const rows = this.db.query<DocumentRow>(`
-      SELECT id, agent_id, workspace_id, filename, hash, status, collection, storage_ref
+      SELECT ${DOCUMENT_COLUMNS}
       FROM documents
       WHERE agent_id = ${sqlValue(agentId)} AND id = ${sqlValue(documentId)}
       LIMIT 1;
@@ -140,6 +150,13 @@ function normalizeFilename(filename: unknown): string {
   return filename.trim();
 }
 
+function normalizeSizeBytes(value: unknown, content: string): number {
+  if (typeof value === 'undefined') return Buffer.byteLength(content, 'utf8');
+  const size = Number(value);
+  if (!Number.isInteger(size) || size < 0) throw new Error('document sizeBytes is invalid');
+  return size;
+}
+
 function hashDocumentIdentity(input: {
   agentId: number;
   filename: string;
@@ -161,5 +178,20 @@ function toDocumentRecord(row: DocumentRow): DocumentRecord {
     indexStatus: row.status,
     collection: row.collection,
     storageRef: row.storage_ref,
+    mimeType: row.mime_type,
+    sizeBytes: Number(row.size_bytes),
   };
 }
+
+const DOCUMENT_COLUMNS = [
+  'id',
+  'agent_id',
+  'workspace_id',
+  'filename',
+  'hash',
+  'status',
+  'collection',
+  'storage_ref',
+  'mime_type',
+  'size_bytes',
+].join(', ');

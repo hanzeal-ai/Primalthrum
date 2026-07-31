@@ -76,10 +76,20 @@ export interface DocumentRecord {
   hash: string
   indexStatus: string
   collection: string
+  storageRef: string
+  mimeType: string
+  sizeBytes: number
 }
 
 export interface CreateDocumentInput {
   filename: string
+  content: string
+  collection?: string
+}
+
+export interface UploadDocumentInput {
+  filename: string
+  mimeType: string
   content: string
   collection?: string
 }

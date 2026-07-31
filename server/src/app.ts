@@ -32,6 +32,7 @@ import {
   type CreateDocumentInput,
 } from './services/documentRepository';
 import { DocumentIndexRepository } from './services/documentIndexRepository';
+import { parseDocumentUpload } from './services/documentUpload';
 import { LocalDocumentStorage } from './services/fileStorage';
 import { checkServerReadiness } from './services/healthReadiness';
 import { JsonConsoleLogger, type StructuredLogger } from './services/logger';
@@ -257,7 +258,7 @@ export function createApp(options: AppOptions = {}): Koa {
 
     await next();
   });
-  app.use(bodyParser());
+  app.use(bodyParser({ jsonLimit: '3mb' }));
   app.use(async (ctx, next) => {
     const startedAt = Date.now();
     try {
@@ -690,16 +691,23 @@ export function createApp(options: AppOptions = {}): Koa {
 
     try {
       const input = ctx.request.body as CreateDocumentInput;
+      const content = typeof input.content === 'string' ? input.content : '';
+      const upload = parseDocumentUpload({
+        filename: input.filename,
+        mimeType: input.mimeType || 'text/plain',
+        dataBase64: Buffer.from(content, 'utf8').toString('base64'),
+        collection: input.collection,
+      });
       const created = documentRepository.create(
         agentId,
-        input,
+        upload,
       );
       const stored = documentStorage.save({
         workspaceId: created.workspaceId,
         agentId: created.agentId,
         documentId: created.id,
         filename: created.filename,
-        content: input.content ?? '',
+        content: upload.content,
       });
       const withStorage = documentRepository.attachStorageRef(
         agentId,
@@ -713,6 +721,36 @@ export function createApp(options: AppOptions = {}): Koa {
         status: 400,
         code: 'DOCUMENT_INVALID',
         message: error instanceof Error ? error.message : 'failed to register document',
+      });
+    }
+  });
+
+  router.post('/api/agents/:id/documents/upload', (ctx) => {
+    const agentId = Number(ctx.params.id);
+    if (!scopedAgent(ctx, agentId, 'agents.write')) return;
+
+    try {
+      const upload = parseDocumentUpload(ctx.request.body as Record<string, unknown>);
+      const created = documentRepository.create(agentId, upload);
+      const stored = documentStorage.save({
+        workspaceId: created.workspaceId,
+        agentId: created.agentId,
+        documentId: created.id,
+        filename: created.filename,
+        content: upload.content,
+      });
+      const withStorage = documentRepository.attachStorageRef(
+        agentId,
+        created.id,
+        stored.storageRef,
+      );
+      ctx.status = 201;
+      ctx.body = withStorage ?? created;
+    } catch (error) {
+      sendApiError(ctx, logger, {
+        status: 400,
+        code: 'DOCUMENT_INVALID',
+        message: error instanceof Error ? error.message : 'failed to upload document',
       });
     }
   });

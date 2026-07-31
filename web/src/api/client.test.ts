@@ -1,6 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
-import { replayAgentRun, streamAgentRun } from './client'
+import { replayAgentRun, streamAgentRun, uploadDocument } from './client'
 
 function streamResponse(body: string, headers: Record<string, string>): Response {
   return new Response(body, {
@@ -79,5 +79,38 @@ describe('stream client', () => {
     expect(result.lastEventId).toBe(13)
     const request = fetchMock.mock.calls[0]
     expect(new Headers(request[1]?.headers).get('Last-Event-ID')).toBe('12')
+  })
+
+  it('uploads UTF-8 document bytes through the bounded upload contract', async () => {
+    const record = {
+      id: 5,
+      agentId: 3,
+      workspaceId: 1,
+      filename: 'guide.md',
+      hash: 'a'.repeat(64),
+      indexStatus: 'registered',
+      collection: 'default',
+      storageRef: 'local://documents/guide.md',
+      mimeType: 'text/markdown',
+      sizeBytes: 7,
+    }
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValue(new Response(
+      JSON.stringify(record),
+      { status: 201, headers: { 'content-type': 'application/json' } },
+    ))
+
+    expect(await uploadDocument(3, {
+      filename: 'guide.md',
+      mimeType: 'text/markdown',
+      content: '# Guide',
+    })).toEqual(record)
+
+    const request = fetchMock.mock.calls[0]
+    const body = JSON.parse(String(request[1]?.body)) as Record<string, unknown>
+    expect(body).toEqual({
+      filename: 'guide.md',
+      mimeType: 'text/markdown',
+      dataBase64: window.btoa('# Guide'),
+    })
   })
 })

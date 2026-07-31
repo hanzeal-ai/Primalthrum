@@ -17,16 +17,21 @@ import { useEffect, useMemo, useRef, useState } from 'react'
 
 import {
   createAgent,
-  createDocument,
   generateAgentProject,
   indexDocument,
   listProviderConfigs,
+  uploadDocument,
 } from '../../api/client'
 import type { AgentRecord, AuthUser, ProviderConfigRecord } from '../../api/types'
 import { ChatComposer } from '../../components/chat/ChatComposer'
 import { Badge } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
 import { Progress } from '../../components/ui/progress'
+import {
+  prepareTextDocument,
+  type PreparedTextDocument,
+  validateDocumentBatch,
+} from '../../lib/documents'
 import { WorkspaceSwitcher } from '../workspaces/WorkspaceSwitcher'
 import { CapabilitySettingsPanel } from '../providers/CapabilitySettingsPanel'
 import { ProviderSettingsPanel } from '../providers/ProviderSettingsPanel'
@@ -39,10 +44,7 @@ interface BuilderMessage {
   content: string
 }
 
-interface DraftFile {
-  name: string
-  content: string
-}
+type DraftFile = PreparedTextDocument
 
 interface ModelChoice {
   label: string
@@ -181,10 +183,8 @@ export function AgentBuilderPage({ user, onLogout }: AgentBuilderPageProps) {
   async function addFiles(files: File[]) {
     setError('')
     try {
-      const loaded = await Promise.all(files.map(async (file) => ({
-        name: file.name,
-        content: await file.text(),
-      })))
+      const loaded = await Promise.all(files.map(prepareTextDocument))
+      validateDocumentBatch(draft.files, loaded)
       setDraft((current) => ({
         ...current,
         files: [...current.files, ...loaded],
@@ -240,8 +240,9 @@ export function AgentBuilderPage({ user, onLogout }: AgentBuilderPageProps) {
       })
 
       for (const file of draft.files) {
-        const document = await createDocument(created.id, {
+        const document = await uploadDocument(created.id, {
           filename: file.name,
+          mimeType: file.mimeType,
           content: file.content,
           collection: 'default',
         })

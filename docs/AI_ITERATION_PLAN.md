@@ -1761,11 +1761,21 @@ complete. Follow the same dependency and verification protocol used above.
 
 ### P17-03 Voice, Attachments, And Knowledge Ingestion
 
-- Status: Todo
+- Status: In Progress
 - Goal: Deliver recording, transcription, optional speech playback, secure file
   upload, document parsing, indexing, retrieval, and source rendering.
 - Dependencies: P17-02
 - Verification: browser permission, media, upload policy, worker, RAG, and mobile E2E.
+- Current evidence: P17-03A adds a bounded UTF-8 document upload contract for
+  TXT, Markdown, JSON, and CSV with extension/MIME matching, strict Base64,
+  JSON syntax, null-byte, empty-file, and 2 MiB validation before persistence.
+  Migration 013 stores canonical MIME and byte size. Builder uploads now use the
+  server contract instead of the legacy raw-content route; Builder and hosted
+  chat share client-side type, count, and aggregate-size validation. Server and
+  Web suites cover valid storage metadata, disguised types, malformed content,
+  oversize rejection, Base64 encoding, and prior document/index workflows.
+  Durable async indexing, embedding-backed retrieval, STT/TTS adapters, and full
+  browser media/upload E2E remain in P17-03B through P17-03D.
 
 ### P18-01 Plans, Trials, Entitlements, And Credit Ledger
 

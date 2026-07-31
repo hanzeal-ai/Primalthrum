@@ -30,6 +30,11 @@ import type {
   StreamPayload,
 } from '../../api/types'
 import { ChatComposer } from '../../components/chat/ChatComposer'
+import {
+  prepareTextDocument,
+  type PreparedTextDocument,
+  validateDocumentBatch,
+} from '../../lib/documents'
 import { Badge } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
 import { WorkspaceSwitcher } from '../workspaces/WorkspaceSwitcher'
@@ -52,10 +57,7 @@ interface ChatMessage {
   status?: 'streaming' | 'stopped' | 'error'
 }
 
-interface Attachment {
-  name: string
-  content: string
-}
+type Attachment = PreparedTextDocument
 
 interface ActivityItem {
   id: string
@@ -133,11 +135,14 @@ export function HostedAgentPage({
   }, [messages, slug])
 
   async function addAttachments(files: File[]) {
-    const loaded = await Promise.all(files.map(async (file) => ({
-      name: file.name,
-      content: await file.text(),
-    })))
-    setAttachments((current) => [...current, ...loaded])
+    setError('')
+    try {
+      const loaded = await Promise.all(files.map(prepareTextDocument))
+      validateDocumentBatch(attachments, loaded)
+      setAttachments((current) => [...current, ...loaded])
+    } catch (attachmentError) {
+      setError(errorMessage(attachmentError, '附件读取失败。'))
+    }
   }
 
   async function submit(promptOverride?: string) {
