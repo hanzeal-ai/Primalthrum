@@ -66,6 +66,8 @@ class StreamContractTest(unittest.TestCase):
                 "goal": "Create a research agent",
                 "agent": "ResearchAgent",
                 "tools": ["search", "files"],
+                "context": "The launch guide requires source citations.",
+                "sources": [{"title": "launch-guide.md", "documentId": 7}],
             },
         )
 
@@ -84,6 +86,13 @@ class StreamContractTest(unittest.TestCase):
         messages = sse_messages(response.text)
         delta = next(payload for event, payload in messages if event == "message.delta")
         self.assertEqual(delta["delta"], "mock response: Create a research agent")
+        completed = next(
+            payload for event, payload in messages if event == "message.completed"
+        )
+        self.assertEqual(
+            completed["sources"],
+            [{"title": "launch-guide.md", "documentId": 7}],
+        )
 
         payloads = sse_payloads(response.text)
         self.assertGreaterEqual(len(payloads), 5)

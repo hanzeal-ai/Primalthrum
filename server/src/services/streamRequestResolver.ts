@@ -9,6 +9,12 @@ export interface AgentStreamPayload {
   memory_provider: string;
   cache_provider: string;
   rag_provider: string;
+  context?: string;
+  sources?: Array<{
+    title: string;
+    documentId?: number;
+    chunkId?: string;
+  }>;
 }
 
 export interface ResolvedStreamRequest {

@@ -2,6 +2,8 @@ import type {
   AgentRecord,
   AuthCredentials,
   AuthResponse,
+  ConversationMessageRecord,
+  ConversationRecord,
   CreateAgentInput,
   CreateDocumentInput,
   CurrentSession,
@@ -15,6 +17,7 @@ import type {
   SkillInfo,
   StreamAgentRequest,
   StreamPayload,
+  StreamResult,
   ToolInfo,
 } from './types'
 
@@ -104,6 +107,21 @@ export async function getAgentBySlug(slug: string): Promise<AgentRecord> {
   return apiFetch<AgentRecord>(`/api/agents/slug/${encodeURIComponent(slug)}`)
 }
 
+export async function listConversations(agentId: number): Promise<ConversationRecord[]> {
+  return apiFetch<ConversationRecord[]>(`/api/agents/${agentId}/conversations`)
+}
+
+export async function createConversation(agentId: number, title = '新对话'): Promise<ConversationRecord> {
+  return apiFetch<ConversationRecord>(`/api/agents/${agentId}/conversations`, {
+    method: 'POST',
+    body: JSON.stringify({ title }),
+  })
+}
+
+export async function listConversationMessages(conversationId: number): Promise<ConversationMessageRecord[]> {
+  return apiFetch<ConversationMessageRecord[]>(`/api/conversations/${conversationId}/messages`)
+}
+
 export async function createAgent(input: CreateAgentInput): Promise<AgentRecord> {
   return apiFetch<AgentRecord>('/api/agents', {
     method: 'POST',
@@ -182,7 +200,7 @@ export async function streamAgentRun(
     signal?: AbortSignal
     onEvent: (event: ParsedSseEvent) => void
   },
-): Promise<void> {
+): Promise<StreamResult> {
   const response = await fetch(apiUrl('/api/stream'), {
     method: 'POST',
     credentials: 'include',
@@ -196,6 +214,10 @@ export async function streamAgentRun(
   }
 
   const reader = response.body.pipeThrough(new TextDecoderStream()).getReader()
+  const result: StreamResult = {
+    runId: positiveHeader(response.headers.get('x-primalthrum-run-id')),
+    conversationId: positiveHeader(response.headers.get('x-primalthrum-conversation-id')),
+  }
   let buffer = ''
 
   while (true) {
@@ -213,6 +235,13 @@ export async function streamAgentRun(
       }
     }
   }
+
+  return result
+}
+
+function positiveHeader(value: string | null): number | undefined {
+  const parsed = Number(value)
+  return Number.isInteger(parsed) && parsed > 0 ? parsed : undefined
 }
 
 interface ApiFetchInit extends RequestInit {

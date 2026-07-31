@@ -23,6 +23,8 @@ class AgentRequest(BaseModel):
     cache_provider: str = "memory"
     cache_path: str | None = None
     rag_provider: str = "null"
+    context: str = ""
+    sources: list[dict[str, Any]] = Field(default_factory=list)
 
 
 class AgentState(TypedDict):
@@ -31,6 +33,8 @@ class AgentState(TypedDict):
     tools: list[str]
     skills: list[str]
     runtime: dict[str, Any]
+    context: str
+    sources: list[dict[str, Any]]
     plan: list[str]
     artifacts: list[str]
     checks: list[str]
@@ -147,15 +151,13 @@ def respond(state: AgentState) -> dict[str, Any]:
             llm_provider=state["runtime"].get("llm_provider", "mock"),
         )
     )
-    answer = runtime.llm.chat(
-        [
-            {
-                "role": "system",
-                "content": f"You are {state['agent']}. Answer the user's request directly.",
-            },
-            {"role": "user", "content": state["goal"]},
-        ]
-    )
+    system_message = f"You are {state['agent']}. Answer the user's request directly."
+    if state["context"]:
+        system_message += f"\n\nUse this retrieved context and cite it when relevant:\n{state['context']}"
+    answer = runtime.llm.chat([
+        {"role": "system", "content": system_message},
+        {"role": "user", "content": state["goal"]},
+    ])
     return {
         "answer": answer,
         "message": "Generated assistant response",
@@ -219,6 +221,8 @@ async def stream_graph(request: AgentRequest) -> AsyncIterator[str]:
             "cache_path": request.cache_path,
             "rag_provider": request.rag_provider,
         },
+        "context": request.context.strip(),
+        "sources": request.sources,
         "plan": [],
         "artifacts": [],
         "checks": [],
@@ -262,6 +266,7 @@ async def stream_graph(request: AgentRequest) -> AsyncIterator[str]:
                         "node": node,
                         "agent": initial_state["agent"],
                         "message": answer,
+                        "sources": initial_state["sources"],
                         "status": "done",
                     },
                 )

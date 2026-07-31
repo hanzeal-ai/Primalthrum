@@ -1661,11 +1661,12 @@ complete. Follow the same dependency and verification protocol used above.
 - Required behavior: conversations, text, voice, attachments, stream rendering,
   sources, tool activity, stop/retry, errors, and history.
 - Verification: direct URL refresh, authenticated and audience access, stream E2E.
-- Current evidence: authenticated direct URL, local history restoration, text and
-  attachment input, voice control, canonical stream rendering, activity, stop,
-  retry, and error states are implemented. Browser E2E passed through the Node
-  proxy and LangGraph runtime. Server-persisted conversations, source rendering,
-  and unauthenticated audience policy remain open.
+- Current evidence: authenticated direct URL, server-persisted conversations,
+  text and attachment input, voice control, canonical stream rendering, RAG
+  source references, activity, stop, retry, and error states are implemented.
+  Browser E2E passed through indexed document retrieval, the Node proxy, and the
+  LangGraph runtime, including refresh restoration. Unauthenticated audience
+  access policy remains open.
 
 ### P16-01 Workspace Membership And RBAC
 

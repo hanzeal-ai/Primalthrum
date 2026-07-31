@@ -11,6 +11,11 @@ export interface DocumentIndexEntry {
   text: string;
 }
 
+export interface RagSearchResult extends DocumentIndexEntry {
+  title: string;
+  score: number;
+}
+
 interface DocumentIndexEntryRow {
   id: number;
   workspace_id: number;
@@ -18,6 +23,10 @@ interface DocumentIndexEntryRow {
   document_id: number;
   chunk_id: string;
   text: string;
+}
+
+interface RagSearchRow extends DocumentIndexEntryRow {
+  title: string;
 }
 
 export class DocumentIndexRepository {
@@ -69,6 +78,33 @@ export class DocumentIndexRepository {
     `).map(toDocumentIndexEntry);
   }
 
+  searchByAgent(agentId: number, query: string, limit = 3): RagSearchResult[] {
+    const queryTokens = tokens(query);
+    const rows = this.db.query<RagSearchRow>(`
+      SELECT
+        e.id,
+        e.workspace_id,
+        e.agent_id,
+        e.document_id,
+        e.chunk_id,
+        e.text,
+        d.filename AS title
+      FROM document_index_entries e
+      JOIN documents d ON d.id = e.document_id
+      WHERE e.agent_id = ${sqlValue(agentId)} AND d.status = 'indexed'
+      ORDER BY e.id ASC;
+    `);
+
+    return rows
+      .map((row) => ({
+        ...toDocumentIndexEntry(row),
+        title: row.title,
+        score: overlapScore(queryTokens, tokens(row.text)),
+      }))
+      .sort((left, right) => right.score - left.score || left.id - right.id)
+      .slice(0, Math.max(1, limit));
+  }
+
   private countByDocument(documentId: number): number {
     const rows = this.db.query<{ count: number }>(`
       SELECT COUNT(*) AS count
@@ -77,6 +113,21 @@ export class DocumentIndexRepository {
     `);
     return Number(rows[0]?.count ?? 0);
   }
+}
+
+function tokens(value: string): Set<string> {
+  const normalized = value.toLowerCase();
+  const words = normalized.match(/[a-z0-9]+/g) ?? [];
+  const cjk = normalized.match(/[\p{Script=Han}]/gu) ?? [];
+  return new Set([...words, ...cjk]);
+}
+
+function overlapScore(query: Set<string>, candidate: Set<string>): number {
+  let score = 0;
+  for (const token of query) {
+    if (candidate.has(token)) score += 1;
+  }
+  return score;
 }
 
 function chunkText(documentId: string, content: string): Array<{

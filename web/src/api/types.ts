@@ -98,6 +98,32 @@ export interface SkillInfo {
   rag: boolean
 }
 
+export interface SourceReference {
+  title: string
+  documentId?: number
+  chunkId?: string
+  url?: string
+}
+
+export interface ConversationRecord {
+  id: number
+  workspaceId: number
+  agentId: number
+  title: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface ConversationMessageRecord {
+  id: number
+  workspaceId: number
+  conversationId: number
+  role: 'user' | 'assistant' | 'system'
+  content: string
+  sources: SourceReference[]
+  createdAt: string
+}
+
 export interface StreamPayload {
   node?: string
   agent?: string
@@ -108,7 +134,7 @@ export interface StreamPayload {
   plan?: string[]
   artifacts?: string[]
   checks?: string[]
-  sources?: Array<{ title: string; url?: string }>
+  sources?: SourceReference[]
 }
 
 export interface ParsedSseEvent {
@@ -127,6 +153,12 @@ export interface LegacyStreamAgentRequest {
 export interface StoredAgentStreamRequest {
   agentId: number
   input: string
+  conversationId?: number
+}
+
+export interface StreamResult {
+  runId?: number
+  conversationId?: number
 }
 
 export interface AuthUser {

@@ -3,6 +3,8 @@ import Koa from 'koa';
 import { type StructuredLogger } from './logger';
 
 export type ErrorCode =
+  | 'CONVERSATION_AGENT_NOT_FOUND'
+  | 'CONVERSATION_NOT_FOUND'
   | 'DOCUMENT_AGENT_NOT_FOUND'
   | 'DOCUMENT_INVALID'
   | 'DOCUMENT_INDEX_FAILED'

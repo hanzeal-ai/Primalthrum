@@ -15,6 +15,7 @@ import { SqliteDatabase, sqlValue } from '../src/db/sqlite';
 import { InProcessJobWorker } from '../src/services/inProcessJobWorker';
 import { JobRepository } from '../src/services/jobRepository';
 import { LocalDocumentStorage } from '../src/services/fileStorage';
+import { DocumentIndexRepository } from '../src/services/documentIndexRepository';
 import { createBackup, restoreBackup } from '../src/services/backupService';
 
 const execFileAsync = promisify(execFile);
@@ -810,6 +811,12 @@ test('document APIs register and list agent document metadata', async () => {
     WHERE document_id = ${sqlValue(document.id)};
   `);
   assert.equal(Number(indexedEntries[0]?.count ?? 0), 1);
+  const matches = new DocumentIndexRepository(db).searchByAgent(
+    agent.id,
+    'Use the guide for retrieval',
+  );
+  assert.equal(matches[0]?.title, 'guide.md');
+  assert.ok((matches[0]?.score ?? 0) > 0);
 
   const reindexResponse = await fetch(
     `${baseUrl}/api/agents/${agent.id}/documents/${document.id}/index`,

@@ -36,6 +36,8 @@ before(async () => {
       res.write('data: {"node":"intake","message":"accepted"}\n\n');
       res.write('event: agent.tool.called\n');
       res.write('data: {"node":"act_with_tools","tool":"file_reader","status":"allowed","dangerous":false,"message":"file_reader executed"}\n\n');
+      res.write('event: message.completed\n');
+      res.write('data: {"node":"respond","message":"Saved assistant response","sources":[{"title":"guide.md"}],"status":"done"}\n\n');
       res.write('event: agent.run.completed\n');
       res.end('data: {"status":"done","agent":"TestAgent"}\n\n');
       return;
@@ -125,7 +127,9 @@ test('POST /api/stream can run by agentId and persist proxied events', async () 
 
   assert.equal(response.status, 200);
   const runId = Number(response.headers.get('x-primalthrum-run-id'));
+  const conversationId = Number(response.headers.get('x-primalthrum-conversation-id'));
   assert.ok(runId > 0);
+  assert.ok(conversationId > 0);
   const body = await response.text();
   assert.match(body, /event: agent\.node\.completed/);
   assert.equal(upstreamPayloads.length, 1);
@@ -160,12 +164,45 @@ test('POST /api/stream can run by agentId and persist proxied events', async () 
     'agent.run.started',
     'agent.node.completed',
     'agent.tool.called',
+    'message.completed',
     'agent.run.completed',
   ]);
   assert.equal(events[0]?.node, 'run');
   assert.equal(events[1]?.node, 'intake');
   assert.equal(events[2]?.node, 'act_with_tools');
-  assert.equal(events[3]?.payload.status, 'done');
+  assert.equal(events[3]?.payload.message, 'Saved assistant response');
+  assert.equal(events[4]?.payload.status, 'done');
+
+  const conversationsResponse = await fetch(
+    `${appBaseUrl}/api/agents/${agent.id}/conversations`,
+    { headers: authHeaders },
+  );
+  assert.equal(conversationsResponse.status, 200);
+  const conversations = await conversationsResponse.json() as Array<{ id: number }>;
+  assert.equal(conversations[0]?.id, conversationId);
+
+  const messagesResponse = await fetch(
+    `${appBaseUrl}/api/conversations/${conversationId}/messages`,
+    { headers: authHeaders },
+  );
+  assert.equal(messagesResponse.status, 200);
+  const messages = await messagesResponse.json() as Array<{
+    role: string;
+    content: string;
+    sources: Array<{ title: string }>;
+  }>;
+  assert.deepEqual(messages.map((message) => ({
+    role: message.role,
+    content: message.content,
+    sources: message.sources,
+  })), [
+    { role: 'user', content: 'Use the saved agent config', sources: [] },
+    {
+      role: 'assistant',
+      content: 'Saved assistant response',
+      sources: [{ title: 'guide.md' }],
+    },
+  ]);
 
   const auditResponse = await fetch(`${appBaseUrl}/api/audit/tool-calls?runId=${runId}`, {
     headers: authHeaders,

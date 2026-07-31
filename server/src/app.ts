@@ -8,6 +8,10 @@ import { generateAgentProject } from './generators/agentProjectGenerator';
 import { AgentRepository, type CreateAgentInput } from './services/agentRepository';
 import { sendApiError } from './services/apiErrors';
 import {
+  ConversationRepository,
+  type ConversationSource,
+} from './services/conversationRepository';
+import {
   clearSessionCookie,
   createAuthMiddleware,
   extractSessionToken,
@@ -99,6 +103,7 @@ export function createApp(options: AppOptions = {}): Koa {
   const streamEventRepository = new StreamEventRepository(db);
   const documentRepository = new DocumentRepository(db);
   const documentIndexRepository = new DocumentIndexRepository(db);
+  const conversationRepository = new ConversationRepository(db);
   const documentStorage = new LocalDocumentStorage(
     options.documentStorageDir ?? DEFAULT_DOCUMENT_STORAGE_DIR,
   );
@@ -435,6 +440,48 @@ export function createApp(options: AppOptions = {}): Koa {
     };
   });
 
+  router.get('/api/agents/:id/conversations', (ctx) => {
+    const agentId = Number(ctx.params.id);
+    if (!agentRepository.findById(agentId)) {
+      sendApiError(ctx, logger, {
+        status: 404,
+        code: 'CONVERSATION_AGENT_NOT_FOUND',
+        message: 'agent not found',
+      });
+      return;
+    }
+    ctx.body = conversationRepository.listByAgent(agentId);
+  });
+
+  router.post('/api/agents/:id/conversations', (ctx) => {
+    const agentId = Number(ctx.params.id);
+    if (!agentRepository.findById(agentId)) {
+      sendApiError(ctx, logger, {
+        status: 404,
+        code: 'CONVERSATION_AGENT_NOT_FOUND',
+        message: 'agent not found',
+      });
+      return;
+    }
+    const body = ctx.request.body as { title?: unknown };
+    const title = typeof body.title === 'string' ? body.title : '新对话';
+    ctx.status = 201;
+    ctx.body = conversationRepository.create(agentId, title);
+  });
+
+  router.get('/api/conversations/:id/messages', (ctx) => {
+    const conversationId = Number(ctx.params.id);
+    if (!conversationRepository.findById(conversationId)) {
+      sendApiError(ctx, logger, {
+        status: 404,
+        code: 'CONVERSATION_NOT_FOUND',
+        message: 'conversation not found',
+      });
+      return;
+    }
+    ctx.body = conversationRepository.listMessages(conversationId);
+  });
+
   router.get('/api/providers', (ctx) => {
     ctx.body = listProviders();
   });
@@ -629,13 +676,59 @@ export function createApp(options: AppOptions = {}): Koa {
     ctx.req.on('close', () => abortController.abort());
 
     try {
+      const body = ctx.request.body as Record<string, unknown>;
       const streamRequest = resolveStreamRequest(
-        ctx.request.body,
+        body,
         agentRepository,
         runRepository,
       );
+      let conversationId: number | null = null;
       if (streamRequest.runId) {
+        const agentId = Number(body.agentId);
+        const requestedConversationId = parseOptionalPositiveInteger(body.conversationId);
+        if (requestedConversationId === null) {
+          throw new StreamRequestError(400, 'conversationId must be a positive integer');
+        }
+
+        let conversation = requestedConversationId
+          ? conversationRepository.findById(requestedConversationId)
+          : null;
+        if (conversation && conversation.agentId !== agentId) {
+          throw new StreamRequestError(404, 'conversation not found for agent');
+        }
+        if (!conversation) {
+          conversation = conversationRepository.create(
+            agentId,
+            String(body.input ?? '').slice(0, 120),
+          );
+        }
+        conversationId = conversation.id;
+        conversationRepository.addMessage({
+          conversationId,
+          role: 'user',
+          content: String(body.input ?? ''),
+        });
+
+        const agent = agentRepository.findById(agentId);
+        if (agent && !['none', 'null'].includes(agent.config.ragProvider)) {
+          const matches = documentIndexRepository.searchByAgent(
+            agentId,
+            String(body.input ?? ''),
+          );
+          if (matches.length) {
+            streamRequest.payload.context = matches
+              .map((match) => `[${match.title}] ${match.text}`)
+              .join('\n\n');
+            streamRequest.payload.sources = matches.map((match) => ({
+              title: match.title,
+              documentId: match.documentId,
+              chunkId: match.chunkId,
+            }));
+          }
+        }
+
         streamHeaders['X-Primalthrum-Run-Id'] = String(streamRequest.runId);
+        streamHeaders['X-Primalthrum-Conversation-Id'] = String(conversationId);
       }
 
       ctx.res.writeHead(200, streamHeaders);
@@ -669,6 +762,18 @@ export function createApp(options: AppOptions = {}): Koa {
               payload: event.payload,
             });
             toolAuditRepository.recordStreamEvent(created);
+            if (
+              conversationId
+              && event.eventType === 'message.completed'
+              && typeof event.payload.message === 'string'
+            ) {
+              conversationRepository.addMessage({
+                conversationId,
+                role: 'assistant',
+                content: event.payload.message,
+                sources: conversationSourcesFromPayload(event.payload.sources),
+              });
+            }
           }
         : undefined);
     } catch (error) {
@@ -706,4 +811,19 @@ export function createApp(options: AppOptions = {}): Koa {
   app.use(router.allowedMethods());
 
   return app;
+}
+
+function conversationSourcesFromPayload(value: unknown): ConversationSource[] {
+  if (!Array.isArray(value)) return [];
+  return value.flatMap((candidate) => {
+    if (!candidate || typeof candidate !== 'object') return [];
+    const source = candidate as Record<string, unknown>;
+    if (typeof source.title !== 'string' || !source.title.trim()) return [];
+    return [{
+      title: source.title.trim(),
+      documentId: typeof source.documentId === 'number' ? source.documentId : undefined,
+      chunkId: typeof source.chunkId === 'string' ? source.chunkId : undefined,
+      url: typeof source.url === 'string' ? source.url : undefined,
+    }];
+  });
 }

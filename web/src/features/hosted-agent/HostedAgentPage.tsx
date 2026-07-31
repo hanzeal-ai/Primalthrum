@@ -10,8 +10,20 @@ import {
 } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 
-import { getAgentBySlug, streamAgentRun } from '../../api/client'
-import type { AgentRecord, AuthUser, StreamPayload } from '../../api/types'
+import {
+  createConversation,
+  getAgentBySlug,
+  listConversationMessages,
+  listConversations,
+  streamAgentRun,
+} from '../../api/client'
+import type {
+  AgentRecord,
+  AuthUser,
+  ConversationMessageRecord,
+  SourceReference,
+  StreamPayload,
+} from '../../api/types'
 import { ChatComposer } from '../../components/chat/ChatComposer'
 import { Badge } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
@@ -26,6 +38,7 @@ interface ChatMessage {
   id: string
   role: 'assistant' | 'user'
   content: string
+  sources?: SourceReference[]
   status?: 'streaming' | 'stopped' | 'error'
 }
 
@@ -43,6 +56,7 @@ interface ActivityItem {
 export function HostedAgentPage({ slug, user, onBack }: HostedAgentPageProps) {
   const [agent, setAgent] = useState<AgentRecord | null>(null)
   const [messages, setMessages] = useState<ChatMessage[]>(() => loadMessages(slug))
+  const [conversationId, setConversationId] = useState<number | null>(null)
   const [activities, setActivities] = useState<ActivityItem[]>([])
   const [attachments, setAttachments] = useState<Attachment[]>([])
   const [input, setInput] = useState('')
@@ -53,13 +67,37 @@ export function HostedAgentPage({ slug, user, onBack }: HostedAgentPageProps) {
   const messageEndRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
-    void getAgentBySlug(slug)
-      .then((record) => {
+    let active = true
+
+    async function loadAgent() {
+      try {
+        const record = await getAgentBySlug(slug)
+        if (!active) return
         setAgent(record)
-        setMessages((current) => current.length ? current : [welcomeMessage(record)])
-      })
-      .catch((loadError) => setError(errorMessage(loadError, '无法打开这个 Agent。')))
-      .finally(() => setLoading(false))
+
+        try {
+          const conversations = await listConversations(record.id)
+          const conversation = conversations[0] ?? await createConversation(record.id)
+          const history = await listConversationMessages(conversation.id)
+          if (!active) return
+          setConversationId(conversation.id)
+          setMessages(history.length ? history.map(toChatMessage) : [welcomeMessage(record)])
+        } catch (historyError) {
+          if (!active) return
+          setMessages((current) => current.length ? current : [welcomeMessage(record)])
+          setError(errorMessage(historyError, '服务端历史暂不可用，当前对话将保存在浏览器。'))
+        }
+      } catch (loadError) {
+        if (active) setError(errorMessage(loadError, '无法打开这个 Agent。'))
+      } finally {
+        if (active) setLoading(false)
+      }
+    }
+
+    void loadAgent()
+    return () => {
+      active = false
+    }
   }, [slug])
 
   useEffect(() => {
@@ -101,8 +139,12 @@ export function HostedAgentPage({ slug, user, onBack }: HostedAgentPageProps) {
     ])
 
     try {
-      await streamAgentRun(
-        { agentId: agent.id, input: `${prompt}${attachmentContext}` },
+      const result = await streamAgentRun(
+        {
+          agentId: agent.id,
+          input: `${prompt}${attachmentContext}`,
+          conversationId: conversationId ?? undefined,
+        },
         {
           signal: controller.signal,
           onEvent: ({ event, data }) => {
@@ -115,7 +157,12 @@ export function HostedAgentPage({ slug, user, onBack }: HostedAgentPageProps) {
 
             if (event === 'message.completed') {
               setMessages((current) => current.map((item) => item.id === assistantId
-                ? { ...item, content: item.content || data.message || '', status: undefined }
+                ? {
+                    ...item,
+                    content: item.content || data.message || '',
+                    sources: data.sources,
+                    status: undefined,
+                  }
                 : item))
               return
             }
@@ -133,6 +180,7 @@ export function HostedAgentPage({ slug, user, onBack }: HostedAgentPageProps) {
           },
         },
       )
+      if (result.conversationId) setConversationId(result.conversationId)
 
       if (streamError) throw new Error(streamError)
       setMessages((current) => current.map((item) => item.id === assistantId
@@ -159,12 +207,18 @@ export function HostedAgentPage({ slug, user, onBack }: HostedAgentPageProps) {
     if (latest) void submit(latest.content)
   }
 
-  function clearConversation() {
+  async function clearConversation() {
     if (!agent) return
-    window.localStorage.removeItem(historyKey(slug))
-    setMessages([welcomeMessage(agent)])
-    setActivities([])
-    setError('')
+    try {
+      const conversation = await createConversation(agent.id)
+      setConversationId(conversation.id)
+      window.localStorage.removeItem(historyKey(slug))
+      setMessages([welcomeMessage(agent)])
+      setActivities([])
+      setError('')
+    } catch (createError) {
+      setError(errorMessage(createError, '新建对话失败。'))
+    }
   }
 
   if (loading) {
@@ -196,7 +250,7 @@ export function HostedAgentPage({ slug, user, onBack }: HostedAgentPageProps) {
           <p className="truncate text-xs text-zinc-500">{agent.description || 'Primalthrum Agent'}</p>
         </div>
         <span className="hidden text-xs text-zinc-500 sm:block">{user.email}</span>
-        <Button aria-label="清空对话" onClick={clearConversation} size="icon" title="清空对话" variant="ghost"><RotateCcw /></Button>
+        <Button aria-label="新建对话" onClick={() => void clearConversation()} size="icon" title="新建对话" variant="ghost"><RotateCcw /></Button>
       </header>
 
       <section className="hosted-chat">
@@ -209,6 +263,20 @@ export function HostedAgentPage({ slug, user, onBack }: HostedAgentPageProps) {
                   {item.content || <span className="inline-flex items-center gap-2 text-zinc-500"><Loader2 className="size-3 animate-spin" />正在生成</span>}
                 </div>
                 {item.status ? <p className="mt-1 text-xs text-zinc-400">{statusLabel(item.status)}</p> : null}
+                {item.sources?.length ? (
+                  <div className="hosted-sources">
+                    <span>来源</span>
+                    {item.sources.map((source) => source.url ? (
+                      <a href={source.url} key={`${source.title}:${source.chunkId ?? ''}`} rel="noreferrer" target="_blank">
+                        <FileText />{source.title}
+                      </a>
+                    ) : (
+                      <span className="hosted-source" key={`${source.title}:${source.chunkId ?? ''}`}>
+                        <FileText />{source.title}
+                      </span>
+                    ))}
+                  </div>
+                ) : null}
               </div>
             </div>
           ))}
@@ -282,6 +350,15 @@ function loadMessages(slug: string): ChatMessage[] {
     return saved ? JSON.parse(saved) as ChatMessage[] : []
   } catch {
     return []
+  }
+}
+
+function toChatMessage(message: ConversationMessageRecord): ChatMessage {
+  return {
+    id: String(message.id),
+    role: message.role === 'user' ? 'user' : 'assistant',
+    content: message.content,
+    sources: message.sources,
   }
 }
 

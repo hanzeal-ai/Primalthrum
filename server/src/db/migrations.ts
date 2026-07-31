@@ -40,6 +40,10 @@ export const MIGRATIONS: Migration[] = [
     id: '007_document_index_entries',
     up: applyDocumentIndexEntries,
   },
+  {
+    id: '008_conversations',
+    up: applyConversations,
+  },
 ];
 
 export function runMigrations(db: DatabaseAdapter): void {
@@ -270,6 +274,33 @@ function applyDocumentIndexEntries(db: DatabaseAdapter): void {
       FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
       FOREIGN KEY(agent_id) REFERENCES agents(id) ON DELETE CASCADE,
       FOREIGN KEY(document_id) REFERENCES documents(id) ON DELETE CASCADE
+    );
+  `);
+}
+
+function applyConversations(db: DatabaseAdapter): void {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS conversations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL DEFAULT ${DEFAULT_WORKSPACE_ID},
+      agent_id INTEGER NOT NULL,
+      title TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+      FOREIGN KEY(agent_id) REFERENCES agents(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS conversation_messages (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL DEFAULT ${DEFAULT_WORKSPACE_ID},
+      conversation_id INTEGER NOT NULL,
+      role TEXT NOT NULL,
+      content TEXT NOT NULL,
+      sources_json TEXT NOT NULL DEFAULT '[]',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+      FOREIGN KEY(conversation_id) REFERENCES conversations(id) ON DELETE CASCADE
     );
   `);
 }
