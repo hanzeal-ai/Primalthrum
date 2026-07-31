@@ -147,10 +147,16 @@ scripts/commercial-smoke.sh
 - `GET/POST /api/workspaces/:id/invitations`：读取或创建受席位限制的邀请。
 - `DELETE /api/workspaces/:id/invitations/:invitationId`：撤销待处理邀请。
 - `POST /api/invitations/accept`：接受一次性邀请并建立工作区会话。
+- `GET/POST /api/settings/api-keys`：读取或创建作用域受限的 Workspace API Key。
+- `DELETE /api/settings/api-keys/:id`：立即撤销 API Key。
+- `GET /api/settings/sessions`：读取当前账号的有效登录会话。
+- `DELETE /api/settings/sessions/:id`：退出指定的其他会话。
+- `POST /api/settings/sessions/revoke-others`：退出当前账号的全部其他会话。
 
 账本生命周期与不变量见 [Billing Entitlements And Credit Ledger](docs/BILLING_LEDGER.md)。
 Stripe 配置、Webhook 和沙箱发布门禁见 [Stripe Payments And Subscription Lifecycle](docs/STRIPE_PAYMENTS.md)。
 版本化计量价格、供应商成本与预算控制见 [Usage Rating And Cost Controls](docs/USAGE_RATING.md)。
+API Key 和登录会话安全契约见 [API Keys And Session Security](docs/API_KEYS_AND_SESSIONS.md)。
 
 分段执行：
 

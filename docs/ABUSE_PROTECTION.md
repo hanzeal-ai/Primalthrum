@@ -41,6 +41,7 @@ Allow these Turnstile origins in the production Content Security Policy:
 | Verification resend | IP and user | 10/hour and 5/hour |
 | Password recovery | IP and normalized email HMAC | 10/hour and 3/hour |
 | Invitation acceptance | IP and invitation token SHA-256 | 20/15 min and 10/15 min |
+| API Key creation | User | 10/hour |
 | Public Agent page | IP | 120/min |
 | Public Agent stream | IP and IP+Agent | 10/min and 30/hour, plus Turnstile |
 | Authenticated stream | User | 120/hour |

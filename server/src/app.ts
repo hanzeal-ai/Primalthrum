@@ -73,7 +73,6 @@ import {
   normalizeEmail,
   UserRepository,
 } from './services/userRepository';
-import { hasWorkspacePermission, type WorkspacePermission } from './services/workspaceAuthorization';
 import { WorkspaceRepository } from './services/workspaceRepository';
 import { LocalSecretVault } from './services/localSecretVault';
 import { RuntimeProviderResolver } from './services/runtimeProviderResolver';
@@ -108,6 +107,13 @@ import { AbuseProtectionService } from './services/abuseProtection';
 import { AbuseProtectionRepository } from './services/abuseProtectionRepository';
 import { type BotChallengeVerifier } from './services/botChallengeVerifier';
 import { registerAbuseRoutes } from './routes/abuseRoutes';
+import { registerSecuritySettingsRoutes } from './routes/securitySettingsRoutes';
+import { ApiKeyRepository } from './services/apiKeyRepository';
+import {
+  apiKeyScopeForPermission,
+  hasWorkspacePermission,
+  type WorkspacePermission,
+} from './services/workspaceAuthorization';
 
 export interface AppOptions {
   agentBaseUrl?: string;
@@ -234,6 +240,7 @@ export function createApp(options: AppOptions = {}): Koa {
   const userRepository = new UserRepository(db);
   const workspaceRepository = new WorkspaceRepository(db);
   const sessionRepository = new SessionRepository(db);
+  const apiKeyRepository = new ApiKeyRepository(db);
   const providerConfigRepository = new ProviderConfigRepository(db);
   const runtimeProviderResolver = new RuntimeProviderResolver(
     providerConfigRepository,
@@ -402,6 +409,16 @@ export function createApp(options: AppOptions = {}): Koa {
   jobDispatcher.resume();
 
   function authorize(ctx: Koa.Context, permission: WorkspacePermission): boolean {
+    if (ctx.state.apiKey) {
+      const requiredScope = apiKeyScopeForPermission(permission);
+      if (requiredScope && ctx.state.apiKey.scopes.includes(requiredScope)) return true;
+      sendApiError(ctx, logger, {
+        status: 403,
+        code: 'API_KEY_SCOPE_FORBIDDEN',
+        message: `API key scope ${requiredScope ?? 'unavailable'} is required`,
+      });
+      return false;
+    }
     const role = ctx.state.authSession?.user.role;
     if (typeof role === 'string' && hasWorkspacePermission(role, permission)) {
       return true;
@@ -534,6 +551,15 @@ export function createApp(options: AppOptions = {}): Koa {
     metrics,
   });
   registerAbuseRoutes(router, { turnstileSiteKey: options.botChallengeSiteKey });
+  registerSecuritySettingsRoutes(router, {
+    apiKeys: apiKeyRepository,
+    authorize,
+    currentUserId,
+    currentWorkspaceId,
+    logger,
+    sessions: sessionRepository,
+    users: userRepository,
+  });
 
   app.use(async (ctx, next) => {
     const origin = ctx.get('origin');
@@ -571,7 +597,7 @@ export function createApp(options: AppOptions = {}): Koa {
       });
     }
   });
-  app.use(createAuthMiddleware(sessionRepository));
+  app.use(createAuthMiddleware(sessionRepository, apiKeyRepository));
   app.use(async (ctx, next) => {
     if (await abuseProtection.enforce(ctx, logger, metrics)) await next();
   });

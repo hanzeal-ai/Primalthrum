@@ -12,6 +12,7 @@ import {
   MessageSquare,
   Plus,
   RotateCcw,
+  ShieldCheck,
   Settings,
   Sparkles,
   Users,
@@ -348,6 +349,7 @@ export function AgentBuilderPage({ user, onLogout }: AgentBuilderPageProps) {
           <div className="flex items-center gap-1">
             <WorkspaceSwitcher user={user} />
             <Button asChild className="md:hidden" size="icon" title="团队" variant="ghost"><a aria-label="团队" href="/app/team"><Users /></a></Button>
+            <Button asChild className="md:hidden" size="icon" title="设置与安全" variant="ghost"><a aria-label="设置与安全" href="/app/settings"><ShieldCheck /></a></Button>
             {canReadBilling(user.role) ? <>
               <Button asChild className="md:hidden" size="icon" title="用量" variant="ghost"><a aria-label="用量" href="/app/usage"><BarChart3 /></a></Button>
               <Button asChild className="md:hidden" size="icon" title="账单" variant="ghost"><a aria-label="账单" href="/app/billing"><CreditCard /></a></Button>
@@ -549,6 +551,7 @@ function NavigationRail({ user, onLogout, onOpenProviderSettings, onReset }: {
         <Button size="icon" title="新建 Agent" variant="outline" onClick={onReset}><Plus /></Button>
         <Button className="bg-blue-50 text-blue-700" size="icon" title="对话" variant="ghost"><MessageSquare /></Button>
         <Button asChild size="icon" title="团队" variant="ghost"><a aria-label="团队" href="/app/team"><Users /></a></Button>
+        <Button asChild size="icon" title="设置与安全" variant="ghost"><a aria-label="设置与安全" href="/app/settings"><ShieldCheck /></a></Button>
         {canReadBilling(user.role) ? <>
           <Button asChild size="icon" title="用量" variant="ghost"><a aria-label="用量" href="/app/usage"><BarChart3 /></a></Button>
           <Button asChild size="icon" title="账单" variant="ghost"><a aria-label="账单" href="/app/billing"><CreditCard /></a></Button>

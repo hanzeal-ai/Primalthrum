@@ -3,10 +3,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   acceptWorkspaceInvitation,
   createBillingCheckout,
+  createWorkspaceApiKey,
   createWorkspaceInvitation,
   indexDocument,
   replayAgentRun,
   registerAccount,
+  revokeOtherSecuritySessions,
   streamAgentRun,
   streamPublicAgentRun,
   synthesizeSpeech,
@@ -262,5 +264,29 @@ describe('stream client', () => {
       email: 'member@example.com', role: 'member',
     })
     expect(window.localStorage.getItem('primalthrum.sessionToken')).toBe('invited-session')
+  })
+
+  it('creates scoped API keys and revokes other sessions through security settings', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch')
+      .mockResolvedValueOnce(new Response(JSON.stringify({
+        id: 4, name: 'Production', token: 'ptk_prefix_secret',
+        scopes: ['agents:read', 'agents:run'], expiresAt: '2026-10-29T00:00:00.000Z',
+      }), { status: 201, headers: { 'content-type': 'application/json' } }))
+      .mockResolvedValueOnce(new Response(JSON.stringify({ revoked: 2 }), {
+        status: 200, headers: { 'content-type': 'application/json' },
+      }))
+
+    await createWorkspaceApiKey({
+      name: 'Production', scopes: ['agents:read', 'agents:run'],
+      expiresInDays: 90, password: 'current password value',
+    })
+    expect(await revokeOtherSecuritySessions()).toEqual({ revoked: 2 })
+
+    expect(fetchMock.mock.calls[0]?.[0]).toContain('/api/settings/api-keys')
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      name: 'Production', scopes: ['agents:read', 'agents:run'],
+      expiresInDays: 90, password: 'current password value',
+    })
+    expect(fetchMock.mock.calls[1]?.[0]).toContain('/api/settings/sessions/revoke-others')
   })
 })

@@ -290,6 +290,35 @@ export interface AuthResponse {
   emailVerified: boolean
 }
 
+export type ApiKeyScope = 'agents:read' | 'agents:write' | 'agents:run' | 'agents:publish'
+
+export interface WorkspaceApiKeyRecord {
+  id: number
+  workspaceId: number
+  name: string
+  keyPrefix: string
+  scopes: ApiKeyScope[]
+  createdByUserId: number | null
+  expiresAt: string
+  lastUsedAt: string | null
+  lastUsedMethod: string
+  lastUsedPath: string
+  revokedAt: string | null
+  createdAt: string
+}
+
+export interface CreatedWorkspaceApiKey extends WorkspaceApiKeyRecord {
+  token: string
+}
+
+export interface SessionSecurityRecord {
+  id: number
+  current: boolean
+  expiresAt: string
+  lastSeenAt: string
+  createdAt: string
+}
+
 export interface RegistrationInput extends AuthCredentials {
   workspaceName: string
   planKey: 'free' | 'pro'

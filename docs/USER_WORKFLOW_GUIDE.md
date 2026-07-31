@@ -74,6 +74,20 @@ recipient into the invited Workspace. Invitation links expire after seven days,
 can be accepted once, and are rate-limited. Owners cannot be changed or removed,
 and administrators cannot change their own role or remove themselves.
 
+## API Keys And Login Sessions
+
+Open `/app/settings` to inspect active login Sessions. Any user can exit one
+other Session or all other Sessions while keeping the current Session active.
+Owner and Admin can also create Workspace API Keys. Enter a name, choose the
+smallest required Agent scopes, select an expiry, and confirm the current
+password. Copy the Key immediately because its plaintext is displayed once.
+The existing-Key list shows prefix, scopes, expiry, last use, and revocation
+state. Revocation takes effect on the next API request.
+
+API Keys are for server integrations and can authenticate only Agent, run,
+conversation, job, and stream routes. They cannot access billing, members,
+Providers, account, Workspace, or settings APIs.
+
 ## Generated Agent
 
 After creating an agent, generate the standalone project. The generated project includes a LangGraph skeleton, provider folders, and a demo test path.

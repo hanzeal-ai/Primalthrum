@@ -14,6 +14,7 @@ import { PublicHomePage } from './features/marketing/PublicHomePage'
 import { PublicInfoPage } from './features/marketing/PublicInfoPage'
 import { PublicPricingPage } from './features/marketing/PublicPricingPage'
 import { SignupPage } from './features/onboarding/SignupPage'
+import { SecuritySettingsPage } from './features/settings/SecuritySettingsPage'
 import { InvitationAcceptPage } from './features/team/InvitationAcceptPage'
 import { TeamPage } from './features/team/TeamPage'
 import { canReadBilling } from './lib/workspacePermissions'
@@ -148,6 +149,10 @@ export default function App() {
 
   if (pathname === '/app/team') {
     return <TeamPage user={auth.user} onLogout={auth.logout} />
+  }
+
+  if (pathname === '/app/settings') {
+    return <SecuritySettingsPage user={auth.user} onLogout={auth.logout} />
   }
 
   if (pathname === '/app/usage') {

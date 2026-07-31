@@ -1,5 +1,6 @@
 import Koa from 'koa';
 
+import { ApiKeyRepository, type ApiKeyScope } from './apiKeyRepository';
 import {
   SessionRepository,
   type AuthenticatedSession,
@@ -8,12 +9,14 @@ import {
 export const SESSION_COOKIE_NAME = 'primalthrum_session';
 
 export interface AuthContextState {
+  apiKey?: { id: number; keyPrefix: string; scopes: ApiKeyScope[] };
   authSession?: AuthenticatedSession;
   sessionToken?: string;
 }
 
 export function createAuthMiddleware(
   sessions: SessionRepository,
+  apiKeys?: ApiKeyRepository,
 ): Koa.Middleware<Koa.DefaultState & AuthContextState> {
   return async (ctx, next) => {
     if (isPublicRequest(ctx)) {
@@ -29,6 +32,35 @@ export function createAuthMiddleware(
     }
 
     const session = sessions.findByToken(token);
+    if (!session && apiKeys) {
+      const apiKey = apiKeys.resolve(token);
+      if (apiKey) {
+        if (!isApiKeyRequest(ctx)) {
+          ctx.status = 403;
+          ctx.body = {
+            error: {
+              code: 'API_KEY_SCOPE_FORBIDDEN',
+              message: 'API keys can only access Agent runtime APIs',
+              status: 403,
+            },
+          };
+          return;
+        }
+        ctx.state.apiKey = {
+          id: apiKey.id,
+          keyPrefix: apiKey.keyPrefix,
+          scopes: apiKey.scopes,
+        };
+        ctx.state.authSession = {
+          user: apiKey.user,
+          expiresAt: apiKey.expiresAt,
+          emailVerified: apiKey.emailVerified,
+        };
+        apiKeys.recordUse(apiKey.id, apiKey.user.workspaceId, ctx.method, ctx.path);
+        await next();
+        return;
+      }
+    }
     if (!session) {
       ctx.status = 401;
       ctx.body = { error: 'authentication required' };
@@ -50,6 +82,10 @@ export function createAuthMiddleware(
     }
     await next();
   };
+}
+
+function isApiKeyRequest(ctx: Koa.Context): boolean {
+  return /^\/api\/(agents(?:\/|$)|conversations(?:\/|$)|runs(?:\/|$)|jobs(?:\/|$)|stream(?:\/|$))/.test(ctx.path);
 }
 
 export function extractSessionToken(ctx: Koa.Context): string | null {

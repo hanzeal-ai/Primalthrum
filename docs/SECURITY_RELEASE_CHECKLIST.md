@@ -7,6 +7,10 @@ Use this checklist before tagging or deploying a commercial Primalthrum build.
 - Admin setup is complete and no default password is used.
 - Browser sessions are protected by `HttpOnly` cookies or bearer tokens.
 - Provider secrets are stored only as server-side secret references.
+- Workspace API Keys are scoped, expiring, hashed at rest, and returned in
+  plaintext only once after password reauthentication.
+- Revoked Keys and Sessions fail on their next authenticated request, and API
+  Key use creates immutable method/path audit evidence without payloads.
 - API clients show standardized `error.code`, `error.message`, and `error.status` without exposing secrets.
 - Public endpoints are limited to liveness, readiness, metrics, setup, auth, and documented public flows.
 
@@ -41,6 +45,7 @@ Use this checklist before tagging or deploying a commercial Primalthrum build.
 - `docs/BACKUP_RESTORE.md` exists.
 - `docs/USER_WORKFLOW_GUIDE.md` exists.
 - `docs/TROUBLESHOOTING.md` exists.
+- `docs/API_KEYS_AND_SESSIONS.md` exists.
 - `docs/DEMO_RESEARCH_AGENT.md` exists.
 
 ## Operator Preflight
@@ -73,6 +78,8 @@ Confirm:
 - `TRUSTED_PROXY_HOPS` matches the deployed ingress chain and spoofed forwarding
   headers cannot change the rate-limit subject.
 - Rate-limit and challenge-outage alerts are active with no raw identity labels.
+- A least-privilege API Key passes its allowed Agent call, fails a missing-scope
+  call, cannot access settings, and fails every call after revocation.
 
 ## Known Limitations
 

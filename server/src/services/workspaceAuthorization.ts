@@ -1,4 +1,5 @@
 import { type WorkspaceRole } from './workspaceRepository';
+import { type ApiKeyScope } from './apiKeyRepository';
 
 export type WorkspacePermission =
   | 'workspace.read'
@@ -9,6 +10,7 @@ export type WorkspacePermission =
   | 'agents.run'
   | 'agents.publish'
   | 'providers.manage'
+  | 'api_keys.manage'
   | 'billing.read'
   | 'billing.manage'
   | 'audit.read';
@@ -23,6 +25,7 @@ const ROLE_PERMISSIONS: Record<WorkspaceRole, ReadonlySet<WorkspacePermission>> 
     'agents.run',
     'agents.publish',
     'providers.manage',
+    'api_keys.manage',
     'billing.read',
     'billing.manage',
     'audit.read',
@@ -35,6 +38,7 @@ const ROLE_PERMISSIONS: Record<WorkspaceRole, ReadonlySet<WorkspacePermission>> 
     'agents.run',
     'agents.publish',
     'providers.manage',
+    'api_keys.manage',
     'billing.read',
     'audit.read',
   ]),
@@ -70,4 +74,13 @@ export function hasWorkspacePermission(
 ): boolean {
   return role in ROLE_PERMISSIONS
     && ROLE_PERMISSIONS[role as WorkspaceRole].has(permission);
+}
+
+export function apiKeyScopeForPermission(permission: WorkspacePermission): ApiKeyScope | null {
+  return ({
+    'agents.read': 'agents:read',
+    'agents.write': 'agents:write',
+    'agents.run': 'agents:run',
+    'agents.publish': 'agents:publish',
+  } as Partial<Record<WorkspacePermission, ApiKeyScope>>)[permission] ?? null;
 }

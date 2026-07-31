@@ -31,5 +31,7 @@ adds Provider delivery identifiers, dead-letter evidence, and immutable signed
 delivery event records. Migration `022_abuse_protection` adds atomic rate-limit
 buckets, short-lived challenge grants, and immutable HMAC-only enforcement
 evidence.
+Migration `023_api_keys_security` adds hashed, scoped, expiring Workspace API
+Keys, immutable Key-use audit events, and Session last-seen metadata.
 
 See [Postgres Persistence Path](POSTGRES_PERSISTENCE.md) before adding migrations that rely on SQLite-only SQL.

@@ -1971,8 +1971,17 @@ complete. Follow the same dependency and verification protocol used above.
   seat display, invitation creation and revocation, and the public acceptance
   surface. Chrome acceptance at 390x844 confirms the loaded team and acceptance
   pages have no horizontal overflow or console warnings. Transactional
-  invitation email, API key management, retention/security settings, complete
-  role-matrix browser E2E, and live Stripe lifecycle evidence remain open.
+  invitation email remains open. The third slice adds `/app/settings`, scoped
+  expiring Workspace API Keys, password reauthentication, one-time plaintext
+  display, SHA-256-at-rest storage, immediate revocation, tenant-bound runtime
+  authentication, immutable method/path usage evidence, active Session listing,
+  and individual or bulk other-Session revocation. API Key tests cover scope
+  denial, settings-route denial, tenant isolation, token non-persistence, audit
+  creation, and post-revocation 401. Desktop browser acceptance covers Key
+  creation, one-time display, revocation, and bulk other-Session logout. Chrome
+  acceptance at 390x844 confirms the fully loaded settings page has no
+  horizontal overflow or console warnings. Customer retention controls, MFA,
+  complete role-matrix browser E2E, and live Stripe lifecycle evidence remain open.
 
 ### P20-01 Operator Administration And Support
 

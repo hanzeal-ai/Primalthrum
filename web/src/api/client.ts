@@ -18,6 +18,7 @@ import type {
   CreateAgentInput,
   CreateDocumentInput,
   CreateWorkspaceResponse,
+  CreatedWorkspaceApiKey,
   CreatedWorkspaceInvitation,
   CurrentSession,
   DocumentRecord,
@@ -32,6 +33,7 @@ import type {
   SpeechSynthesisResult,
   TranscriptionResult,
   RuntimeCapabilityCatalog,
+  SessionSecurityRecord,
   RuntimeCapabilityRecord,
   SaveProviderConfigInput,
   PublicPlanRecord,
@@ -45,6 +47,8 @@ import type {
   ToolInfo,
   UploadDocumentInput,
   WorkspaceRecord,
+  WorkspaceApiKeyRecord,
+  ApiKeyScope,
   WorkspaceInvitationRecord,
   WorkspaceMemberRecord,
   WorkspaceRole,
@@ -341,6 +345,44 @@ export async function acceptWorkspaceInvitation(
   })
   storeSessionToken(response.session.token)
   return response
+}
+
+export async function listWorkspaceApiKeys(): Promise<WorkspaceApiKeyRecord[]> {
+  return apiFetch<WorkspaceApiKeyRecord[]>('/api/settings/api-keys')
+}
+
+export async function createWorkspaceApiKey(input: {
+  name: string
+  scopes: ApiKeyScope[]
+  expiresInDays: number
+  password: string
+}): Promise<CreatedWorkspaceApiKey> {
+  return apiFetch<CreatedWorkspaceApiKey>('/api/settings/api-keys', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function revokeWorkspaceApiKey(apiKeyId: number): Promise<void> {
+  return apiFetch<void>(`/api/settings/api-keys/${apiKeyId}`, {
+    method: 'DELETE',
+    parseJson: false,
+  })
+}
+
+export async function listSecuritySessions(): Promise<SessionSecurityRecord[]> {
+  return apiFetch<SessionSecurityRecord[]>('/api/settings/sessions')
+}
+
+export async function revokeSecuritySession(sessionId: number): Promise<void> {
+  return apiFetch<void>(`/api/settings/sessions/${sessionId}`, {
+    method: 'DELETE',
+    parseJson: false,
+  })
+}
+
+export async function revokeOtherSecuritySessions(): Promise<{ revoked: number }> {
+  return apiFetch<{ revoked: number }>('/api/settings/sessions/revoke-others', { method: 'POST' })
 }
 
 export async function listAgents(): Promise<AgentRecord[]> {

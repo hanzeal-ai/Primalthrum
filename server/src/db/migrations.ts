@@ -100,6 +100,10 @@ export const MIGRATIONS: Migration[] = [
     id: '022_abuse_protection',
     up: applyAbuseProtection,
   },
+  {
+    id: '023_api_keys_security',
+    up: applyApiKeysSecurity,
+  },
 ];
 
 export function runMigrations(db: DatabaseAdapter): void {
@@ -1336,6 +1340,61 @@ function applyAbuseProtection(db: DatabaseAdapter): void {
     BEFORE DELETE ON abuse_enforcement_events
     BEGIN
       SELECT RAISE(ABORT, 'abuse enforcement events are immutable');
+    END;
+  `);
+}
+
+function applyApiKeysSecurity(db: DatabaseAdapter): void {
+  ensureColumn(db, 'sessions', 'last_seen_at', 'TEXT');
+  db.run(`
+    UPDATE sessions SET last_seen_at = COALESCE(last_seen_at, created_at);
+
+    CREATE TABLE IF NOT EXISTS workspace_api_keys (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      name TEXT NOT NULL,
+      key_prefix TEXT NOT NULL UNIQUE,
+      token_hash TEXT NOT NULL UNIQUE,
+      scopes_json TEXT NOT NULL,
+      created_by_user_id INTEGER,
+      expires_at TEXT NOT NULL,
+      last_used_at TEXT,
+      last_used_method TEXT NOT NULL DEFAULT '',
+      last_used_path TEXT NOT NULL DEFAULT '',
+      revoked_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+      FOREIGN KEY(created_by_user_id) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS api_key_usage_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      api_key_id INTEGER NOT NULL,
+      workspace_id INTEGER NOT NULL,
+      method TEXT NOT NULL,
+      path TEXT NOT NULL,
+      used_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(api_key_id) REFERENCES workspace_api_keys(id) ON DELETE RESTRICT,
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
+    );
+
+    CREATE INDEX IF NOT EXISTS workspace_api_keys_active_idx
+      ON workspace_api_keys(workspace_id, revoked_at, expires_at);
+    CREATE INDEX IF NOT EXISTS api_key_usage_events_key_time_idx
+      ON api_key_usage_events(api_key_id, used_at DESC);
+
+    CREATE TRIGGER IF NOT EXISTS api_key_usage_events_no_update
+    BEFORE UPDATE ON api_key_usage_events
+    BEGIN
+      SELECT RAISE(ABORT, 'api key usage events are immutable');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS api_key_usage_events_no_delete
+    BEFORE DELETE ON api_key_usage_events
+    BEGIN
+      SELECT RAISE(ABORT, 'api key usage events are immutable');
     END;
   `);
 }

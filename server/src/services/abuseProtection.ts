@@ -36,6 +36,7 @@ export const DEFAULT_ABUSE_POLICIES: readonly AbusePolicy[] = [
   policy('password_forgot', 'password_forgot', 'POST', /^\/api\/auth\/password\/forgot$/, [ip(10, HOUR), identity(3, HOUR)]),
   policy('password_reset', 'password_reset', 'POST', /^\/api\/auth\/password\/reset$/, [ip(10, HOUR)]),
   policy('invitation_accept', 'invitation_accept', 'POST', /^\/api\/invitations\/accept$/, [ip(20, 15 * MINUTE), token(10, 15 * MINUTE)]),
+  policy('api_key_create', 'api_key_create', 'POST', /^\/api\/settings\/api-keys$/, [user(10, HOUR)]),
   policy('privacy_consent', 'privacy_consent', 'POST', /^\/api\/public\/privacy\/consents$/, [ip(30, MINUTE)]),
   policy('analytics_event', 'analytics_event', 'POST', /^\/api\/public\/analytics\/events$/, [ip(120, MINUTE)]),
   policy('public_agent_read', 'public_agent_read', 'GET', /^\/api\/public\/agents\/[^/]+$/, [ip(120, MINUTE)]),
@@ -157,6 +158,8 @@ function subjectFor(ctx: Koa.Context, clientIp: string, scope: SubjectScope): st
     const value = typeof body?.token === 'string' ? body.token.slice(0, 512) : 'missing';
     return `token:${createHash('sha256').update(value || 'missing').digest('hex')}`;
   }
+  const apiKeyId = Number(ctx.state.apiKey?.id);
+  if (Number.isSafeInteger(apiKeyId) && apiKeyId > 0) return `api_key:${apiKeyId}`;
   const userId = Number(ctx.state.authSession?.user.id);
   return Number.isSafeInteger(userId) && userId > 0 ? `user:${userId}` : `user:anonymous:${clientIp}`;
 }

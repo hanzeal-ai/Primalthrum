@@ -1,4 +1,4 @@
-import { BarChart3, CreditCard, LogOut, MessageSquare, Sparkles, Users } from 'lucide-react'
+import { BarChart3, CreditCard, LogOut, MessageSquare, Settings, Sparkles, Users } from 'lucide-react'
 import type { ReactNode } from 'react'
 
 import type { AuthUser } from '../../api/types'
@@ -6,13 +6,14 @@ import { Button } from '../../components/ui/button'
 import { canReadBilling } from '../../lib/workspacePermissions'
 import { WorkspaceSwitcher } from '../workspaces/WorkspaceSwitcher'
 
-export type WorkspaceAppSection = 'builder' | 'team' | 'usage' | 'billing'
+export type WorkspaceAppSection = 'builder' | 'team' | 'usage' | 'billing' | 'settings'
 
 const NAV_ITEMS = [
   { key: 'builder', href: '/app', label: '创建 Agent', icon: MessageSquare },
   { key: 'team', href: '/app/team', label: '团队', icon: Users },
   { key: 'usage', href: '/app/usage', label: '用量', icon: BarChart3 },
   { key: 'billing', href: '/app/billing', label: '账单', icon: CreditCard },
+  { key: 'settings', href: '/app/settings', label: '设置', icon: Settings },
 ] as const
 
 interface WorkspaceAppShellProps {
@@ -76,7 +77,7 @@ export function WorkspaceAppShell({
 }
 
 function navigationAllowed(section: WorkspaceAppSection, user: AuthUser): boolean {
-  return section === 'builder' || section === 'team' || canReadBilling(user.role)
+  return section === 'builder' || section === 'team' || section === 'settings' || canReadBilling(user.role)
 }
 
 function NavigationItem({ active, compact = false, item }: {

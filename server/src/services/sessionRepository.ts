@@ -17,6 +17,14 @@ export interface AuthenticatedSession {
   emailVerified: boolean;
 }
 
+export interface SessionSecurityRecord {
+  id: number;
+  current: boolean;
+  expiresAt: string;
+  lastSeenAt: string;
+  createdAt: string;
+}
+
 interface SessionUserRow {
   user_id: number;
   workspace_id: number;
@@ -24,6 +32,14 @@ interface SessionUserRow {
   role: string;
   expires_at: string;
   email_verified_at: string | null;
+}
+
+interface SessionSecurityRow {
+  id: number;
+  current: number;
+  expires_at: string;
+  last_seen_at: string | null;
+  created_at: string;
 }
 
 export class SessionRepository {
@@ -80,7 +96,12 @@ export class SessionRepository {
       LIMIT 1;
     `);
 
-    return rows[0] ? toAuthenticatedSession(rows[0]) : null;
+    if (!rows[0]) return null;
+    this.db.run(`
+      UPDATE sessions SET last_seen_at = ${sqlValue(new Date().toISOString())}
+      WHERE token_hash = ${sqlValue(hashToken(token))};
+    `);
+    return toAuthenticatedSession(rows[0]);
   }
 
   revokeToken(token: string): void {
@@ -100,6 +121,62 @@ export class SessionRepository {
       UPDATE sessions SET revoked_at = COALESCE(revoked_at, CURRENT_TIMESTAMP)
       WHERE user_id = ${sqlValue(userId)};
     `);
+  }
+
+  listForUser(userId: number, currentToken: string): SessionSecurityRecord[] {
+    const currentHash = hashToken(currentToken);
+    return this.db.query<SessionSecurityRow>(`
+      SELECT id,
+        CASE WHEN token_hash = ${sqlValue(currentHash)} THEN 1 ELSE 0 END AS current,
+        expires_at, last_seen_at, created_at
+      FROM sessions
+      WHERE user_id = ${sqlValue(userId)}
+        AND revoked_at IS NULL
+        AND expires_at > ${sqlValue(new Date().toISOString())}
+      ORDER BY current DESC, COALESCE(last_seen_at, created_at) DESC, id DESC;
+    `).map((row) => ({
+      id: Number(row.id),
+      current: Boolean(row.current),
+      expiresAt: row.expires_at,
+      lastSeenAt: row.last_seen_at ?? row.created_at,
+      createdAt: row.created_at,
+    }));
+  }
+
+  revokeForUser(userId: number, sessionId: number, currentToken: string): void {
+    const session = this.db.query<{ token_hash: string }>(`
+      SELECT token_hash FROM sessions
+      WHERE id = ${sqlValue(sessionId)}
+        AND user_id = ${sqlValue(userId)}
+        AND revoked_at IS NULL
+      LIMIT 1;
+    `)[0];
+    if (!session) throw new Error('session not found');
+    if (session.token_hash === hashToken(currentToken)) {
+      throw new Error('current session cannot be revoked from this action');
+    }
+    this.db.run(`
+      UPDATE sessions SET revoked_at = ${sqlValue(new Date().toISOString())}
+      WHERE id = ${sqlValue(sessionId)} AND user_id = ${sqlValue(userId)};
+    `);
+  }
+
+  revokeOthers(userId: number, currentToken: string): number {
+    const currentHash = hashToken(currentToken);
+    const count = Number(this.db.query<{ count: number }>(`
+      SELECT COUNT(*) AS count FROM sessions
+      WHERE user_id = ${sqlValue(userId)}
+        AND token_hash <> ${sqlValue(currentHash)}
+        AND revoked_at IS NULL
+        AND expires_at > ${sqlValue(new Date().toISOString())};
+    `)[0]?.count ?? 0);
+    this.db.run(`
+      UPDATE sessions SET revoked_at = ${sqlValue(new Date().toISOString())}
+      WHERE user_id = ${sqlValue(userId)}
+        AND token_hash <> ${sqlValue(currentHash)}
+        AND revoked_at IS NULL;
+    `);
+    return count;
   }
 
   switchWorkspace(token: string, userId: number, workspaceId: number): void {
