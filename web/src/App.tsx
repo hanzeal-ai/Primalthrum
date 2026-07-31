@@ -4,12 +4,17 @@ import { AuthScreen } from './features/auth/AuthScreen'
 import { useAuthSession } from './features/auth/useAuthSession'
 import { AgentBuilderPage } from './features/builder/AgentBuilderPage'
 import { HostedAgentPage } from './features/hosted-agent/HostedAgentPage'
+import { PublicHomePage } from './features/marketing/PublicHomePage'
+import { PublicInfoPage } from './features/marketing/PublicInfoPage'
+import { PublicPricingPage } from './features/marketing/PublicPricingPage'
+import { SignupPage } from './features/onboarding/SignupPage'
 import './App.css'
 
 export default function App() {
   const auth = useAuthSession()
   const agentSlug = hostedAgentSlug(window.location.pathname)
   const preview = previewAgentRoute(window.location.pathname, window.location.search)
+  const pathname = normalizePath(window.location.pathname)
 
   if (auth.mode === 'checking') {
     return (
@@ -37,7 +42,7 @@ export default function App() {
   if (preview && auth.user) {
     return (
       <HostedAgentPage
-        onBack={() => window.location.assign('/')}
+        onBack={() => window.location.assign(auth.user ? '/app' : '/')}
         slug={preview.slug}
         user={auth.user}
         versionId={preview.versionId}
@@ -49,7 +54,7 @@ export default function App() {
     if (auth.user) {
       return (
         <HostedAgentPage
-          onBack={() => window.location.assign('/')}
+          onBack={() => window.location.assign('/app')}
           slug={agentSlug}
           user={auth.user}
         />
@@ -68,15 +73,42 @@ export default function App() {
     }
   }
 
-  if (authScreen) {
+  if (pathname === '/pricing') {
+    return <PublicPricingPage authenticated={Boolean(auth.user)} />
+  }
+
+  const infoSlug = publicInfoSlug(pathname)
+  if (infoSlug) {
+    return <PublicInfoPage authenticated={Boolean(auth.user)} slug={infoSlug} />
+  }
+
+  if (!auth.user && pathname === '/signup') {
+    return <SignupPage message={auth.message} onRegister={auth.register} />
+  }
+
+  if (!auth.user && pathname === '/login') {
     return authScreen
   }
 
   if (!auth.user) {
-    return null
+    return <PublicHomePage />
+  }
+
+  if (pathname === '/' && window.location.search.includes('marketing=1')) {
+    return <PublicHomePage authenticated />
   }
 
   return <AgentBuilderPage user={auth.user} onLogout={auth.logout} />
+}
+
+function normalizePath(pathname: string): string {
+  const normalized = pathname.replace(/\/+$/, '')
+  return normalized || '/'
+}
+
+function publicInfoSlug(pathname: string) {
+  const match = /^\/(security|docs|contact|status|legal\/privacy|legal\/terms)$/.exec(pathname)
+  return match?.[1] ?? null
 }
 
 function hostedAgentSlug(pathname: string): string | null {

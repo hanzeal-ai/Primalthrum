@@ -1,5 +1,5 @@
 import type { FormEvent } from 'react'
-import { Loader2, Sparkles } from 'lucide-react'
+import { ArrowLeft, Loader2, Sparkles } from 'lucide-react'
 
 import type { AuthCredentials } from '../../api/types'
 import { Button } from '../../components/ui/button'
@@ -23,9 +23,10 @@ export function AuthScreen({ credentials, message, mode, onChange, onSubmit }: A
   }
 
   return (
-    <main className="grid min-h-screen place-items-center bg-zinc-50 px-4 text-zinc-950">
+    <main className="grid min-h-screen place-items-center bg-zinc-50 px-4 py-12 text-zinc-950">
       <Card className="w-full max-w-md border-zinc-200 shadow-lg shadow-zinc-950/5">
         <CardHeader>
+          <a className="mb-4 flex items-center gap-2 text-sm text-zinc-500 hover:text-zinc-950" href="/"><ArrowLeft className="size-4" /> 返回首页</a>
           <div className="mb-3 flex size-10 items-center justify-center rounded-md bg-zinc-950 text-white">
             <Sparkles className="size-5" />
           </div>
@@ -58,6 +59,7 @@ export function AuthScreen({ credentials, message, mode, onChange, onSubmit }: A
               {mode === 'setup' ? '创建管理员' : '登录'}
             </Button>
           </form>
+          {mode === 'login' ? <p className="mt-6 text-center text-sm text-zinc-600">还没有账号？ <a className="font-medium text-zinc-950 underline underline-offset-4" href="/signup?plan=pro">免费试用</a></p> : null}
         </CardContent>
       </Card>
     </main>

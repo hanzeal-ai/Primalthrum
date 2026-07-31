@@ -7,9 +7,10 @@ import {
   isUnauthorizedError,
   loginAdmin,
   logoutAdmin,
+  registerAccount,
   setupAdmin,
 } from '../../api/client'
-import type { AuthCredentials, AuthUser } from '../../api/types'
+import type { AuthCredentials, AuthUser, RegistrationInput } from '../../api/types'
 
 export type AuthMode = 'checking' | 'setup' | 'login' | 'ready'
 
@@ -27,19 +28,25 @@ export function useAuthSession() {
   async function initialize() {
     setMode('checking')
     try {
-      const setupStatus = await getSetupStatus()
-      if (setupStatus.needsSetup) {
-        setMode('setup')
-        setMessage('创建第一个管理员账号。')
-        return
-      }
-
       const session = await getCurrentSession()
       setUser(session.user)
       setMode('ready')
+      return
     } catch (error) {
       clearStoredSessionToken()
       setUser(null)
+      try {
+        const setupStatus = await getSetupStatus()
+        if (setupStatus.needsSetup) {
+          setMode('setup')
+          setMessage('创建第一个管理员账号。')
+          return
+        }
+      } catch {
+        setMode('login')
+        setMessage(errorMessage(error))
+        return
+      }
       setMode('login')
       setMessage(isUnauthorizedError(error) ? '请登录继续。' : errorMessage(error))
     }
@@ -77,6 +84,19 @@ export function useAuthSession() {
     setMessage('已安全退出。')
   }
 
+  async function register(input: RegistrationInput) {
+    setMessage('正在创建工作区...')
+    try {
+      const response = await registerAccount(input)
+      setUser(response.user)
+      setMode('ready')
+      return response
+    } catch (error) {
+      setMessage(errorMessage(error))
+      throw error
+    }
+  }
+
   return {
     mode,
     credentials,
@@ -84,6 +104,7 @@ export function useAuthSession() {
     user,
     setCredentials,
     authenticate,
+    register,
     logout,
   }
 }

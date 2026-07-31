@@ -712,9 +712,25 @@ function canManageProviders(role: string): boolean {
 function loadDraft(workspaceId: number): BuilderDraft {
   try {
     const saved = window.localStorage.getItem(storageKey(workspaceId))
-    return saved ? { ...INITIAL_DRAFT, ...JSON.parse(saved) as BuilderDraft } : INITIAL_DRAFT
+    return saved ? { ...INITIAL_DRAFT, ...JSON.parse(saved) as BuilderDraft } : pendingPromptDraft()
   } catch {
-    return INITIAL_DRAFT
+    return pendingPromptDraft()
+  }
+}
+
+function pendingPromptDraft(): BuilderDraft {
+  const prompt = window.sessionStorage.getItem('primalthrum.pending-agent-prompt')?.trim()
+  if (!prompt) return INITIAL_DRAFT
+  window.sessionStorage.removeItem('primalthrum.pending-agent-prompt')
+  return {
+    ...INITIAL_DRAFT,
+    description: prompt,
+    stage: 'model',
+    messages: [
+      ...INITIAL_DRAFT.messages,
+      message('user', prompt),
+      message('assistant', `我理解了。接下来为“${inferAgentName(prompt)}”选择主要模型。`),
+    ],
   }
 }
 

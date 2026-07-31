@@ -23,6 +23,9 @@ import type {
   RuntimeCapabilityCatalog,
   RuntimeCapabilityRecord,
   SaveProviderConfigInput,
+  PublicPlanRecord,
+  RegistrationInput,
+  RegistrationResponse,
   SetupStatus,
   SkillInfo,
   StreamAgentRequest,
@@ -94,6 +97,20 @@ export async function loginAdmin(input: AuthCredentials): Promise<AuthResponse> 
   })
   storeSessionToken(response.session.token)
   return response
+}
+
+export async function registerAccount(input: RegistrationInput): Promise<RegistrationResponse> {
+  const response = await apiFetch<RegistrationResponse>('/api/auth/register', {
+    auth: false,
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+  storeSessionToken(response.session.token)
+  return response
+}
+
+export async function listPublicPlans(): Promise<PublicPlanRecord[]> {
+  return apiFetch<PublicPlanRecord[]>('/api/public/plans', { auth: false })
 }
 
 export async function logoutAdmin(): Promise<void> {

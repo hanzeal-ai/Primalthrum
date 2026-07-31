@@ -1900,8 +1900,13 @@ complete. Follow the same dependency and verification protocol used above.
   password validation, duplicate-account conflict handling, isolated Owner
   Workspace creation, optional Free enrollment or one-time Pro trial activation,
   credit/entitlement provisioning, session issuance, and real HTTP coverage.
-  Public product, pricing, signup, login, legal, and conversion UI remains in the
-  next slice.
+  The Web slice adds a responsive public product home, server-backed five-plan
+  pricing, Free/Pro signup and login conversion, security, docs, contact, status,
+  privacy, and terms surfaces. Homepage Agent intent survives registration and
+  opens directly in the conversational builder. A real product screenshot is the
+  hero asset. Component tests plus Chrome desktop and 390x844 checks cover signup,
+  pricing, overflow, console health, and the live registration handoff. Email
+  verification, recovery, consent analytics, and legal approval remain open.
 
 ### P19-02 Billing, Usage, Team, And Settings UX
 

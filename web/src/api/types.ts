@@ -283,6 +283,52 @@ export interface AuthResponse {
   session: AuthSession
 }
 
+export interface RegistrationInput extends AuthCredentials {
+  workspaceName: string
+  planKey: 'free' | 'pro'
+}
+
+export interface RegistrationResponse extends AuthResponse {
+  workspace: Omit<WorkspaceRecord, 'role'>
+  trial: {
+    id: number
+    planKey: string
+    creditAmount: number
+    startsAt: string
+    endsAt: string
+  } | null
+  entitlementSnapshot: {
+    workspaceId: number
+    planKey: string
+    subscriptionState: string
+  }
+  creditAccount: {
+    workspaceId: number
+    availableCredits: number
+    reservedCredits: number
+    spentCredits: number
+  }
+}
+
+export interface PublicPlanRecord {
+  key: string
+  name: string
+  status: string
+  currency: string
+  monthlyPriceMinor: number
+  monthlyCreditGrant: number
+  trialCreditGrant: number
+  trialDays: number
+  overageEnabled: boolean
+  metadata: Record<string, unknown>
+  entitlements: Array<{
+    feature: string
+    enabled: boolean
+    quantityLimit: number | null
+    source: string
+  }>
+}
+
 export interface CurrentSession {
   user: AuthUser
   expiresAt: string

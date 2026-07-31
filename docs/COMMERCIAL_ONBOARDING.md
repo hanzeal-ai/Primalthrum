@@ -27,5 +27,18 @@ adds the customer to the installation's default Workspace.
 
 - Email ownership verification and transactional email delivery.
 - Password reset, abuse throttling, bot protection, and account recovery.
-- Public product, pricing, signup, login, legal, and onboarding UI.
 - Signup funnel analytics with consent controls.
+- Final privacy and terms review by qualified legal counsel.
+
+## Public Web Surfaces
+
+- `/`: product home with an Agent intent composer and real product visual.
+- `/pricing`: live plan catalog sourced from `GET /api/public/plans`.
+- `/signup`: Free or Pro registration and immediate Workspace handoff.
+- `/login`: existing account access.
+- `/security`, `/docs`, `/contact`, and `/status`: product trust and help pages.
+- `/legal/privacy` and `/legal/terms`: clearly labeled pre-release legal surfaces.
+
+An Agent description entered on the public home is stored for the browser session
+and consumed by the builder after successful registration. The new customer lands
+at the first required model choice instead of repeating their request.
