@@ -1,5 +1,6 @@
 import type {
   AgentRecord,
+  AnalyticsEventInput,
   AgentDeploymentRecord,
   AgentVersionLifecycleResult,
   AgentVersionRecord,
@@ -18,6 +19,8 @@ import type {
   ParsedSseEvent,
   ProviderCatalog,
   ProviderConfigRecord,
+  PrivacyConfig,
+  PrivacyConsentReceipt,
   SpeechSynthesisResult,
   TranscriptionResult,
   RuntimeCapabilityCatalog,
@@ -142,6 +145,32 @@ export async function resetPassword(token: string, password: string): Promise<vo
 
 export async function listPublicPlans(): Promise<PublicPlanRecord[]> {
   return apiFetch<PublicPlanRecord[]>('/api/public/plans', { auth: false })
+}
+
+export async function getPrivacyConfig(): Promise<PrivacyConfig> {
+  return apiFetch<PrivacyConfig>('/api/public/privacy/config', { auth: false })
+}
+
+export async function recordPrivacyConsent(input: {
+  subjectId: string
+  policyVersion: string
+  analytics: boolean
+  source: 'banner' | 'preferences'
+}): Promise<PrivacyConsentReceipt> {
+  return apiFetch<PrivacyConsentReceipt>('/api/public/privacy/consents', {
+    auth: false,
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export async function recordAnalyticsEvent(input: AnalyticsEventInput): Promise<void> {
+  await apiFetch('/api/public/analytics/events', {
+    auth: false,
+    keepalive: true,
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
 }
 
 export async function logoutAdmin(): Promise<void> {

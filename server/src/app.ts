@@ -100,6 +100,8 @@ import { AccountEmailOutboxRepository } from './services/accountEmailOutboxRepos
 import { AccountEmailDispatcher } from './services/accountEmailDispatcher';
 import { type AccountEmailSender } from './services/accountEmailSender';
 import { AccountIdentityService } from './services/accountIdentityService';
+import { PrivacyAnalyticsRepository } from './services/privacyAnalyticsRepository';
+import { registerPrivacyRoutes } from './routes/privacyRoutes';
 
 export interface AppOptions {
   agentBaseUrl?: string;
@@ -268,6 +270,7 @@ export function createApp(options: AppOptions = {}): Koa {
     billingRepository,
     publicAppUrl,
   );
+  const privacyAnalyticsRepository = new PrivacyAnalyticsRepository(db);
   if (options.accountEmailSender) {
     accountEmailDispatcher = new AccountEmailDispatcher(
       accountEmailOutbox,
@@ -501,6 +504,10 @@ export function createApp(options: AppOptions = {}): Koa {
     metering: meteredOperationService,
     resolver: speechResolver,
     speech: speechClient,
+  });
+  registerPrivacyRoutes(router, {
+    analytics: privacyAnalyticsRepository,
+    logger,
   });
 
   app.use(async (ctx, next) => {

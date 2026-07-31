@@ -4,6 +4,7 @@ import { useState, type FormEvent } from 'react'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { MarketingShell } from './MarketingShell'
+import { usePrivacyConsent } from '../privacy/usePrivacyConsent'
 
 const CAPABILITIES = [
   { icon: Blocks, title: '模型可替换', body: '按 Workspace 配置 LLM、Embedding、STT 与 TTS，运行时解析密钥。' },
@@ -16,11 +17,13 @@ const CAPABILITIES = [
 
 export function PublicHomePage({ authenticated = false }: { authenticated?: boolean }) {
   const [prompt, setPrompt] = useState('')
+  const privacy = usePrivacyConsent()
 
   function startBuilding(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     const description = prompt.trim()
     if (!description) return
+    void privacy.track('agent_intent_started', { source: 'home', authenticated })
     window.sessionStorage.setItem('primalthrum.pending-agent-prompt', description)
     window.location.assign(authenticated ? '/app' : '/signup?plan=pro')
   }

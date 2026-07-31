@@ -104,6 +104,10 @@ function isPublicRequest(ctx: Koa.Context): boolean {
     return true;
   }
 
+  if (ctx.path.startsWith('/api/public/privacy/') || ctx.path === '/api/public/analytics/events') {
+    return true;
+  }
+
   if (ctx.method === 'POST' && ctx.path === '/api/webhooks/stripe') {
     return true;
   }

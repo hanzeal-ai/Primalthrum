@@ -336,6 +336,42 @@ export interface VerificationDispatchResponse {
   emailPreviewUrl?: string
 }
 
+export interface PrivacyConfig {
+  policyVersion: string
+  categories: {
+    necessary: { required: true }
+    analytics: { required: false; default: false }
+  }
+}
+
+export interface PrivacyConsentReceipt {
+  receiptId: string
+  policyVersion: string
+  necessary: true
+  analytics: boolean
+  action: 'granted' | 'denied' | 'withdrawn'
+  recordedAt: string
+}
+
+export type AnalyticsEventName =
+  | 'page_view'
+  | 'agent_intent_started'
+  | 'plan_selected'
+  | 'signup_viewed'
+  | 'signup_submitted'
+  | 'signup_completed'
+  | 'email_verification_completed'
+
+export interface AnalyticsEventInput {
+  subjectId: string
+  consentReceiptId: string
+  eventId: string
+  eventName: AnalyticsEventName
+  path: string
+  properties: Record<string, string | boolean>
+  occurredAt: string
+}
+
 export interface WorkspaceRecord {
   id: number
   name: string

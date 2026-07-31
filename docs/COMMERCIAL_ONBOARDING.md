@@ -27,7 +27,6 @@ adds the customer to the installation's default Workspace.
 
 - Transactional email provider credentials and live delivery verification.
 - Abuse throttling, bot protection, and assisted account recovery.
-- Signup funnel analytics with consent controls.
 - Final privacy and terms review by qualified legal counsel.
 
 ## Public Web Surfaces
@@ -40,6 +39,10 @@ adds the customer to the installation's default Workspace.
 - `/forgot-password` and `/reset-password`: enumeration-safe account recovery.
 - `/security`, `/docs`, `/contact`, and `/status`: product trust and help pages.
 - `/legal/privacy` and `/legal/terms`: clearly labeled pre-release legal surfaces.
+
+The public funnel uses first-party, default-denied analytics. Consent can be
+granted, denied, or withdrawn from the persistent preference center. See
+`docs/PRIVACY_ANALYTICS.md` for the event allowlist and evidence contract.
 
 An Agent description entered on the public home is stored for the browser session
 and consumed by the builder after successful registration. The new customer lands

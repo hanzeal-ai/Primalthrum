@@ -5,6 +5,7 @@ import { listPublicPlans } from '../../api/client'
 import type { PublicPlanRecord } from '../../api/types'
 import { Button } from '../../components/ui/button'
 import { MarketingShell } from './MarketingShell'
+import { usePrivacyConsent } from '../privacy/usePrivacyConsent'
 
 const FEATURE_LABELS: Record<string, string> = {
   'agents.create': 'Agent 创建',
@@ -50,6 +51,7 @@ export function PublicPricingPage({ authenticated = false }: { authenticated?: b
 }
 
 function PlanColumn({ plan }: { plan: PublicPlanRecord }) {
+  const privacy = usePrivacyConsent()
   const isPro = plan.key === 'pro'
   const contactSales = plan.monthlyPriceMinor === 0 && plan.key !== 'free'
   const enabled = plan.entitlements.filter((item) => item.enabled).slice(0, 7)
@@ -64,7 +66,7 @@ function PlanColumn({ plan }: { plan: PublicPlanRecord }) {
       </div>
       <p className="text-sm text-zinc-600">{contactSales ? '按合同配置额度' : `${plan.monthlyCreditGrant.toLocaleString()} credits / 月`}</p>
       <Button asChild className="mt-6 w-full" variant={isPro ? 'default' : 'outline'}>
-        <a href={planHref(plan)}>{planCta(plan)}</a>
+        <a href={planHref(plan)} onClick={() => void privacy.track('plan_selected', { planKey: plan.key, source: 'pricing' })}>{planCta(plan)}</a>
       </Button>
       <div className="my-6 h-px bg-zinc-200" />
       <ul className="grid gap-3 text-sm">

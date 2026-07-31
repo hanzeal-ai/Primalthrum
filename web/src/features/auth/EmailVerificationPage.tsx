@@ -3,6 +3,7 @@ import { useEffect, useRef, useState } from 'react'
 
 import { resendVerification, verifyEmail } from '../../api/client'
 import { Button } from '../../components/ui/button'
+import { usePrivacyConsent } from '../privacy/usePrivacyConsent'
 
 interface EmailVerificationPageProps {
   authenticated: boolean
@@ -20,6 +21,7 @@ export function EmailVerificationPage(props: EmailVerificationPageProps) {
   const [message, setMessage] = useState(token ? '正在验证邮箱...' : '验证邮件已发送。')
   const [resending, setResending] = useState(false)
   const verificationStarted = useRef(false)
+  const privacy = usePrivacyConsent()
 
   useEffect(() => {
     if (!token || verificationStarted.current) return
@@ -29,12 +31,13 @@ export function EmailVerificationPage(props: EmailVerificationPageProps) {
         if (authenticated) await onVerified()
         setStatus('verified')
         setMessage('邮箱验证完成。')
+        void privacy.track('email_verification_completed', { source: 'email' })
       })
       .catch((error) => {
         setStatus('error')
         setMessage(error instanceof Error ? error.message : '验证链接无效或已过期。')
       })
-  }, [token, authenticated, onVerified])
+  }, [token, authenticated, onVerified, privacy])
 
   async function resend() {
     setResending(true)

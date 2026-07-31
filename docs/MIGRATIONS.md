@@ -23,4 +23,9 @@ subscriptions, one-time trials, entitlement grants, credit reservations, immutab
 usage events, immutable ledger entries, and balance projection triggers. Back up
 the metadata database before applying it to an existing environment.
 
+Migration `019_account_identity_lifecycle` adds email verification, password
+recovery, email delivery evidence, and pending onboarding state. Migration
+`020_privacy_consent_analytics` adds immutable privacy receipts and minimized
+first-party product analytics events.
+
 See [Postgres Persistence Path](POSTGRES_PERSISTENCE.md) before adding migrations that rely on SQLite-only SQL.

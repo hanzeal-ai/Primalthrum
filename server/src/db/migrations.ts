@@ -88,6 +88,10 @@ export const MIGRATIONS: Migration[] = [
     id: '019_account_identity_lifecycle',
     up: applyAccountIdentityLifecycle,
   },
+  {
+    id: '020_privacy_consent_analytics',
+    up: applyPrivacyConsentAnalytics,
+  },
 ];
 
 export function runMigrations(db: DatabaseAdapter): void {
@@ -1174,6 +1178,64 @@ function applyAccountIdentityLifecycle(db: DatabaseAdapter): void {
       ON account_action_tokens(purpose, token_hash, expires_at);
     CREATE INDEX IF NOT EXISTS account_email_outbox_dispatch_idx
       ON account_email_outbox(status, next_attempt_at, id);
+  `);
+}
+
+function applyPrivacyConsentAnalytics(db: DatabaseAdapter): void {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS privacy_consent_receipts (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      receipt_id TEXT NOT NULL UNIQUE,
+      subject_hash TEXT NOT NULL,
+      policy_version TEXT NOT NULL,
+      necessary_granted INTEGER NOT NULL DEFAULT 1 CHECK(necessary_granted = 1),
+      analytics_granted INTEGER NOT NULL CHECK(analytics_granted IN (0, 1)),
+      action TEXT NOT NULL CHECK(action IN ('granted', 'denied', 'withdrawn')),
+      source TEXT NOT NULL CHECK(source IN ('banner', 'preferences')),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS product_analytics_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_id TEXT NOT NULL UNIQUE,
+      consent_receipt_id INTEGER NOT NULL,
+      subject_hash TEXT NOT NULL,
+      event_name TEXT NOT NULL,
+      path TEXT NOT NULL,
+      properties_json TEXT NOT NULL DEFAULT '{}',
+      occurred_at TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(consent_receipt_id) REFERENCES privacy_consent_receipts(id) ON DELETE RESTRICT
+    );
+
+    CREATE INDEX IF NOT EXISTS privacy_consent_subject_idx
+      ON privacy_consent_receipts(subject_hash, id DESC);
+    CREATE INDEX IF NOT EXISTS product_analytics_name_time_idx
+      ON product_analytics_events(event_name, occurred_at);
+
+    CREATE TRIGGER IF NOT EXISTS privacy_consent_receipts_no_update
+    BEFORE UPDATE ON privacy_consent_receipts
+    BEGIN
+      SELECT RAISE(ABORT, 'privacy consent receipts are immutable');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS privacy_consent_receipts_no_delete
+    BEFORE DELETE ON privacy_consent_receipts
+    BEGIN
+      SELECT RAISE(ABORT, 'privacy consent receipts are immutable');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS product_analytics_events_no_update
+    BEFORE UPDATE ON product_analytics_events
+    BEGIN
+      SELECT RAISE(ABORT, 'product analytics events are immutable');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS product_analytics_events_no_delete
+    BEFORE DELETE ON product_analytics_events
+    BEGIN
+      SELECT RAISE(ABORT, 'product analytics events are immutable');
+    END;
   `);
 }
 

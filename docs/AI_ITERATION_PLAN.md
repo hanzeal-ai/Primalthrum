@@ -1915,8 +1915,16 @@ complete. Follow the same dependency and verification protocol used above.
   password rejection. The Web now includes pending-verification, resend, automatic
   token confirmation, forgot-password, reset-password, and revoked-session login
   handoff surfaces. Component tests and a live Chrome lifecycle cover the complete
-  path without console errors. Consent analytics, qualified legal approval, and
-  live transactional email delivery remain open.
+  path without console errors. Migration 020 and the Web consent layer now add
+  default-denied, versioned, pseudonymous analytics consent with immutable grant,
+  denial, and withdrawal receipts. The API accepts only a bounded event/property
+  allowlist when the supplied receipt is the subject's latest grant; the Web
+  exposes first-visit choices, a persistent preference center, and the public
+  signup funnel. HTTP, database, and component tests cover denial, grant, replay,
+  withdrawal, sensitive-property rejection, policy defaults, and post-consent
+  page views. Desktop and 390px mobile browser acceptance passed without overflow
+  or console errors. Qualified legal approval and live transactional email
+  delivery remain open.
 
 ### P19-02 Billing, Usage, Team, And Settings UX
 

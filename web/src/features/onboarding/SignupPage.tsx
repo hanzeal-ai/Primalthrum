@@ -1,10 +1,11 @@
 import { ArrowLeft, Check, Loader2 } from 'lucide-react'
-import { useMemo, useState, type FormEvent } from 'react'
+import { useEffect, useMemo, useRef, useState, type FormEvent } from 'react'
 
 import type { RegistrationInput, RegistrationResponse } from '../../api/types'
 import { Button } from '../../components/ui/button'
 import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
+import { usePrivacyConsent } from '../privacy/usePrivacyConsent'
 
 interface SignupPageProps {
   message: string
@@ -18,6 +19,14 @@ export function SignupPage({ message, onRegister }: SignupPageProps) {
   const [form, setForm] = useState({ email: '', password: '', workspaceName: '' })
   const [submitting, setSubmitting] = useState(false)
   const [error, setError] = useState('')
+  const privacy = usePrivacyConsent()
+  const viewed = useRef(false)
+
+  useEffect(() => {
+    if (viewed.current) return
+    viewed.current = true
+    void privacy.track('signup_viewed', { planKey, source: 'direct' })
+  }, [planKey, privacy])
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
@@ -28,7 +37,9 @@ export function SignupPage({ message, onRegister }: SignupPageProps) {
     setSubmitting(true)
     setError('')
     try {
+      void privacy.track('signup_submitted', { planKey, source: 'signup' })
       await onRegister({ ...form, workspaceName: form.workspaceName.trim(), planKey })
+      await privacy.track('signup_completed', { planKey, source: 'signup' })
       window.location.assign('/app')
     } catch (reason) {
       setError(reason instanceof Error ? reason.message : '注册失败，请稍后重试。')

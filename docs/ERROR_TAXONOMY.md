@@ -30,6 +30,9 @@ Tests inject a silent logger so payload assertions stay deterministic.
 
 | Code | Status | Workflow |
 | --- | --- | --- |
+| `PRIVACY_CONSENT_INVALID` | 400 | Privacy consent is malformed or targets an outdated policy version. |
+| `ANALYTICS_CONSENT_REQUIRED` | 403 | The supplied receipt is not the subject's latest analytics grant. |
+| `ANALYTICS_EVENT_INVALID` | 400/409 | The event violates the allowlist, time window, or idempotency contract. |
 | `TRIAL_NOT_ELIGIBLE` | 409 | The user or workspace already consumed a one-time trial. |
 | `TRIAL_PLAN_INVALID` | 409 | The selected plan has no activatable trial. |
 | `TRIAL_REQUEST_INVALID` | 400 | The trial request payload is invalid. |
