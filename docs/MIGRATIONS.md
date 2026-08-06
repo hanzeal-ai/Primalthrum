@@ -58,5 +58,9 @@ Migration `030_account_privacy_rights` adds account and Workspace deletion
 tombstones, durable export/deletion request state, retry counters, and immutable
 hashed data-rights lifecycle events. It preserves billing and security evidence
 while allowing customer content and credentials to be erased.
+Migration `031_workspace_ownership_transfer` enforces one active Owner per
+Workspace and adds immutable ownership-transfer evidence. Existing databases
+must resolve any legacy Workspace with multiple active Owners before this
+migration can be applied.
 
 See [Postgres Persistence Path](POSTGRES_PERSISTENCE.md) before adding migrations that rely on SQLite-only SQL.

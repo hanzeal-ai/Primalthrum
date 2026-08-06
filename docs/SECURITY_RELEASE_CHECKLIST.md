@@ -32,6 +32,8 @@ Use this checklist before tagging or deploying a commercial Primalthrum build.
 - Account deletion enforces its grace period and paid/shared-ownership blockers,
   revokes every Session and user-created API Key, deletes physical knowledge
   files, anonymizes identity data, and preserves billing/legal evidence.
+- Workspace ownership transfer requires Owner permission, current-password
+  reauthentication, exact target confirmation, one active Owner, and immutable evidence.
 - API clients show standardized `error.code`, `error.message`, and `error.status` without exposing secrets.
 - Public endpoints are limited to liveness, readiness, metrics, setup, auth, and documented public flows.
 

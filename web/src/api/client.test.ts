@@ -14,6 +14,7 @@ import {
   streamAgentRun,
   streamPublicAgentRun,
   synthesizeSpeech,
+  transferWorkspaceOwnership,
   transcribeAudio,
   uploadDocument,
   updateRetentionSettings,
@@ -269,6 +270,26 @@ describe('stream client', () => {
       email: 'member@example.com', role: 'member',
     })
     expect(window.localStorage.getItem('primalthrum.sessionToken')).toBe('invited-session')
+  })
+
+  it('sends ownership transfer confirmation only to the scoped workspace endpoint', async () => {
+    const fetchMock = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(new Response(JSON.stringify({
+      eventId: 'ownership-event', workspaceId: 3,
+    }), { status: 200, headers: { 'content-type': 'application/json' } }))
+
+    await transferWorkspaceOwnership(3, {
+      targetUserId: 4,
+      password: 'current owner password',
+      confirmTargetEmail: 'member@example.com',
+    })
+
+    expect(fetchMock.mock.calls[0]?.[0]).toContain('/api/workspaces/3/ownership')
+    expect(fetchMock.mock.calls[0]?.[1]?.method).toBe('PUT')
+    expect(JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body))).toEqual({
+      targetUserId: 4,
+      password: 'current owner password',
+      confirmTargetEmail: 'member@example.com',
+    })
   })
 
   it('stores no session until the MFA login challenge succeeds', async () => {

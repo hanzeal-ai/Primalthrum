@@ -159,7 +159,7 @@ function WorkspaceApplication() {
   }
 
   if (pathname === '/app/team') {
-    return <TeamPage user={auth.user} onLogout={auth.logout} />
+    return <TeamPage user={auth.user} onLogout={auth.logout} onSessionRefresh={auth.refreshSession} />
   }
 
   if (pathname === '/app/settings') {

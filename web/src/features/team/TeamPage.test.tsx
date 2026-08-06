@@ -11,6 +11,7 @@ const api = vi.hoisted(() => ({
   listWorkspaceMembers: vi.fn(),
   removeWorkspaceMember: vi.fn(),
   revokeWorkspaceInvitation: vi.fn(),
+  transferWorkspaceOwnership: vi.fn(),
   updateWorkspaceMemberRole: vi.fn(),
 }))
 
@@ -52,7 +53,7 @@ describe('TeamPage', () => {
     })
     api.updateWorkspaceMemberRole.mockResolvedValue({ ...members[1], role: 'developer' })
 
-    render(<TeamPage onLogout={vi.fn()} user={{
+    render(<TeamPage onLogout={vi.fn()} onSessionRefresh={vi.fn()} user={{
       id: 1, workspaceId: 1, email: 'owner@example.com', role: 'owner',
     }} />)
 
@@ -71,8 +72,41 @@ describe('TeamPage', () => {
     await waitFor(() => expect(api.updateWorkspaceMemberRole).toHaveBeenCalledWith(1, 2, 'developer'))
   })
 
+  it('requires explicit confirmation and refreshes the session after ownership transfer', async () => {
+    const refreshSession = vi.fn().mockResolvedValue(undefined)
+    api.transferWorkspaceOwnership.mockResolvedValue({
+      eventId: 'ownership-event',
+      workspaceId: 1,
+      previousOwner: { ...members[0], role: 'admin' },
+      newOwner: { ...members[1], role: 'owner' },
+      transferredAt: '2026-08-06T00:00:00.000Z',
+    })
+    render(<TeamPage onLogout={vi.fn()} onSessionRefresh={refreshSession} user={{
+      id: 1, workspaceId: 1, email: 'owner@example.com', role: 'owner',
+    }} />)
+
+    fireEvent.click(await screen.findByRole('button', { name: '转移所有权给 viewer@example.com' }))
+    expect(screen.getByRole('dialog', { name: '转移 Workspace 所有权' })).toBeTruthy()
+    const submit = screen.getByRole('button', { name: '确认转移' })
+    expect(submit).toHaveProperty('disabled', true)
+    fireEvent.change(screen.getByLabelText('确认目标成员邮箱'), {
+      target: { value: 'viewer@example.com' },
+    })
+    fireEvent.change(screen.getByLabelText('所有权转移当前密码'), {
+      target: { value: 'current owner password' },
+    })
+    fireEvent.click(submit)
+
+    await waitFor(() => expect(api.transferWorkspaceOwnership).toHaveBeenCalledWith(1, {
+      targetUserId: 2,
+      password: 'current owner password',
+      confirmTargetEmail: 'viewer@example.com',
+    }))
+    await waitFor(() => expect(refreshSession).toHaveBeenCalledTimes(1))
+  })
+
   it('keeps member management read-only for a developer', async () => {
-    render(<TeamPage onLogout={vi.fn()} user={{
+    render(<TeamPage onLogout={vi.fn()} onSessionRefresh={vi.fn()} user={{
       id: 2, workspaceId: 1, email: 'viewer@example.com', role: 'developer',
     }} />)
 
@@ -80,5 +114,6 @@ describe('TeamPage', () => {
     expect(screen.getAllByRole('link', { name: '团队' }).length).toBeGreaterThan(0)
     expect(screen.queryByLabelText('邀请邮箱')).toBeNull()
     expect(screen.queryByLabelText('调整 viewer@example.com 的角色')).toBeNull()
+    expect(screen.queryByRole('button', { name: /转移所有权给/ })).toBeNull()
   })
 })

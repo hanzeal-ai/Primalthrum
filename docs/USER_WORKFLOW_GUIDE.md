@@ -72,7 +72,10 @@ The recipient opens `/accept-invitation?token=...`. New users set a password;
 existing users enter their current password. Successful acceptance signs the
 recipient into the invited Workspace. Invitation links expire after seven days,
 can be accepted once, and are rate-limited. Owners cannot be changed or removed,
-and administrators cannot change their own role or remove themselves.
+and administrators cannot change their own role or remove themselves. The current
+Owner can use the crown action beside an active member to transfer ownership.
+Enter the target member email and current Owner password to confirm. The change
+is immediate: the target becomes Owner and the former Owner becomes Admin.
 
 ## API Keys And Login Sessions
 

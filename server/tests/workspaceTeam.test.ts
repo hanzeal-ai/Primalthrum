@@ -9,6 +9,8 @@ import { createApp } from '../src/app';
 import { SqliteDatabase } from '../src/db/sqlite';
 import { type AccountEmailMessage } from '../src/services/accountEmailSender';
 import { BillingRepository } from '../src/services/billingRepository';
+import { hashPassword } from '../src/services/passwordHash';
+import { UserRepository } from '../src/services/userRepository';
 
 let rootDir = '';
 let dbPath = '';
@@ -142,11 +144,136 @@ test('workspace invitations reserve seats, reject existing members, and can be r
   assert.equal(removedSession.status, 401);
 });
 
+test('workspace ownership transfer is reauthenticated, tenant-scoped, atomic, and auditable', async () => {
+  const successorInvite = await createInvite('successor@example.com', 'admin');
+  assert.equal(successorInvite.status, 201);
+  const successorInvitation = await body<{ token: string }>(successorInvite);
+  const successorAccept = await acceptInvite(successorInvitation.token, 'successor password value');
+  assert.equal(successorAccept.status, 201);
+  const successor = await body<{
+    user: { id: number; role: string };
+    session: { token: string };
+  }>(successorAccept);
+
+  const database = new SqliteDatabase(dbPath);
+  const outsider = new UserRepository(database).createUser(
+    'outsider@example.com',
+    hashPassword('outsider password value'),
+    true,
+  );
+  const endpoint = `${baseUrl}/api/workspaces/${workspaceId}/ownership`;
+
+  const adminAttempt = await fetch(endpoint, {
+    method: 'PUT',
+    headers: jsonHeaders(successor.session.token),
+    body: JSON.stringify({
+      targetUserId: ownerUserId,
+      password: 'successor password value',
+      confirmTargetEmail: 'team-owner@example.com',
+    }),
+  });
+  assert.equal(adminAttempt.status, 403);
+
+  const wrongPassword = await transferOwnership({
+    targetUserId: successor.user.id,
+    password: 'wrong owner password',
+    confirmTargetEmail: 'successor@example.com',
+  });
+  assert.equal(wrongPassword.status, 401);
+  assert.equal(
+    (await body<{ error: { code: string } }>(wrongPassword)).error.code,
+    'REAUTHENTICATION_REQUIRED',
+  );
+
+  const crossTenantTarget = await transferOwnership({
+    targetUserId: outsider.id,
+    password: 'correct horse battery staple',
+    confirmTargetEmail: 'outsider@example.com',
+  });
+  assert.equal(crossTenantTarget.status, 404);
+
+  const wrongConfirmation = await transferOwnership({
+    targetUserId: successor.user.id,
+    password: 'correct horse battery staple',
+    confirmTargetEmail: 'other@example.com',
+  });
+  assert.equal(wrongConfirmation.status, 400);
+
+  const transferred = await transferOwnership({
+    targetUserId: successor.user.id,
+    password: 'correct horse battery staple',
+    confirmTargetEmail: 'successor@example.com',
+  });
+  assert.equal(transferred.status, 200);
+  const transfer = await body<{
+    eventId: string;
+    previousOwner: { userId: number; role: string };
+    newOwner: { userId: number; role: string };
+  }>(transferred);
+  assert.ok(transfer.eventId);
+  assert.deepEqual(transfer.previousOwner, {
+    ...transfer.previousOwner,
+    userId: ownerUserId,
+    role: 'admin',
+  });
+  assert.deepEqual(transfer.newOwner, {
+    ...transfer.newOwner,
+    userId: successor.user.id,
+    role: 'owner',
+  });
+
+  const previousOwnerSession = await fetch(`${baseUrl}/api/auth/session`, {
+    headers: jsonHeaders(ownerToken),
+  });
+  assert.equal((await body<{ user: { role: string } }>(previousOwnerSession)).user.role, 'admin');
+  const newOwnerSession = await fetch(`${baseUrl}/api/auth/session`, {
+    headers: jsonHeaders(successor.session.token),
+  });
+  assert.equal((await body<{ user: { role: string } }>(newOwnerSession)).user.role, 'owner');
+
+  const owners = database.query<{ count: number }>(`
+    SELECT COUNT(*) AS count FROM workspace_memberships
+    WHERE workspace_id = ${workspaceId} AND role = 'owner' AND status = 'active';
+  `);
+  assert.equal(Number(owners[0]?.count), 1);
+  const events = database.query<{ event_id: string; initiated_by_user_id: number }>(`
+    SELECT event_id, initiated_by_user_id FROM workspace_ownership_events;
+  `);
+  assert.deepEqual(events, [{ event_id: transfer.eventId, initiated_by_user_id: ownerUserId }]);
+  assert.throws(
+    () => database.run(`UPDATE workspace_ownership_events SET workspace_id = 99;`),
+    /immutable/,
+  );
+  assert.throws(
+    () => database.run(`DELETE FROM workspace_ownership_events;`),
+    /immutable/,
+  );
+
+  const formerOwnerRetry = await transferOwnership({
+    targetUserId: outsider.id,
+    password: 'correct horse battery staple',
+    confirmTargetEmail: 'outsider@example.com',
+  });
+  assert.equal(formerOwnerRetry.status, 403);
+});
+
 function createInvite(email: string, role: string): Promise<Response> {
   return fetch(`${baseUrl}/api/workspaces/${workspaceId}/invitations`, {
     method: 'POST',
     headers: jsonHeaders(ownerToken),
     body: JSON.stringify({ email, role }),
+  });
+}
+
+function transferOwnership(input: {
+  targetUserId: number;
+  password: string;
+  confirmTargetEmail: string;
+}): Promise<Response> {
+  return fetch(`${baseUrl}/api/workspaces/${workspaceId}/ownership`, {
+    method: 'PUT',
+    headers: jsonHeaders(ownerToken),
+    body: JSON.stringify(input),
   });
 }
 

@@ -24,6 +24,14 @@ for (const access of ROLE_MATRIX) {
     await expect(page.getByRole('heading', { name: '成员', exact: true }))
       .toBeVisible({ timeout: 15_000 })
     await expect(page.getByLabel('邀请邮箱')).toHaveCount(access.membersManage ? 1 : 0)
+    const ownershipActions = page.getByRole('button', { name: /转移所有权给/ })
+    await expect(ownershipActions).toHaveCount(access.role === 'owner' ? 5 : 0)
+    if (access.role === 'owner') {
+      await ownershipActions.first().click()
+      await expect(page.getByRole('dialog', { name: '转移 Workspace 所有权' })).toBeVisible()
+      await expect(page.getByRole('button', { name: '确认转移' })).toBeDisabled()
+      await page.getByRole('button', { name: '关闭所有权转移' }).click()
+    }
     await expectDesktopNavigation(page, access)
     await expectNoHorizontalOverflow(page)
 

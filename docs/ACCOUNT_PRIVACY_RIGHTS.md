@@ -30,7 +30,7 @@ current password. The request enters a seven-day grace period. During that time,
 
 Deletion is blocked when an owned Workspace:
 
-- still has another active member, because ownership must be resolved first; or
+- still has another active member, until ownership is transferred to that member; or
 - has an active, trialing, incomplete, or past-due paid subscription.
 
 The same blockers are checked again immediately before execution. A durable
@@ -54,6 +54,11 @@ security events, and minimized privacy request evidence remain pseudonymous for
 contractual, fraud-prevention, tax, and legal-retention obligations. Production
 policy must define the exact jurisdiction-specific retention period and legal
 hold process before launch.
+
+An Owner can resolve the shared-Workspace blocker from `/app/team` without
+removing members. The dedicated ownership-transfer flow requires the current
+password and exact target member email, immediately demotes the former Owner to
+Admin, and preserves the Workspace for the new Owner.
 
 ## Operations
 

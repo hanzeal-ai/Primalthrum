@@ -1,4 +1,4 @@
-import { Check, Clipboard, Loader2, MailPlus, Trash2, UserRound, X } from 'lucide-react'
+import { Check, Clipboard, Crown, Loader2, MailPlus, Trash2, UserRound, X } from 'lucide-react'
 import { useEffect, useState, type FormEvent } from 'react'
 
 import {
@@ -8,6 +8,7 @@ import {
   listWorkspaceMembers,
   removeWorkspaceMember,
   revokeWorkspaceInvitation,
+  transferWorkspaceOwnership,
   updateWorkspaceMemberRole,
 } from '../../api/client'
 import type {
@@ -24,6 +25,7 @@ import { Input } from '../../components/ui/input'
 import { Label } from '../../components/ui/label'
 import { canManageMembers, canReadBilling } from '../../lib/workspacePermissions'
 import { WorkspaceAppShell } from '../app-shell/WorkspaceAppShell'
+import { OwnershipTransferDialog } from './OwnershipTransferDialog'
 
 const MEMBER_ROLES: Array<Exclude<WorkspaceRole, 'owner'>> = [
   'admin', 'developer', 'member', 'billing', 'viewer',
@@ -31,10 +33,11 @@ const MEMBER_ROLES: Array<Exclude<WorkspaceRole, 'owner'>> = [
 
 interface TeamPageProps {
   onLogout: () => Promise<void>
+  onSessionRefresh: () => Promise<void>
   user: AuthUser
 }
 
-export function TeamPage({ onLogout, user }: TeamPageProps) {
+export function TeamPage({ onLogout, onSessionRefresh, user }: TeamPageProps) {
   const [members, setMembers] = useState<WorkspaceMemberRecord[]>([])
   const [invitations, setInvitations] = useState<WorkspaceInvitationRecord[]>([])
   const [billing, setBilling] = useState<BillingSummary | null>(null)
@@ -46,6 +49,7 @@ export function TeamPage({ onLogout, user }: TeamPageProps) {
   const [createdInvite, setCreatedInvite] = useState<CreatedWorkspaceInvitation | null>(null)
   const [copied, setCopied] = useState(false)
   const [confirmRemove, setConfirmRemove] = useState<number | null>(null)
+  const [transferTarget, setTransferTarget] = useState<WorkspaceMemberRecord | null>(null)
   const canManage = canManageMembers(user.role)
 
   useEffect(() => {
@@ -126,6 +130,24 @@ export function TeamPage({ onLogout, user }: TeamPageProps) {
     }
   }
 
+  async function transferOwnership(input: { password: string; confirmTargetEmail: string }) {
+    if (!transferTarget) return
+    setBusy('ownership')
+    setError('')
+    try {
+      await transferWorkspaceOwnership(user.workspaceId, {
+        targetUserId: transferTarget.userId,
+        ...input,
+      })
+      setTransferTarget(null)
+      await onSessionRefresh()
+    } catch (reason) {
+      setError(errorMessage(reason, '无法转移 Workspace 所有权。'))
+    } finally {
+      setBusy('')
+    }
+  }
+
   async function copyInvite() {
     if (!createdInvite) return
     try {
@@ -162,8 +184,11 @@ export function TeamPage({ onLogout, user }: TeamPageProps) {
                     </select>
                   ) : <Badge variant={member.role === 'owner' ? 'default' : 'secondary'}>{roleLabel(member.role)}</Badge>}
                   {canManage && member.role !== 'owner' && member.userId !== user.id ? (
-                    confirmRemove === member.userId ? <div className="flex gap-1"><Button aria-label={`确认移除 ${member.email}`} disabled={Boolean(busy)} onClick={() => void removeMember(member)} size="icon" variant="destructive"><Check /></Button><Button aria-label="取消移除" onClick={() => setConfirmRemove(null)} size="icon" variant="ghost"><X /></Button></div>
-                      : <Button aria-label={`移除 ${member.email}`} onClick={() => setConfirmRemove(member.userId)} size="icon" title="移除成员" variant="ghost"><Trash2 /></Button>
+                    <div className="flex justify-end gap-1">
+                      {user.role === 'owner' ? <Button aria-label={`转移所有权给 ${member.email}`} disabled={Boolean(busy)} onClick={() => setTransferTarget(member)} size="icon" title="转移所有权" variant="ghost"><Crown /></Button> : null}
+                      {confirmRemove === member.userId ? <><Button aria-label={`确认移除 ${member.email}`} disabled={Boolean(busy)} onClick={() => void removeMember(member)} size="icon" variant="destructive"><Check /></Button><Button aria-label="取消移除" onClick={() => setConfirmRemove(null)} size="icon" variant="ghost"><X /></Button></>
+                        : <Button aria-label={`移除 ${member.email}`} onClick={() => setConfirmRemove(member.userId)} size="icon" title="移除成员" variant="ghost"><Trash2 /></Button>}
+                    </div>
                   ) : <span />}
                 </div>
               ))}
@@ -196,6 +221,7 @@ export function TeamPage({ onLogout, user }: TeamPageProps) {
           </section> : null}
         </div>
       )}
+      {transferTarget ? <OwnershipTransferDialog busy={busy === 'ownership'} member={transferTarget} onCancel={() => setTransferTarget(null)} onConfirm={transferOwnership} /> : null}
     </WorkspaceAppShell>
   )
 }

@@ -663,6 +663,14 @@ export interface WorkspaceMemberRecord {
   updatedAt: string
 }
 
+export interface WorkspaceOwnershipTransferRecord {
+  eventId: string
+  workspaceId: number
+  previousOwner: WorkspaceMemberRecord
+  newOwner: WorkspaceMemberRecord
+  transferredAt: string
+}
+
 export interface WorkspaceInvitationRecord {
   id: number
   workspaceId: number

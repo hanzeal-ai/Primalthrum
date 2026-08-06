@@ -82,6 +82,7 @@ import {
   UserRepository,
 } from './services/userRepository';
 import { WorkspaceRepository } from './services/workspaceRepository';
+import { WorkspaceOwnershipRepository } from './services/workspaceOwnershipRepository';
 import { LocalSecretVault } from './services/localSecretVault';
 import { RuntimeProviderResolver } from './services/runtimeProviderResolver';
 import { RuntimeSpeechResolver } from './services/runtimeSpeechResolver';
@@ -125,6 +126,7 @@ import { registerMfaRoutes } from './routes/mfaRoutes';
 import { registerOperatorChangeRoutes } from './routes/operatorChangeRoutes';
 import { registerOperatorDomainRoutes } from './routes/operatorDomainRoutes';
 import { registerOperatorRoutes } from './routes/operatorRoutes';
+import { registerWorkspaceOwnershipRoutes } from './routes/workspaceOwnershipRoutes';
 import { ApiKeyRepository } from './services/apiKeyRepository';
 import { MfaRepository } from './services/mfaRepository';
 import { MfaService } from './services/mfaService';
@@ -281,6 +283,7 @@ export function createApp(options: AppOptions = {}): Koa {
   );
   const userRepository = new UserRepository(db);
   const workspaceRepository = new WorkspaceRepository(db);
+  const workspaceOwnershipRepository = new WorkspaceOwnershipRepository(db, workspaceRepository);
   const sessionRepository = new SessionRepository(db);
   const operatorIdentity = new OperatorIdentityRepository(db);
   const operatorAudit = new OperatorAuditRepository(db);
@@ -707,6 +710,14 @@ export function createApp(options: AppOptions = {}): Koa {
     policies: retentionPolicies,
     retention: retentionService,
     schedule: (workspaceId) => retentionScheduler.trigger(workspaceId),
+    users: userRepository,
+  });
+  registerWorkspaceOwnershipRoutes(router, {
+    authorize,
+    currentUserId,
+    logger,
+    ownership: workspaceOwnershipRepository,
+    requireCurrentWorkspace,
     users: userRepository,
   });
   registerMfaRoutes(router, {

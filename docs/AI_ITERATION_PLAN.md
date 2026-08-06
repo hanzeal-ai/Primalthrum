@@ -2078,9 +2078,13 @@ complete. Follow the same dependency and verification protocol used above.
   anonymize identity/email data, and retain pseudonymous billing and security
   evidence. Real HTTP, tenant-role, retry scheduling, blocker, cancellation,
   deletion, immutable-event, responsive Web, and browser download coverage is
-  included. Legal-document approval, statutory retention/legal hold, ownership
-  transfer UX, production object lifecycle, and independent manual security
-  signoff remain open.
+  included. The third P21 slice adds a dedicated password-reauthenticated,
+  tenant-scoped ownership-transfer API and Team UI. Migration 031 enforces one
+  active Owner, atomically promotes the target while demoting the previous Owner,
+  and stores immutable transfer evidence. HTTP and Web tests cover role denial,
+  cross-tenant targets, confirmation, live Session roles, database uniqueness,
+  and audit immutability. Legal-document approval, statutory retention/legal hold,
+  production object lifecycle, and independent manual security signoff remain open.
 
 ### P22-01 Production Data And Infrastructure
 

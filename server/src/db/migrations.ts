@@ -132,6 +132,10 @@ export const MIGRATIONS: Migration[] = [
     id: '030_account_privacy_rights',
     up: applyAccountPrivacyRights,
   },
+  {
+    id: '031_workspace_ownership_transfer',
+    up: applyWorkspaceOwnershipTransfer,
+  },
 ];
 
 export function runMigrations(db: DatabaseAdapter): void {
@@ -2058,6 +2062,41 @@ function applyAccountPrivacyRights(db: DatabaseAdapter): void {
     BEFORE DELETE ON account_privacy_events
     BEGIN
       SELECT RAISE(ABORT, 'account privacy events are immutable');
+    END;
+  `);
+}
+
+function applyWorkspaceOwnershipTransfer(db: DatabaseAdapter): void {
+  db.run(`
+    CREATE UNIQUE INDEX IF NOT EXISTS workspace_active_owner_idx
+      ON workspace_memberships(workspace_id)
+      WHERE role = 'owner' AND status = 'active';
+
+    CREATE TABLE IF NOT EXISTS workspace_ownership_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_id TEXT NOT NULL UNIQUE,
+      workspace_id INTEGER NOT NULL,
+      previous_owner_user_id INTEGER NOT NULL,
+      new_owner_user_id INTEGER NOT NULL,
+      initiated_by_user_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CHECK(previous_owner_user_id <> new_owner_user_id),
+      CHECK(previous_owner_user_id = initiated_by_user_id)
+    );
+
+    CREATE INDEX IF NOT EXISTS workspace_ownership_events_workspace_time_idx
+      ON workspace_ownership_events(workspace_id, created_at DESC, id DESC);
+
+    CREATE TRIGGER IF NOT EXISTS workspace_ownership_events_no_update
+    BEFORE UPDATE ON workspace_ownership_events
+    BEGIN
+      SELECT RAISE(ABORT, 'workspace ownership events are immutable');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS workspace_ownership_events_no_delete
+    BEFORE DELETE ON workspace_ownership_events
+    BEGIN
+      SELECT RAISE(ABORT, 'workspace ownership events are immutable');
     END;
   `);
 }

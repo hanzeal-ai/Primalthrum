@@ -61,6 +61,7 @@ import type {
   ApiKeyScope,
   WorkspaceInvitationRecord,
   WorkspaceMemberRecord,
+  WorkspaceOwnershipTransferRecord,
   WorkspaceRole,
   WorkspaceSubscriptionRecord,
   VerificationDispatchResponse,
@@ -359,6 +360,16 @@ export async function removeWorkspaceMember(workspaceId: number, userId: number)
   return apiFetch<void>(`/api/workspaces/${workspaceId}/members/${userId}`, {
     method: 'DELETE',
     parseJson: false,
+  })
+}
+
+export async function transferWorkspaceOwnership(
+  workspaceId: number,
+  input: { targetUserId: number; password: string; confirmTargetEmail: string },
+): Promise<WorkspaceOwnershipTransferRecord> {
+  return apiFetch<WorkspaceOwnershipTransferRecord>(`/api/workspaces/${workspaceId}/ownership`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
   })
 }
 
