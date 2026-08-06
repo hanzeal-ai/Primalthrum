@@ -165,6 +165,7 @@ Stripe 配置、Webhook 和沙箱发布门禁见 [Stripe Payments And Subscripti
 API Key 和登录会话安全契约见 [API Keys And Session Security](docs/API_KEYS_AND_SESSIONS.md)。
 多因素认证、恢复码和登录挑战安全契约见 [Multi-Factor Authentication Security](docs/MFA_SECURITY.md)。
 工作区留存范围、执行和审计边界见 [Workspace Data Retention](docs/DATA_RETENTION.md)。
+独立运营身份、角色权限、限时支持授权和审计契约见 [Operator Control Plane](docs/OPERATOR_CONTROL_PLANE.md)。
 
 分段执行：
 
@@ -200,6 +201,7 @@ web/     React + TypeScript + Vite 研发控制台
 - [Error Taxonomy](docs/ERROR_TAXONOMY.md): run、job、provider config、document API 的标准错误响应和结构化日志规则。
 - [Health And Metrics](docs/HEALTH_METRICS.md): 生产健康检查、readiness 探针和 Prometheus 指标导出。
 - [Operator Setup](docs/OPERATOR_SETUP.md): 首次运营者从创建管理员到完成首个 Agent 运行的检查清单。
+- [Operator Control Plane](docs/OPERATOR_CONTROL_PLANE.md): 独立运营账号、RBAC、支持授权与不可变审计。
 - [Demo Research Agent](docs/DEMO_RESEARCH_AGENT.md): 可用于演示的 Research Agent 配置、知识文档和 smoke 命令。
 - [Security And Release Checklist](docs/SECURITY_RELEASE_CHECKLIST.md): 商业发布前的安全、secrets、危险工具、备份和文档 gate。
 - [Multi-Factor Authentication Security](docs/MFA_SECURITY.md): TOTP、恢复码、邀请挑战、角色矩阵与生产运维要求。

@@ -42,5 +42,8 @@ challenges, immutable MFA events, and Session authentication assurance metadata.
 Migration `026_workspace_invitation_email` extends the durable transactional
 email Outbox with Workspace invitation ownership and delivery context while
 preserving all existing account email delivery evidence.
+Migration `027_operator_control_plane` adds isolated Operator users and hashed
+sessions, explicit time-limited Workspace support grants, and immutable minimized
+Operator audit evidence.
 
 See [Postgres Persistence Path](POSTGRES_PERSISTENCE.md) before adding migrations that rely on SQLite-only SQL.

@@ -8,9 +8,9 @@ import { PrivacyConsentProvider } from './features/privacy/PrivacyConsentProvide
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
     <ErrorBoundary>
-      <PrivacyConsentProvider>
-        <App />
-      </PrivacyConsentProvider>
+      {window.location.pathname.startsWith('/operator')
+        ? <App />
+        : <PrivacyConsentProvider><App /></PrivacyConsentProvider>}
     </ErrorBoundary>
   </StrictMode>,
 )

@@ -29,6 +29,8 @@ const DAY = 24 * HOUR;
 
 export const DEFAULT_ABUSE_POLICIES: readonly AbusePolicy[] = [
   policy('setup_admin', 'setup_admin', 'POST', /^\/api\/setup\/admin$/, [ip(3, HOUR)]),
+  policy('operator_setup', 'operator_setup', 'POST', /^\/api\/operator\/setup$/, [ip(3, HOUR)]),
+  policy('operator_login', 'operator_login', 'POST', /^\/api\/operator\/auth\/login$/, [ip(20, 10 * MINUTE), identity(8, 10 * MINUTE)]),
   policy('auth_login', 'auth_login', 'POST', /^\/api\/auth\/login$/, [ip(30, 10 * MINUTE), identity(10, 10 * MINUTE)]),
   policy('auth_mfa_verify', 'auth_mfa_verify', 'POST', /^\/api\/auth\/mfa\/verify$/, [ip(30, 10 * MINUTE), token(5, 10 * MINUTE)]),
   policy('auth_register', 'auth_register', 'POST', /^\/api\/auth\/register$/, [ip(5, HOUR), identity(3, DAY)], true),

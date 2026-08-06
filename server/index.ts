@@ -51,6 +51,7 @@ const app = createApp({
   botChallengeVerifier: abuseProtection.botChallengeVerifier,
   botChallengeSiteKey: abuseProtection.botChallengeSiteKey,
   trustedProxyHops: abuseProtection.trustedProxyHops,
+  operatorBootstrapToken: process.env.OPERATOR_BOOTSTRAP_TOKEN,
 });
 
 app.listen(port, () => {

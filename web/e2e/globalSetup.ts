@@ -6,6 +6,7 @@ import { BillingRepository } from '../../server/src/services/billingRepository'
 
 const API_URL = 'http://127.0.0.1:43100'
 const PASSWORD = 'commercial role matrix password'
+const OPERATOR_BOOTSTRAP_TOKEN = 'browser-e2e-operator-bootstrap-token-0001'
 const ROLES = ['admin', 'developer', 'member', 'billing', 'viewer'] as const
 
 export default async function globalSetup() {
@@ -55,6 +56,12 @@ export default async function globalSetup() {
       })
       await assertStatus(accepted, 201, `accept ${role} invitation`)
     }
+
+    const operator = await api.post('/api/operator/setup', {
+      headers: { 'X-Operator-Bootstrap-Token': OPERATOR_BOOTSTRAP_TOKEN },
+      data: { email: 'operator@role-matrix.test', password: PASSWORD },
+    })
+    await assertStatus(operator, 201, 'create browser operator')
   } finally {
     await api.dispose()
   }

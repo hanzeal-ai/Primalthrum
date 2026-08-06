@@ -16,6 +16,7 @@ const server = createApp({
   dbPath: resolve(rootDir, 'platform.sqlite'),
   documentStorageDir: resolve(rootDir, 'documents'),
   generatedAgentsDir: resolve(rootDir, 'generated-agents'),
+  operatorBootstrapToken: 'browser-e2e-operator-bootstrap-token-0001',
   publicAppUrl: 'http://127.0.0.1:4173',
 }).listen(port, '127.0.0.1', () => {
   console.log(`Primalthrum browser E2E server listening on http://127.0.0.1:${port}`);

@@ -116,6 +116,10 @@ export const MIGRATIONS: Migration[] = [
     id: '026_workspace_invitation_email',
     up: applyWorkspaceInvitationEmail,
   },
+  {
+    id: '027_operator_control_plane',
+    up: applyOperatorControlPlane,
+  },
 ];
 
 export function runMigrations(db: DatabaseAdapter): void {
@@ -1644,6 +1648,111 @@ function applyWorkspaceInvitationEmail(db: DatabaseAdapter): void {
     CREATE UNIQUE INDEX account_email_provider_message_idx
       ON account_email_outbox(provider, provider_message_id)
       WHERE provider_message_id <> '';
+  `);
+}
+
+function applyOperatorControlPlane(db: DatabaseAdapter): void {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS operator_users (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      email TEXT NOT NULL UNIQUE,
+      password_hash TEXT NOT NULL,
+      role TEXT NOT NULL CHECK(role IN (
+        'super_admin', 'support', 'billing', 'security', 'viewer'
+      )),
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'disabled')),
+      must_change_password INTEGER NOT NULL DEFAULT 1,
+      bootstrap_root INTEGER NOT NULL DEFAULT 0 CHECK(bootstrap_root IN (0, 1)),
+      last_login_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS operator_sessions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      operator_user_id INTEGER NOT NULL,
+      token_hash TEXT NOT NULL UNIQUE,
+      expires_at TEXT NOT NULL,
+      revoked_at TEXT,
+      last_seen_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(operator_user_id) REFERENCES operator_users(id) ON DELETE CASCADE
+    );
+
+    CREATE TABLE IF NOT EXISTS operator_support_grants (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      operator_user_id INTEGER NOT NULL,
+      permissions_json TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      ticket_ref TEXT NOT NULL,
+      expires_at TEXT NOT NULL,
+      revoked_at TEXT,
+      revoked_by_operator_id INTEGER,
+      created_by_operator_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(operator_user_id) REFERENCES operator_users(id) ON DELETE RESTRICT,
+      FOREIGN KEY(revoked_by_operator_id) REFERENCES operator_users(id) ON DELETE RESTRICT,
+      FOREIGN KEY(created_by_operator_id) REFERENCES operator_users(id) ON DELETE RESTRICT
+    );
+
+    CREATE TABLE IF NOT EXISTS operator_audit_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_id TEXT NOT NULL UNIQUE,
+      operator_user_id INTEGER,
+      event_type TEXT NOT NULL,
+      target_type TEXT NOT NULL DEFAULT '',
+      target_id TEXT NOT NULL DEFAULT '',
+      metadata_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(operator_user_id) REFERENCES operator_users(id) ON DELETE RESTRICT
+    );
+
+    CREATE INDEX IF NOT EXISTS operator_sessions_active_idx
+      ON operator_sessions(token_hash, expires_at, revoked_at);
+    CREATE UNIQUE INDEX IF NOT EXISTS operator_bootstrap_root_once_idx
+      ON operator_users(bootstrap_root) WHERE bootstrap_root = 1;
+    CREATE INDEX IF NOT EXISTS operator_support_grants_active_idx
+      ON operator_support_grants(operator_user_id, workspace_id, expires_at, revoked_at);
+    CREATE INDEX IF NOT EXISTS operator_audit_events_time_idx
+      ON operator_audit_events(created_at DESC, id DESC);
+
+    CREATE TRIGGER IF NOT EXISTS operator_audit_events_no_update
+    BEFORE UPDATE ON operator_audit_events
+    BEGIN
+      SELECT RAISE(ABORT, 'operator audit events are immutable');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS operator_audit_events_no_delete
+    BEFORE DELETE ON operator_audit_events
+    BEGIN
+      SELECT RAISE(ABORT, 'operator audit events are immutable');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS operator_support_grants_no_delete
+    BEFORE DELETE ON operator_support_grants
+    BEGIN
+      SELECT RAISE(ABORT, 'operator support grants cannot be deleted');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS operator_support_grants_update_guard
+    BEFORE UPDATE ON operator_support_grants
+    WHEN
+      NEW.id IS NOT OLD.id
+      OR NEW.workspace_id IS NOT OLD.workspace_id
+      OR NEW.operator_user_id IS NOT OLD.operator_user_id
+      OR NEW.permissions_json IS NOT OLD.permissions_json
+      OR NEW.reason IS NOT OLD.reason
+      OR NEW.ticket_ref IS NOT OLD.ticket_ref
+      OR NEW.expires_at IS NOT OLD.expires_at
+      OR NEW.created_by_operator_id IS NOT OLD.created_by_operator_id
+      OR NEW.created_at IS NOT OLD.created_at
+      OR OLD.revoked_at IS NOT NULL
+      OR NEW.revoked_at IS NULL
+      OR NEW.revoked_by_operator_id IS NULL
+    BEGIN
+      SELECT RAISE(ABORT, 'operator support grant fields are immutable');
+    END;
   `);
 }
 

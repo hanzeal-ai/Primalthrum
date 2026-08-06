@@ -2013,11 +2013,26 @@ complete. Follow the same dependency and verification protocol used above.
 
 ### P20-01 Operator Administration And Support
 
-- Status: Todo
+- Status: In Progress
 - Goal: Deliver audited operations for workspaces, users, subscriptions, usage,
   payments, Agents, jobs, abuse, support access, flags, and system health.
 - Dependencies: P19-02
 - Verification: operator RBAC, audit, support expiry, and sensitive-data tests.
+- Evidence: migration 027 establishes a distinct Operator identity and hashed
+  12-hour Session domain with one-time token-bound Super Admin bootstrap, five
+  platform roles, temporary-password rotation, and bidirectional separation from
+  customer Sessions. The first operations console exposes readiness and minimized
+  platform/Workspace aggregates, Operator provisioning, immutable filtered audit,
+  and explicit support grants bound to one Operator, Workspace, ticket, scope, and
+  five-minute-to-four-hour expiry. Revoked and expired grants cannot open support
+  context, grants cannot be deleted, and support access never impersonates a
+  customer. Real HTTP tests cover all five roles, password rotation, token-at-rest,
+  customer/Operator isolation, assignment, scope, expiry, revocation, audit
+  immutability, and sensitive metadata filtering. React tests mirror the role
+  matrix; isolated desktop and Pixel 5 Playwright checks cover login, readiness,
+  Workspace and support views, console health, and horizontal overflow. Detailed
+  user, subscription, payment, Agent, Job, abuse, feature-flag, and incident views
+  remain open.
 
 ### P21-01 Security, Privacy, And Compliance Baseline
 

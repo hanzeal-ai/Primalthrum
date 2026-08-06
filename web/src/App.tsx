@@ -15,6 +15,7 @@ import { PublicHomePage } from './features/marketing/PublicHomePage'
 import { PublicInfoPage } from './features/marketing/PublicInfoPage'
 import { PublicPricingPage } from './features/marketing/PublicPricingPage'
 import { SignupPage } from './features/onboarding/SignupPage'
+import { OperatorApp } from './features/operator/OperatorApp'
 import { SecuritySettingsPage } from './features/settings/SecuritySettingsPage'
 import { InvitationAcceptPage } from './features/team/InvitationAcceptPage'
 import { TeamPage } from './features/team/TeamPage'
@@ -22,6 +23,13 @@ import { canReadAgents, canReadBilling } from './lib/workspacePermissions'
 import './App.css'
 
 export default function App() {
+  if (normalizePath(window.location.pathname).startsWith('/operator')) {
+    return <OperatorApp />
+  }
+  return <WorkspaceApplication />
+}
+
+function WorkspaceApplication() {
   const auth = useAuthSession()
   const agentSlug = hostedAgentSlug(window.location.pathname)
   const preview = previewAgentRoute(window.location.pathname, window.location.search)

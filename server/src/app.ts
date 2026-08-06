@@ -110,6 +110,7 @@ import { registerAbuseRoutes } from './routes/abuseRoutes';
 import { registerSecuritySettingsRoutes } from './routes/securitySettingsRoutes';
 import { registerRetentionSettingsRoutes } from './routes/retentionSettingsRoutes';
 import { registerMfaRoutes } from './routes/mfaRoutes';
+import { registerOperatorRoutes } from './routes/operatorRoutes';
 import { ApiKeyRepository } from './services/apiKeyRepository';
 import { MfaRepository } from './services/mfaRepository';
 import { MfaService } from './services/mfaService';
@@ -121,6 +122,10 @@ import {
   hasWorkspacePermission,
   type WorkspacePermission,
 } from './services/workspaceAuthorization';
+import { OperatorIdentityRepository } from './services/operatorIdentityRepository';
+import { OperatorAuditRepository } from './services/operatorAuditRepository';
+import { OperatorReadRepository } from './services/operatorReadRepository';
+import { SupportAccessRepository } from './services/supportAccessRepository';
 
 export interface AppOptions {
   agentBaseUrl?: string;
@@ -142,6 +147,7 @@ export interface AppOptions {
   botChallengeVerifier?: BotChallengeVerifier;
   botChallengeSiteKey?: string;
   trustedProxyHops?: number;
+  operatorBootstrapToken?: string;
 }
 
 const DEFAULT_AGENT_BASE_URL = 'http://127.0.0.1:8000';
@@ -222,6 +228,7 @@ function runStreamHeaders(run: RunRecord): Record<string, string> {
 export function createApp(options: AppOptions = {}): Koa {
   const app = new Koa();
   const router = new Router();
+  const operatorRouter = new Router();
   const agentBaseUrl = options.agentBaseUrl ?? DEFAULT_AGENT_BASE_URL;
   const logger = options.logger ?? new JsonConsoleLogger();
   const metrics = options.metrics ?? new MetricsRegistry();
@@ -247,6 +254,10 @@ export function createApp(options: AppOptions = {}): Koa {
   const userRepository = new UserRepository(db);
   const workspaceRepository = new WorkspaceRepository(db);
   const sessionRepository = new SessionRepository(db);
+  const operatorIdentity = new OperatorIdentityRepository(db);
+  const operatorAudit = new OperatorAuditRepository(db);
+  const operatorReads = new OperatorReadRepository(db);
+  const supportAccess = new SupportAccessRepository(db);
   const localSecretVault = new LocalSecretVault(db);
   const mfaService = new MfaService(new MfaRepository(db, localSecretVault));
   const apiKeyRepository = new ApiKeyRepository(db);
@@ -636,6 +647,16 @@ export function createApp(options: AppOptions = {}): Koa {
       return { user: principal, emailVerified: Boolean(user.emailVerifiedAt) };
     },
   });
+  registerOperatorRoutes(operatorRouter, {
+    audit: operatorAudit,
+    bootstrapToken: options.operatorBootstrapToken,
+    enforceAbuse: (ctx) => abuseProtection.enforce(ctx, logger, metrics),
+    identity: operatorIdentity,
+    logger,
+    reads: operatorReads,
+    readiness: () => checkServerReadiness({ db, agentBaseUrl }),
+    support: supportAccess,
+  });
 
   app.use(async (ctx, next) => {
     const origin = ctx.get('origin');
@@ -643,7 +664,7 @@ export function createApp(options: AppOptions = {}): Koa {
     ctx.set('Access-Control-Allow-Credentials', 'true');
     ctx.set(
       'Access-Control-Allow-Headers',
-      'Content-Type, Accept, Authorization, Idempotency-Key, Last-Event-ID, X-Bot-Challenge-Token',
+      'Content-Type, Accept, Authorization, Idempotency-Key, Last-Event-ID, X-Bot-Challenge-Token, X-Operator-Bootstrap-Token',
     );
     ctx.set(
       'Access-Control-Expose-Headers',
@@ -673,6 +694,8 @@ export function createApp(options: AppOptions = {}): Koa {
       });
     }
   });
+  app.use(operatorRouter.routes());
+  app.use(operatorRouter.allowedMethods());
   app.use(createAuthMiddleware(sessionRepository, apiKeyRepository));
   app.use(async (ctx, next) => {
     if (await abuseProtection.enforce(ctx, logger, metrics)) await next();
