@@ -2,7 +2,7 @@ import { renderAccountEmail } from './accountEmailTemplates';
 
 export interface AccountEmailMessage {
   id: number;
-  template: 'verify_email' | 'reset_password';
+  template: 'verify_email' | 'reset_password' | 'workspace_invitation';
   recipientEmail: string;
   payload: Record<string, unknown>;
 }

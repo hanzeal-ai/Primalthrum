@@ -1,8 +1,8 @@
 # Transactional Email Operations
 
-Primalthrum sends account verification and password recovery through a durable
-Outbox. Customer requests only enqueue messages; a dispatcher claims them with a
-five-minute lease and sends them with the stable idempotency key
+Primalthrum sends account verification, password recovery, and Workspace
+invitations through a durable Outbox. Customer requests only enqueue messages;
+a dispatcher claims them with a five-minute lease and sends them with the stable idempotency key
 `primalthrum-account-email-<outbox-id>`.
 
 ## Provider Configuration
@@ -64,7 +64,8 @@ Outbox and Provider IDs but not tokens or email content.
 ## Production Verification
 
 Before release, use a mailbox on each supported domain to complete registration,
-verification, forgot-password, and reset-password. Confirm Provider acceptance,
+verification, forgot-password, reset-password, and Workspace invitation
+acceptance. Confirm Provider acceptance,
 Webhook delivery, database evidence, and the final user flow. Then force a test
 bounce and confirm the `bounced` gauge and alert. Passing automated tests proves
 the integration contract, not live DNS reputation or mailbox delivery.

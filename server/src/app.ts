@@ -622,6 +622,7 @@ export function createApp(options: AppOptions = {}): Koa {
           user.id,
           user.email,
         );
+        accountEmailOutbox.supersedeInvitation(invitationId);
         const invitedPrincipal = workspaceRepository.principalForUser(user.id, workspaceId);
         if (!invitedPrincipal) throw new Error('workspace membership could not be loaded');
         return {
@@ -1041,9 +1042,30 @@ export function createApp(options: AppOptions = {}): Koa {
         role: body.role,
         invitedByUserId: ctx.state.authSession.user.id,
       });
+      const workspace = workspaceRepository.findById(workspaceId);
+      if (!workspace) throw new Error('workspace not found');
+      const acceptUrl = `${publicAppUrl}/accept-invitation?token=${encodeURIComponent(invitation.token)}`;
+      try {
+        accountEmailOutbox.supersedePendingInvitations(workspaceId, email, invitation.id);
+        accountEmailOutbox.enqueue({
+          template: 'workspace_invitation',
+          recipientEmail: email,
+          payload: {
+            workspaceId,
+            invitationId: invitation.id,
+            workspaceName: workspace.name,
+            role: invitation.role,
+            actionUrl: acceptUrl,
+          },
+        });
+      } catch (error) {
+        workspaceRepository.revokeInvitation(workspaceId, invitation.id);
+        throw error;
+      }
       ctx.body = {
         ...invitation,
-        acceptUrl: `${publicAppUrl}/accept-invitation?token=${encodeURIComponent(invitation.token)}`,
+        acceptUrl,
+        emailDelivery: 'queued',
       };
     } catch (error) {
       sendApiError(ctx, logger, {
@@ -1058,7 +1080,9 @@ export function createApp(options: AppOptions = {}): Koa {
     const workspaceId = Number(ctx.params.id);
     if (!requireCurrentWorkspace(ctx, workspaceId) || !authorize(ctx, 'members.manage')) return;
     try {
-      workspaceRepository.revokeInvitation(workspaceId, Number(ctx.params.invitationId));
+      const invitationId = Number(ctx.params.invitationId);
+      workspaceRepository.revokeInvitation(workspaceId, invitationId);
+      accountEmailOutbox.supersedeInvitation(invitationId);
       ctx.status = 204;
     } catch (error) {
       sendApiError(ctx, logger, {
@@ -1098,6 +1122,7 @@ export function createApp(options: AppOptions = {}): Koa {
       }
       user ??= userRepository.createUser(invitation.email, hashPassword(password), true);
       workspaceRepository.acceptInvitation(token, user.id, user.email);
+      accountEmailOutbox.supersedeInvitation(invitation.id);
       const principal = workspaceRepository.principalForUser(user.id, invitation.workspaceId);
       if (!principal) throw new Error('workspace membership could not be loaded');
       const session = sessionRepository.create(principal);

@@ -37,11 +37,13 @@ export class AccountEmailOutboxRepository {
   }
 
   enqueue(input: Omit<AccountEmailMessage, 'id'>): void {
+    const context = emailContext(input);
     this.db.run(`
       INSERT INTO account_email_outbox (
-        user_id, template, recipient_email, payload_json
+        user_id, workspace_id, invitation_id, template, recipient_email, payload_json
       ) VALUES (
-        ${sqlValue(Number(input.payload.userId))}, ${sqlValue(input.template)},
+        ${sqlValue(context.userId)}, ${sqlValue(context.workspaceId)},
+        ${sqlValue(context.invitationId)}, ${sqlValue(input.template)},
         ${sqlValue(input.recipientEmail)}, ${sqlValue(JSON.stringify(input.payload))}
       );
     `);
@@ -58,6 +60,30 @@ export class AccountEmailOutboxRepository {
     `);
   }
 
+  supersedePendingInvitations(workspaceId: number, recipientEmail: string, exceptInvitationId?: number): void {
+    this.db.run(`
+      UPDATE account_email_outbox
+      SET status = 'superseded', payload_json = '{}',
+        updated_at = ${sqlValue(this.now().toISOString())}
+      WHERE workspace_id = ${sqlValue(workspaceId)}
+        AND recipient_email = ${sqlValue(recipientEmail)}
+        AND template = 'workspace_invitation'
+        ${exceptInvitationId ? `AND invitation_id <> ${sqlValue(exceptInvitationId)}` : ''}
+        AND status IN ('pending', 'delivering', 'failed');
+    `);
+  }
+
+  supersedeInvitation(invitationId: number): void {
+    this.db.run(`
+      UPDATE account_email_outbox
+      SET status = 'superseded', payload_json = '{}',
+        updated_at = ${sqlValue(this.now().toISOString())}
+      WHERE invitation_id = ${sqlValue(invitationId)}
+        AND template = 'workspace_invitation'
+        AND status IN ('pending', 'delivering', 'failed');
+    `);
+  }
+
   claimNext(): ClaimedAccountEmail | null {
     const now = this.now().toISOString();
     this.db.run(`
@@ -69,7 +95,7 @@ export class AccountEmailOutboxRepository {
     `);
     const row = this.db.query<{
       id: number;
-      template: 'verify_email' | 'reset_password';
+      template: AccountEmailMessage['template'];
       recipient_email: string;
       payload_json: string;
       attempts: number;
@@ -232,6 +258,32 @@ export class AccountEmailOutboxRepository {
       complained: Number(row.complained ?? 0),
     };
   }
+}
+
+function emailContext(input: Omit<AccountEmailMessage, 'id'>): {
+  userId: number | null;
+  workspaceId: number | null;
+  invitationId: number | null;
+} {
+  if (input.template === 'workspace_invitation') {
+    return {
+      userId: null,
+      workspaceId: positiveInteger(input.payload.workspaceId, 'workspace invitation workspace'),
+      invitationId: positiveInteger(input.payload.invitationId, 'workspace invitation'),
+    };
+  }
+  return {
+    userId: positiveInteger(input.payload.userId, 'account email user'),
+    workspaceId: null,
+    invitationId: null,
+  };
+}
+
+function positiveInteger(value: unknown, label: string): number {
+  if (typeof value !== 'number' || !Number.isSafeInteger(value) || value <= 0) {
+    throw new Error(`${label} id is invalid`);
+  }
+  return value;
 }
 
 function validateProviderIdentity(provider: string, providerMessageId: string): void {

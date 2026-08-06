@@ -112,6 +112,10 @@ export const MIGRATIONS: Migration[] = [
     id: '025_account_mfa',
     up: applyAccountMfa,
   },
+  {
+    id: '026_workspace_invitation_email',
+    up: applyWorkspaceInvitationEmail,
+  },
 ];
 
 export function runMigrations(db: DatabaseAdapter): void {
@@ -1581,6 +1585,65 @@ function applyAccountMfa(db: DatabaseAdapter): void {
     BEGIN
       SELECT RAISE(ABORT, 'MFA events are immutable');
     END;
+  `);
+}
+
+function applyWorkspaceInvitationEmail(db: DatabaseAdapter): void {
+  db.run(`
+    DROP TABLE IF EXISTS account_email_outbox_next;
+
+    CREATE TABLE account_email_outbox_next (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      user_id INTEGER,
+      workspace_id INTEGER,
+      invitation_id INTEGER,
+      template TEXT NOT NULL CHECK(
+        template IN ('verify_email', 'reset_password', 'workspace_invitation')
+      ),
+      recipient_email TEXT NOT NULL,
+      payload_json TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending'
+        CHECK(status IN ('pending', 'delivering', 'delivered', 'failed', 'superseded')),
+      attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts >= 0),
+      next_attempt_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      last_error TEXT NOT NULL DEFAULT '',
+      delivered_at TEXT,
+      provider TEXT NOT NULL DEFAULT '',
+      provider_message_id TEXT NOT NULL DEFAULT '',
+      accepted_at TEXT,
+      dead_lettered_at TEXT,
+      last_provider_status TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CHECK(
+        (template IN ('verify_email', 'reset_password') AND user_id IS NOT NULL)
+        OR
+        (template = 'workspace_invitation' AND workspace_id IS NOT NULL AND invitation_id IS NOT NULL)
+      ),
+      FOREIGN KEY(user_id) REFERENCES users(id) ON DELETE CASCADE
+    );
+
+    INSERT INTO account_email_outbox_next (
+      id, user_id, template, recipient_email, payload_json, status, attempts,
+      next_attempt_at, last_error, delivered_at, provider, provider_message_id,
+      accepted_at, dead_lettered_at, last_provider_status, created_at, updated_at
+    )
+    SELECT
+      id, user_id, template, recipient_email, payload_json, status, attempts,
+      next_attempt_at, last_error, delivered_at, provider, provider_message_id,
+      accepted_at, dead_lettered_at, last_provider_status, created_at, updated_at
+    FROM account_email_outbox;
+
+    DROP TABLE account_email_outbox;
+    ALTER TABLE account_email_outbox_next RENAME TO account_email_outbox;
+
+    CREATE INDEX account_email_outbox_dispatch_idx
+      ON account_email_outbox(status, next_attempt_at, id);
+    CREATE INDEX account_email_outbox_invitation_idx
+      ON account_email_outbox(workspace_id, invitation_id, status);
+    CREATE UNIQUE INDEX account_email_provider_message_idx
+      ON account_email_outbox(provider, provider_message_id)
+      WHERE provider_message_id <> '';
   `);
 }
 

@@ -1970,8 +1970,10 @@ complete. Follow the same dependency and verification protocol used above.
   role assignment, and session invalidation. Desktop browser acceptance covers
   seat display, invitation creation and revocation, and the public acceptance
   surface. Chrome acceptance at 390x844 confirms the loaded team and acceptance
-  pages have no horizontal overflow or console warnings. Transactional
-  invitation email remains open. The third slice adds `/app/settings`, scoped
+  pages have no horizontal overflow or console warnings. Workspace invitations
+  now enqueue durable Provider-delivered email with retry, idempotency, delivery
+  evidence, acceptance/revocation supersession, and a manual-link fallback in the team UI.
+  The third slice adds `/app/settings`, scoped
   expiring Workspace API Keys, password reauthentication, one-time plaintext
   display, SHA-256-at-rest storage, immediate revocation, tenant-bound runtime
   authentication, immutable method/path usage evidence, active Session listing,

@@ -39,5 +39,8 @@ preserved tool-audit archive for expired runs.
 Migration `025_account_mfa` adds encrypted account-level TOTP factors, hashed
 single-use recovery codes, expiring and attempt-bounded login or invitation
 challenges, immutable MFA events, and Session authentication assurance metadata.
+Migration `026_workspace_invitation_email` extends the durable transactional
+email Outbox with Workspace invitation ownership and delivery context while
+preserving all existing account email delivery evidence.
 
 See [Postgres Persistence Path](POSTGRES_PERSISTENCE.md) before adding migrations that rely on SQLite-only SQL.

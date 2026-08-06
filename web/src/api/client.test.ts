@@ -253,6 +253,7 @@ describe('stream client', () => {
     const fetchMock = vi.spyOn(globalThis, 'fetch')
       .mockResolvedValueOnce(new Response(JSON.stringify({
         id: 9, workspaceId: 3, email: 'member@example.com', role: 'member', token: 'invite-token',
+        emailDelivery: 'queued',
       }), { status: 201, headers: { 'content-type': 'application/json' } }))
       .mockResolvedValueOnce(new Response(JSON.stringify({
         user: { id: 4, workspaceId: 3, email: 'member@example.com', role: 'member' },

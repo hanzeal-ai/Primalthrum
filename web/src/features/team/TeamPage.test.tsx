@@ -48,6 +48,7 @@ describe('TeamPage', () => {
       expiresAt: '2026-08-07T00:00:00.000Z', acceptedAt: null, revokedAt: null,
       createdAt: '2026-07-31T00:00:00.000Z', token: 'invite-token',
       acceptUrl: 'http://localhost/accept-invitation?token=invite-token',
+      emailDelivery: 'queued',
     })
     api.updateWorkspaceMemberRole.mockResolvedValue({ ...members[1], role: 'developer' })
 
@@ -62,6 +63,7 @@ describe('TeamPage', () => {
       email: 'new@example.com', role: 'member',
     }))
     expect(screen.getByLabelText('邀请链接')).toHaveProperty('value', expect.stringContaining('invite-token'))
+    expect(screen.getByText('邀请邮件已加入发送队列')).toBeTruthy()
 
     fireEvent.change(screen.getByLabelText('调整 viewer@example.com 的角色'), {
       target: { value: 'developer' },

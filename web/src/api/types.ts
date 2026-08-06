@@ -636,6 +636,7 @@ export interface WorkspaceInvitationRecord {
 export interface CreatedWorkspaceInvitation extends WorkspaceInvitationRecord {
   token: string
   acceptUrl: string
+  emailDelivery: 'queued'
 }
 
 export interface CreateWorkspaceResponse {

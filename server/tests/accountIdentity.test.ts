@@ -105,6 +105,32 @@ test('new account email supersedes an older undelivered link', () => {
   `)[0]?.payload_json, '{}');
 });
 
+test('workspace invitation emails carry tenant ownership and can be superseded', () => {
+  const outbox = new AccountEmailOutboxRepository(db, () => now);
+  outbox.enqueue({
+    template: 'workspace_invitation',
+    recipientEmail: 'invitee@example.com',
+    payload: {
+      workspaceId: 5,
+      invitationId: 11,
+      workspaceName: 'Acme',
+      role: 'developer',
+      actionUrl: 'https://app.test/accept-invitation?token=secret',
+    },
+  });
+  const claimed = outbox.claimNext();
+  assert.equal(claimed?.template, 'workspace_invitation');
+  assert.equal(claimed?.payload.invitationId, 11);
+  outbox.supersedeInvitation(11);
+  assert.deepEqual(db.query<{ status: string; user_id: number | null; workspace_id: number }>(`
+    SELECT status, user_id, workspace_id FROM account_email_outbox;
+  `), [{ status: 'superseded', user_id: null, workspace_id: 5 }]);
+  assert.equal(outbox.claimNext(), null);
+  assert.equal(db.query<{ payload_json: string }>(`
+    SELECT payload_json FROM account_email_outbox;
+  `)[0]?.payload_json, '{}');
+});
+
 test('HTTP email sender uses a stable provider idempotency contract', async () => {
   let request: RequestInit | undefined;
   const sender = new HttpAccountEmailSender(
@@ -145,6 +171,35 @@ test('Resend sender renders account templates without exposing internal payload'
   assert.match(String(body.html), /https:\/\/app\.test\/reset\?token=secret/);
   assert.equal('userId' in body, false);
   assert.deepEqual(receipt, { provider: 'resend', providerMessageId: 'resend-message-7' });
+});
+
+test('Resend sender renders a bounded Workspace invitation template', async () => {
+  let request: RequestInit | undefined;
+  const sender = new ResendAccountEmailSender(
+    're_secret',
+    'Primalthrum <noreply@example.com>',
+    async (_input, init) => {
+      request = init;
+      return Response.json({ id: 'resend-invitation-1' });
+    },
+  );
+  await sender.send({
+    id: 8,
+    template: 'workspace_invitation',
+    recipientEmail: 'invitee@example.com',
+    payload: {
+      workspaceId: 5,
+      invitationId: 11,
+      workspaceName: 'Acme\r\nInjected',
+      role: 'developer',
+      actionUrl: 'https://app.test/accept-invitation?token=secret',
+    },
+  });
+  const body = JSON.parse(String(request?.body)) as Record<string, unknown>;
+  assert.match(String(body.subject), /Acme Injected/);
+  assert.doesNotMatch(String(body.subject), /[\r\n]/);
+  assert.match(String(body.html), /接受邀请/);
+  assert.equal('workspaceId' in body, false);
 });
 
 test('email sender classifies rate limits as retryable and bad requests as permanent', async () => {

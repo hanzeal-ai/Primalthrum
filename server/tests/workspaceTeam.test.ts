@@ -7,6 +7,7 @@ import { after, before, test } from 'node:test';
 
 import { createApp } from '../src/app';
 import { SqliteDatabase } from '../src/db/sqlite';
+import { type AccountEmailMessage } from '../src/services/accountEmailSender';
 import { BillingRepository } from '../src/services/billingRepository';
 
 let rootDir = '';
@@ -16,6 +17,7 @@ let baseUrl = '';
 let ownerToken = '';
 let ownerUserId = 0;
 let workspaceId = 0;
+const deliveredEmails: AccountEmailMessage[] = [];
 
 before(async () => {
   rootDir = mkdtempSync(join(tmpdir(), 'primalthrum-workspace-team-'));
@@ -24,6 +26,12 @@ before(async () => {
     dbPath,
     generatedAgentsDir: join(rootDir, 'agents'),
     documentStorageDir: join(rootDir, 'documents'),
+    accountEmailSender: {
+      send: async (message) => {
+        deliveredEmails.push(message);
+        return { provider: 'test', providerMessageId: `workspace-invitation-${message.id}` };
+      },
+    },
     logger: { log: () => undefined },
   }).listen(0, '127.0.0.1');
   await new Promise<void>((resolve) => server.once('listening', resolve));
@@ -80,8 +88,15 @@ test('workspace invitations reserve seats, reject existing members, and can be r
 
   const first = await createInvite('first@example.com', 'viewer');
   assert.equal(first.status, 201);
-  const created = await body<{ id: number; token: string }>(first);
+  const created = await body<{ id: number; token: string; emailDelivery: string }>(first);
   assert.ok(created.token);
+  assert.equal(created.emailDelivery, 'queued');
+  await waitFor(() => deliveredEmails.some((message) => message.recipientEmail === 'first@example.com'));
+  const invitationEmail = deliveredEmails.find((message) => message.recipientEmail === 'first@example.com');
+  assert.equal(invitationEmail?.template, 'workspace_invitation');
+  assert.equal(invitationEmail?.payload.workspaceName, 'Local Workspace');
+  assert.equal(invitationEmail?.payload.role, 'viewer');
+  assert.match(String(invitationEmail?.payload.actionUrl), /accept-invitation\?token=/);
 
   const overLimit = await createInvite('second@example.com', 'member');
   assert.equal(overLimit.status, 403);
@@ -133,6 +148,14 @@ function createInvite(email: string, role: string): Promise<Response> {
     headers: jsonHeaders(ownerToken),
     body: JSON.stringify({ email, role }),
   });
+}
+
+async function waitFor(predicate: () => boolean): Promise<void> {
+  const deadline = Date.now() + 2_000;
+  while (!predicate()) {
+    if (Date.now() >= deadline) throw new Error('timed out waiting for invitation email');
+    await new Promise((resolve) => setTimeout(resolve, 10));
+  }
 }
 
 function acceptInvite(token: string, password: string): Promise<Response> {

@@ -16,12 +16,29 @@ export function renderAccountEmail(message: AccountEmailMessage): RenderedAccoun
       actionUrl,
     );
   }
+  if (message.template === 'workspace_invitation') {
+    const workspaceName = payloadText(message.payload.workspaceName, 'Workspace name', 120);
+    const role = payloadText(message.payload.role, 'Workspace role', 40);
+    return render(
+      `加入 ${workspaceName} 的 Primalthrum Workspace`,
+      '接受邀请',
+      `你已被邀请以 ${role} 角色加入 ${workspaceName}。该一次性链接将在 7 天后失效。`,
+      actionUrl,
+    );
+  }
   return render(
     '重置你的 Primalthrum 密码',
     '重置密码',
     '有人请求重置你的 Primalthrum 密码。该链接将在 30 分钟后失效；如非本人操作，请忽略此邮件。',
     actionUrl,
   );
+}
+
+function payloadText(value: unknown, label: string, maxLength: number): string {
+  if (typeof value !== 'string') throw new Error(`${label} is invalid`);
+  const normalized = value.replace(/[\r\n]+/g, ' ').trim();
+  if (!normalized || normalized.length > maxLength) throw new Error(`${label} is invalid`);
+  return normalized;
 }
 
 function render(subject: string, action: string, description: string, actionUrl: string) {

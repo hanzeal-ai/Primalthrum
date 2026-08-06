@@ -330,6 +330,47 @@ test('schema migrations are ordered and idempotent', () => {
   }
 });
 
+test('Workspace invitation email migration preserves existing delivery evidence', () => {
+  const migrationRootDir = mkdtempSync(join(tmpdir(), 'primalthrum-email-migration-'));
+  try {
+    const db = new SqliteDatabase(join(migrationRootDir, 'platform.sqlite'));
+    for (const migration of MIGRATIONS.slice(0, -1)) migration.up(db);
+    db.run(`
+      INSERT INTO users (workspace_id, email, password_hash, role)
+      VALUES (1, 'migration@example.com', 'hash', 'user');
+      INSERT INTO account_email_outbox (
+        user_id, template, recipient_email, payload_json, status,
+        provider, provider_message_id, last_provider_status
+      ) VALUES (
+        1, 'verify_email', 'migration@example.com', '{}', 'delivered',
+        'resend', 'existing-message', 'delivered'
+      );
+    `);
+
+    MIGRATIONS[MIGRATIONS.length - 1]?.up(db);
+
+    assert.deepEqual(db.query<{
+      template: string;
+      workspace_id: number | null;
+      provider_message_id: string;
+    }>(`
+      SELECT template, workspace_id, provider_message_id
+      FROM account_email_outbox;
+    `), [{
+      template: 'verify_email',
+      workspace_id: null,
+      provider_message_id: 'existing-message',
+    }]);
+    db.run(`
+      INSERT INTO account_email_outbox (
+        workspace_id, invitation_id, template, recipient_email, payload_json
+      ) VALUES (1, 9, 'workspace_invitation', 'invitee@example.com', '{}');
+    `);
+  } finally {
+    rmSync(migrationRootDir, { recursive: true, force: true });
+  }
+});
+
 test('in-process job worker records retry and failure states', () => {
   const jobRootDir = mkdtempSync(join(tmpdir(), 'primalthrum-jobs-'));
   try {
