@@ -83,6 +83,7 @@ import {
 } from './services/userRepository';
 import { WorkspaceRepository } from './services/workspaceRepository';
 import { WorkspaceOwnershipRepository } from './services/workspaceOwnershipRepository';
+import { WorkspaceLegalHoldRepository } from './services/workspaceLegalHoldRepository';
 import { LocalSecretVault } from './services/localSecretVault';
 import { RuntimeProviderResolver } from './services/runtimeProviderResolver';
 import { RuntimeSpeechResolver } from './services/runtimeSpeechResolver';
@@ -125,6 +126,7 @@ import { registerRetentionSettingsRoutes } from './routes/retentionSettingsRoute
 import { registerMfaRoutes } from './routes/mfaRoutes';
 import { registerOperatorChangeRoutes } from './routes/operatorChangeRoutes';
 import { registerOperatorDomainRoutes } from './routes/operatorDomainRoutes';
+import { registerOperatorLegalHoldRoutes } from './routes/operatorLegalHoldRoutes';
 import { registerOperatorRoutes } from './routes/operatorRoutes';
 import { registerWorkspaceOwnershipRoutes } from './routes/workspaceOwnershipRoutes';
 import { ApiKeyRepository } from './services/apiKeyRepository';
@@ -291,6 +293,7 @@ export function createApp(options: AppOptions = {}): Koa {
   const operatorCustomerReads = new OperatorCustomerReadRepository(db);
   const operatorFeatureFlags = new OperatorFeatureFlagRepository(db);
   const operatorIncidents = new OperatorIncidentRepository(db);
+  const workspaceLegalHolds = new WorkspaceLegalHoldRepository(db);
   const operatorReads = new OperatorReadRepository(db);
   const operatorRuntimeReads = new OperatorRuntimeReadRepository(db);
   const operatorSecurityReads = new OperatorSecurityReadRepository(db);
@@ -785,6 +788,12 @@ export function createApp(options: AppOptions = {}): Koa {
     featureFlags: operatorFeatureFlags,
     identity: operatorIdentity,
     incidents: operatorIncidents,
+    logger,
+  });
+  registerOperatorLegalHoldRoutes(operatorRouter, {
+    audit: operatorAudit,
+    identity: operatorIdentity,
+    legalHolds: workspaceLegalHolds,
     logger,
   });
 

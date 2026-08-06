@@ -159,6 +159,8 @@ scripts/commercial-smoke.sh
 - `POST /api/auth/mfa/verify`：完成登录或邀请接受的二次验证挑战。
 - `GET/PUT /api/settings/retention`：读取或维护工作区数据留存策略。
 - `POST /api/settings/retention/enforce`：密码复验后立即执行留存清理。
+- `GET/POST /api/operator/legal-holds`：受限 Operator 读取或放置 Workspace 法务保全。
+- `POST /api/operator/legal-holds/:id/release`：由第二名授权 Operator 复核释放保全。
 
 账本生命周期与不变量见 [Billing Entitlements And Credit Ledger](docs/BILLING_LEDGER.md)。
 Stripe 配置、Webhook 和沙箱发布门禁见 [Stripe Payments And Subscription Lifecycle](docs/STRIPE_PAYMENTS.md)。
@@ -166,6 +168,7 @@ Stripe 配置、Webhook 和沙箱发布门禁见 [Stripe Payments And Subscripti
 API Key 和登录会话安全契约见 [API Keys And Session Security](docs/API_KEYS_AND_SESSIONS.md)。
 多因素认证、恢复码和登录挑战安全契约见 [Multi-Factor Authentication Security](docs/MFA_SECURITY.md)。
 工作区留存范围、执行和审计边界见 [Workspace Data Retention](docs/DATA_RETENTION.md)。
+法务保全、双人释放和应急处置见 [Workspace Legal Holds](docs/LEGAL_HOLDS.md)。
 独立运营身份、角色权限、限时支持授权和审计契约见 [Operator Control Plane](docs/OPERATOR_CONTROL_PLANE.md)。
 
 分段执行：
@@ -207,4 +210,5 @@ web/     React + TypeScript + Vite 研发控制台
 - [Security And Release Checklist](docs/SECURITY_RELEASE_CHECKLIST.md): 商业发布前的安全、secrets、危险工具、备份和文档 gate。
 - [Multi-Factor Authentication Security](docs/MFA_SECURITY.md): TOTP、恢复码、邀请挑战、角色矩阵与生产运维要求。
 - [Workspace Data Retention](docs/DATA_RETENTION.md): 客户留存策略、自动执行、文件清理和审计保留边界。
+- [Workspace Legal Holds](docs/LEGAL_HOLDS.md): 强制保全范围、Operator 权限、双人释放和运维程序。
 - [Release Gate](docs/RELEASE_GATE.md): 版本规则、发布 gate 和商业就绪证据。

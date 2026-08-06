@@ -91,7 +91,9 @@ export function RetentionSettingsSection({ workspaceId }: RetentionSettingsSecti
       applyState(next)
       setPassword('')
       setConfirmEnforce(false)
-      setNotice(`清理完成：${numberResult(outcome.event.result, 'conversations')} 个对话、${numberResult(outcome.event.result, 'runs')} 个运行、${numberResult(outcome.event.result, 'documents')} 个文件。`)
+      setNotice(outcome.blockedByLegalHold
+        ? '强制保全策略生效中，本次数据清理已暂停。'
+        : `清理完成：${numberResult(outcome.event.result, 'conversations')} 个对话、${numberResult(outcome.event.result, 'runs')} 个运行、${numberResult(outcome.event.result, 'documents')} 个文件。`)
     } catch (reason) {
       setError(errorMessage(reason, '无法执行数据清理。'))
     } finally {
@@ -114,6 +116,7 @@ export function RetentionSettingsSection({ workspaceId }: RetentionSettingsSecti
 
       {error ? <div className="mt-4 border border-red-200 bg-red-50 p-4 text-sm text-red-700" role="alert">{error}</div> : null}
       {notice ? <div className="mt-4 border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-800" role="status">{notice}</div> : null}
+      {state?.legalHoldActive ? <div className="mt-4 flex items-start gap-3 border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900" role="status"><LockKeyhole className="mt-0.5 size-4 shrink-0" /><div><p className="font-medium">强制保全策略生效中</p><p className="mt-1 text-xs leading-5">自动与手动数据清理已暂停，策略设置仍会保存。</p></div></div> : null}
 
       {!state && !error ? <div className="mt-5 flex min-h-32 items-center justify-center border bg-white text-sm text-zinc-500"><Loader2 className="mr-2 size-4 animate-spin" />正在加载留存策略</div> : null}
       {state ? <div className="mt-5 grid min-w-0 gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
@@ -147,7 +150,7 @@ export function RetentionSettingsSection({ workspaceId }: RetentionSettingsSecti
         <div className="min-w-0">
           <div className="flex items-center gap-2"><Clock3 className="size-4 text-zinc-500" /><h3 className="text-base font-semibold">执行记录</h3></div>
           <div className="mt-3 overflow-hidden rounded-lg border bg-white">
-            {state.events.length ? state.events.slice(0, 5).map((event) => <div className="border-b p-4 last:border-b-0" key={event.id}><div className="flex items-center justify-between gap-3"><p className="text-sm font-medium">{event.eventType === 'policy_updated' ? '策略已更新' : '自动清理完成'}</p><Database className="size-4 shrink-0 text-zinc-400" /></div><p className="mt-1 text-xs text-zinc-500">{formatDateTime(event.createdAt)}</p>{event.eventType === 'enforcement_completed' ? <p className="mt-2 text-xs leading-5 text-zinc-500">清理 {numberResult(event.result, 'conversations')} 个对话、{numberResult(event.result, 'runs')} 个运行、{numberResult(event.result, 'documents')} 个文件</p> : null}</div>) : <p className="p-5 text-sm text-zinc-500">尚无策略变更或清理记录。</p>}
+            {state.events.length ? state.events.slice(0, 5).map((event) => <div className="border-b p-4 last:border-b-0" key={event.id}><div className="flex items-center justify-between gap-3"><p className="text-sm font-medium">{eventLabel(event.eventType)}</p><Database className="size-4 shrink-0 text-zinc-400" /></div><p className="mt-1 text-xs text-zinc-500">{formatDateTime(event.createdAt)}</p>{event.eventType === 'enforcement_completed' ? <p className="mt-2 text-xs leading-5 text-zinc-500">清理 {numberResult(event.result, 'conversations')} 个对话、{numberResult(event.result, 'runs')} 个运行、{numberResult(event.result, 'documents')} 个文件</p> : null}{event.eventType === 'enforcement_blocked' ? <p className="mt-2 text-xs leading-5 text-zinc-500">强制保全策略已暂停本次清理。</p> : null}</div>) : <p className="p-5 text-sm text-zinc-500">尚无策略变更或清理记录。</p>}
           </div>
           <p className="mt-3 text-xs leading-5 text-zinc-500">账单、用量、安全和留存审计不受此策略影响。</p>
         </div>
@@ -173,6 +176,12 @@ function PreviewValue({ label, value }: { label: string; value: string }) {
 function numberResult(result: Record<string, unknown>, key: string): number {
   const value = Number(result[key] ?? 0)
   return Number.isFinite(value) ? value : 0
+}
+
+function eventLabel(eventType: 'policy_updated' | 'enforcement_completed' | 'enforcement_blocked'): string {
+  if (eventType === 'policy_updated') return '策略已更新'
+  if (eventType === 'enforcement_blocked') return '清理已暂停'
+  return '自动清理完成'
 }
 
 function formatBytes(bytes: number): string {

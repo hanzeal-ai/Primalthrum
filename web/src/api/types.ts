@@ -369,7 +369,7 @@ export interface RetentionPreview {
 export interface RetentionEventRecord {
   id: number
   workspaceId: number
-  eventType: 'policy_updated' | 'enforcement_completed'
+  eventType: 'policy_updated' | 'enforcement_completed' | 'enforcement_blocked'
   actorUserId: number | null
   policy: Pick<RetentionPolicyRecord, 'conversationDays' | 'runDays' | 'documentDays'>
   result: Record<string, unknown>
@@ -382,12 +382,14 @@ export interface RetentionSettingsState {
   events: RetentionEventRecord[]
   customRetentionEnabled: boolean
   canManage: boolean
+  legalHoldActive: boolean
 }
 
 export interface RetentionEnforcementOutcome {
   event: RetentionEventRecord
   filesDeleted: number
   fileDeletionFailures: number
+  blockedByLegalHold: boolean
 }
 
 export interface RegistrationInput extends AuthCredentials {
@@ -603,7 +605,7 @@ export interface AccountPrivacyRequestRecord {
 }
 
 export interface AccountDeletionBlocker {
-  code: 'OWNERSHIP_TRANSFER_REQUIRED' | 'ACTIVE_PAID_SUBSCRIPTION'
+  code: 'OWNERSHIP_TRANSFER_REQUIRED' | 'ACTIVE_PAID_SUBSCRIPTION' | 'LEGAL_HOLD_ACTIVE'
   workspaceId: number
   workspaceName: string
 }

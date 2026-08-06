@@ -33,6 +33,11 @@ Deletion is blocked when an owned Workspace:
 - still has another active member, until ownership is transferred to that member; or
 - has an active, trialing, incomplete, or past-due paid subscription.
 
+Deletion is also blocked when the account has any active membership in a
+Workspace under legal hold. This applies to Owners, Admins, Members, and Viewers.
+The customer receives only a mandatory-preservation message; case details remain
+restricted to authorized Operators.
+
 The same blockers are checked again immediately before execution. A durable
 `account.delete` job retries three times. Every transition is recorded in the
 immutable `account_privacy_events` evidence stream using a one-way subject hash.
@@ -52,8 +57,8 @@ removed. File deletion happens before database finalization and is idempotent.
 Billing subscriptions, invoices, refunds, immutable usage/credit ledgers,
 security events, and minimized privacy request evidence remain pseudonymous for
 contractual, fraud-prevention, tax, and legal-retention obligations. Production
-policy must define the exact jurisdiction-specific retention period and legal
-hold process before launch.
+policy must define the exact jurisdiction-specific retention period before
+launch. The technical legal-hold process is documented in `docs/LEGAL_HOLDS.md`.
 
 An Owner can resolve the shared-Workspace blocker from `/app/team` without
 removing members. The dedicated ownership-transfer flow requires the current

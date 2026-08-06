@@ -145,6 +145,36 @@ test('account deletion reports shared ownership and paid subscription blockers',
   db.run(`
     UPDATE workspace_subscriptions SET plan_key = 'free', state = 'active'
     WHERE workspace_id = ${sqlValue(workspaceId)};
+    UPDATE workspace_memberships SET status = 'active' WHERE user_id = ${sqlValue(member.id)};
+    INSERT INTO operator_users (
+      email, password_hash, role, must_change_password, bootstrap_root
+    ) VALUES
+      ('privacy-legal-maker@example.com', 'unused', 'security', 0, 0),
+      ('privacy-legal-reviewer@example.com', 'unused', 'security', 0, 0);
+    INSERT INTO workspace_legal_holds (
+      hold_ref, workspace_id, external_case_ref, basis, reason, created_by_operator_id
+    ) VALUES (
+      'LH-PRIVACY-001', ${sqlValue(workspaceId)}, 'PRIVACY-HOLD-001', 'investigation',
+      'Preserve all member account records during the authorized investigation.', 1
+    );
+  `);
+  const privacy = new AccountPrivacyRepository(db);
+  assert.ok(privacy.deletionBlockers(member.id).some((blocker) => (
+    blocker.code === 'LEGAL_HOLD_ACTIVE' && blocker.workspaceId === workspaceId
+  )));
+  const held = await privacyRequest('/api/settings/privacy/deletion', 'POST', {
+    password, confirmEmail: 'privacy-owner@example.com',
+  });
+  assert.equal(held.status, 409);
+  assert.ok((await held.json() as { error: { details: { blockers: Array<{ code: string }> } } })
+    .error.details.blockers.some((blocker) => blocker.code === 'LEGAL_HOLD_ACTIVE'));
+  db.run(`
+    UPDATE workspace_legal_holds
+    SET status = 'released', revision = revision + 1, released_by_operator_id = 2,
+      release_reason = 'Independent reviewer confirmed the preservation duty ended.',
+      released_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+    WHERE hold_ref = 'LH-PRIVACY-001';
+    UPDATE workspace_memberships SET status = 'inactive' WHERE user_id = ${sqlValue(member.id)};
   `);
 });
 

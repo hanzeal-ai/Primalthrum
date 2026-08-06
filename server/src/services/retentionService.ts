@@ -8,6 +8,7 @@ export interface RetentionEnforcementOutcome {
   event: RetentionEventRecord;
   filesDeleted: number;
   fileDeletionFailures: number;
+  blockedByLegalHold: boolean;
 }
 
 export class RetentionService {
@@ -18,11 +19,15 @@ export class RetentionService {
 
   enforce(workspaceId: number, actorUserId: number | null): RetentionEnforcementOutcome {
     const event = this.policies.enforce(workspaceId, actorUserId);
-    const files = this.drainFileDeletions(workspaceId);
+    const blockedByLegalHold = event.eventType === 'enforcement_blocked';
+    const files = blockedByLegalHold
+      ? { deleted: 0, failed: 0 }
+      : this.drainFileDeletions(workspaceId);
     return {
       event,
       filesDeleted: files.deleted,
       fileDeletionFailures: files.failed,
+      blockedByLegalHold,
     };
   }
 

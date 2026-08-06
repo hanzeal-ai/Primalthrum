@@ -2083,8 +2083,16 @@ complete. Follow the same dependency and verification protocol used above.
   active Owner, atomically promotes the target while demoting the previous Owner,
   and stores immutable transfer evidence. HTTP and Web tests cover role denial,
   cross-tenant targets, confirmation, live Session roles, database uniqueness,
-  and audit immutability. Legal-document approval, statutory retention/legal hold,
-  production object lifecycle, and independent manual security signoff remain open.
+  and audit immutability. The fourth P21 slice adds restricted Workspace legal
+  holds with multiple concurrent cases, maker-checker release, optimistic
+  revisions, immutable lifecycle evidence, and minimized Operator audit data.
+  Migration 032 makes automatic/manual retention and physical file deletion
+  fail closed while held, and every active Workspace member is blocked from
+  account deletion. API, database, Web, and browser tests cover role isolation,
+  self-release denial, second-reviewer release, zero-delete enforcement, generic
+  customer disclosure, and responsive operation. Legal-document approval,
+  jurisdiction-specific statutory schedules, production object lifecycle, and
+  independent manual security signoff remain open.
 
 ### P22-01 Production Data And Infrastructure
 

@@ -96,6 +96,57 @@ test('feature flag reads are universal while mutations are Security-controlled',
   assert.equal(securityCreated.status, 201);
 });
 
+test('legal holds are Security-restricted and require a second operator to release', async () => {
+  for (const role of ['support', 'billing', 'viewer'] as const) {
+    assert.equal((await get('/api/operator/legal-holds', auth(token(role)))).status, 403, role);
+  }
+  assert.equal((await get('/api/operator/legal-holds', auth(token('security')))).status, 200);
+
+  const placedResponse = await post('/api/operator/legal-holds', {
+    workspaceId: 1,
+    externalCaseRef: 'LEGAL-CHANGE-CONTROL-001',
+    basis: 'regulatory',
+    reason: 'Preserve the approved Workspace records for a regulatory response.',
+  }, auth(token('super_admin')));
+  assert.equal(placedResponse.status, 201);
+  const placed = await placedResponse.json() as {
+    id: number;
+    revision: number;
+    status: string;
+    createdByOperatorId: number;
+  };
+  assert.equal(placed.status, 'active');
+  assert.equal(placed.revision, 1);
+  assert.equal(placed.createdByOperatorId, user('super_admin').id);
+
+  const selfRelease = await post(`/api/operator/legal-holds/${placed.id}/release`, {
+    expectedRevision: placed.revision,
+    releaseReason: 'This attempt must be rejected because the maker cannot review itself.',
+  }, auth(token('super_admin')));
+  assert.equal(selfRelease.status, 409);
+  assert.equal((await selfRelease.json() as { error: { code: string } }).error.code,
+    'OPERATOR_LEGAL_HOLD_SELF_RELEASE_FORBIDDEN');
+
+  const releasedResponse = await post(`/api/operator/legal-holds/${placed.id}/release`, {
+    expectedRevision: placed.revision,
+    releaseReason: 'Security independently verified that the preservation obligation ended.',
+  }, auth(token('security')));
+  assert.equal(releasedResponse.status, 200);
+  const released = await releasedResponse.json() as {
+    revision: number;
+    status: string;
+    releasedByOperatorId: number;
+  };
+  assert.equal(released.status, 'released');
+  assert.equal(released.revision, 2);
+  assert.equal(released.releasedByOperatorId, user('security').id);
+
+  assert.throws(() => database.run(`DELETE FROM workspace_legal_holds WHERE id = ${placed.id};`),
+    /cannot be deleted/);
+  assert.throws(() => database.run(`DELETE FROM workspace_legal_hold_events
+    WHERE legal_hold_id = ${placed.id};`), /immutable/);
+});
+
 test('feature flags enforce rollout, override, kill switch, revision, and immutable history', async () => {
   const createdResponse = await post(
     '/api/operator/feature-flags',
@@ -310,11 +361,15 @@ test('change-control mutations produce sanitized immutable Operator audit eviden
     'operator.incident_created',
     'operator.incident_updated',
     'operator.incident_event_created',
+    'operator.legal_hold_placed',
+    'operator.legal_hold_released',
   ]) {
     assert.ok(events.some((event) => event.eventType === eventType), eventType);
   }
   const serialized = JSON.stringify(events);
   assert.equal(serialized.includes('Disabled the affected provider route'), false);
+  assert.equal(serialized.includes('LEGAL-CHANGE-CONTROL-001'), false);
+  assert.equal(serialized.includes('regulatory response'), false);
   assert.throws(() => database.run('DELETE FROM operator_audit_events WHERE id = 1;'), /immutable/);
 });
 

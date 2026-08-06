@@ -62,5 +62,10 @@ Migration `031_workspace_ownership_transfer` enforces one active Owner per
 Workspace and adds immutable ownership-transfer evidence. Existing databases
 must resolve any legacy Workspace with multiple active Owners before this
 migration can be applied.
+Migration `032_workspace_legal_holds` adds restricted Workspace hold cases,
+maker-checker release state, and immutable lifecycle evidence. It rebuilds
+`retention_events` to allow `enforcement_blocked` while preserving every existing
+event ID and payload. Back up the database first and verify active cases and
+retention event counts after migration or restore.
 
 See [Postgres Persistence Path](POSTGRES_PERSISTENCE.md) before adding migrations that rely on SQLite-only SQL.

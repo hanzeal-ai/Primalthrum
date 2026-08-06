@@ -34,6 +34,9 @@ Use this checklist before tagging or deploying a commercial Primalthrum build.
   files, anonymizes identity data, and preserves billing/legal evidence.
 - Workspace ownership transfer requires Owner permission, current-password
   reauthentication, exact target confirmation, one active Owner, and immutable evidence.
+- Legal holds are restricted to Super Admin and Security, immediately block
+  retention and member account deletion, require a different Operator for
+  release, and preserve immutable case, lifecycle, and minimized audit evidence.
 - API clients show standardized `error.code`, `error.message`, and `error.status` without exposing secrets.
 - Public endpoints are limited to liveness, readiness, metrics, setup, auth, and documented public flows.
 
@@ -73,6 +76,7 @@ Use this checklist before tagging or deploying a commercial Primalthrum build.
 - `docs/API_KEYS_AND_SESSIONS.md` exists.
 - `docs/DATA_RETENTION.md` exists.
 - `docs/ACCOUNT_PRIVACY_RIGHTS.md` exists.
+- `docs/LEGAL_HOLDS.md` exists.
 - `docs/MFA_SECURITY.md` exists.
 - `docs/DEMO_RESEARCH_AGENT.md` exists.
 
@@ -120,6 +124,11 @@ Confirm:
 - Account and Workspace export archives pass a forbidden-field scan, and a
   deletion smoke run proves cancellation, due execution, Session revocation,
   credential removal, physical file deletion, and immutable transition evidence.
+- A legal-hold smoke run proves automatic and manual retention delete zero rows,
+  queued physical file deletion remains pending, every active member is blocked
+  from account deletion, self-release fails, and a second authorized Operator can
+  release the current revision without case details entering customer UI or
+  Operator audit metadata.
 
 ## Known Limitations
 

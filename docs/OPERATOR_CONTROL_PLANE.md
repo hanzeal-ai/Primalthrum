@@ -26,13 +26,13 @@ Operator session and returns one new 12-hour session.
 
 ## Roles
 
-| Role | Overview / Workspaces | Customers | Billing | Runtime | Abuse | Flags / Incidents | Operators | Support | Audit |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| Super Admin | Read | Read | Read | Read | Read | Manage | Manage | Grant/use | Read |
-| Support | Read | Read | None | Read | None | Read | Read | Assigned grants only | None |
-| Billing | Read | None | Read | None | None | Read | None | None | None |
-| Security | Read | Read | None | Read | Read | Manage | Read | Grant/revoke | Read |
-| Viewer | Read | None | None | None | None | Read | None | None | None |
+| Role | Overview / Workspaces | Customers | Billing | Runtime | Abuse | Flags / Incidents | Legal Holds | Operators | Support | Audit |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Super Admin | Read | Read | Read | Read | Read | Manage | Manage | Manage | Grant/use | Read |
+| Support | Read | Read | None | Read | None | Read | None | Read | Assigned grants only | None |
+| Billing | Read | None | Read | None | None | Read | None | None | None | None |
+| Security | Read | Read | None | Read | Read | Manage | Manage | Read | Grant/revoke | Read |
+| Viewer | Read | None | None | None | None | Read | None | None | None | None |
 
 Server authorization is authoritative. Web navigation mirrors the same matrix but
 is not a security boundary.
@@ -94,6 +94,14 @@ context read create immutable events. Metadata filtering removes keys associated
 with passwords, tokens, secrets, authorization, cookies, payloads, and content.
 Database triggers reject audit updates and deletion.
 
+## Legal Holds
+
+Super Admin and Security can place and inspect Workspace legal holds. The placing
+Operator cannot release the same case; a second authorized Operator must submit
+the current revision and release basis. Audit metadata excludes case references
+and reasons. See `docs/LEGAL_HOLDS.md` for preservation scope and the incident
+runbook.
+
 ## API Surface
 
 - `GET /api/operator/setup/status`
@@ -120,6 +128,8 @@ Database triggers reject audit updates and deletion.
 - `GET/POST /api/operator/incidents`
 - `GET/PUT /api/operator/incidents/:id`
 - `POST /api/operator/incidents/:id/events`
+- `GET/POST /api/operator/legal-holds`
+- `POST /api/operator/legal-holds/:id/release`
 - `GET/POST /api/operator/operators`
 - `GET/POST /api/operator/support-grants`
 - `DELETE /api/operator/support-grants/:id`

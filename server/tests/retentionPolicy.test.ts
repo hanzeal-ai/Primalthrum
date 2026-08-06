@@ -13,6 +13,7 @@ import { RetentionScheduler } from '../src/services/retentionScheduler';
 import { RetentionService } from '../src/services/retentionService';
 import { ToolAuditRepository } from '../src/services/toolAuditRepository';
 import { UserRepository } from '../src/services/userRepository';
+import { WorkspaceLegalHoldRepository } from '../src/services/workspaceLegalHoldRepository';
 
 const roots: string[] = [];
 
@@ -119,6 +120,56 @@ test('retention scheduler creates one durable job for each due workspace', () =>
     SELECT COUNT(*) AS count FROM jobs WHERE type = 'retention.enforce';
   `)[0]?.count, 1);
   scheduler.stop();
+});
+
+test('active legal hold atomically blocks retention records and physical file deletion', () => {
+  const root = temporaryRoot();
+  const db = new SqliteDatabase(join(root, 'platform.sqlite'));
+  const now = new Date('2026-08-01T12:00:00.000Z');
+  const policies = new RetentionPolicyRepository(db, () => now);
+  const storage = new LocalDocumentStorage(join(root, 'documents'));
+  const retention = new RetentionService(policies, storage);
+  const owner = new UserRepository(db).createAdmin('held-owner@example.com', hashPassword('strong password'));
+  seedRetentionData(db);
+  policies.update({
+    workspaceId: 1,
+    conversationDays: 30,
+    runDays: 7,
+    documentDays: 30,
+    actorUserId: owner.id,
+  });
+  db.run(`
+    INSERT INTO operator_users (
+      email, password_hash, role, must_change_password, bootstrap_root
+    ) VALUES ('legal-maker@example.com', 'unused', 'security', 0, 0);
+    INSERT INTO retention_file_deletions (workspace_id, storage_ref)
+    VALUES (1, 'held/already-queued.txt');
+  `);
+  new WorkspaceLegalHoldRepository(db, () => now).create({
+    workspaceId: 1,
+    externalCaseRef: 'RETENTION-HOLD-001',
+    basis: 'litigation',
+    reason: 'Preserve all Workspace records while the litigation matter remains active.',
+    operatorUserId: 1,
+  });
+
+  const outcome = retention.enforce(1, owner.id);
+
+  assert.equal(outcome.blockedByLegalHold, true);
+  assert.equal(outcome.event.eventType, 'enforcement_blocked');
+  assert.deepEqual(outcome.event.result, { legalHoldCount: 1 });
+  assert.equal(outcome.filesDeleted, 0);
+  assert.equal(outcome.fileDeletionFailures, 0);
+  assert.deepEqual(ids(db, 'conversations'), [1, 2, 3]);
+  assert.deepEqual(ids(db, 'runs'), [1, 2, 3, 4]);
+  assert.deepEqual(ids(db, 'documents'), [1, 2, 3]);
+  assert.equal(db.query<{ status: string }>('SELECT status FROM jobs WHERE id = 1;')[0]?.status, 'queued');
+  assert.equal(db.query<{ count: number }>(
+    'SELECT COUNT(*) AS count FROM retained_tool_audit_logs;',
+  )[0]?.count, 0);
+  assert.deepEqual(policies.pendingFileDeletions(1), []);
+  assert.equal(policies.get(1).lastEnforcedAt, null);
+  assert.equal(policies.get(1).nextEnforcementAt, '2026-08-02T12:00:00.000Z');
 });
 
 function seedRetentionData(db: SqliteDatabase): void {

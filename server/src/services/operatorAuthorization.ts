@@ -20,6 +20,8 @@ export type OperatorPermission =
   | 'feature_flags.manage'
   | 'incidents.read'
   | 'incidents.manage'
+  | 'legal_holds.read'
+  | 'legal_holds.manage'
   | 'operators.read'
   | 'operators.manage'
   | 'support.read'
@@ -48,6 +50,8 @@ const ALL_OPERATOR_PERMISSIONS: readonly OperatorPermission[] = [
   'feature_flags.manage',
   'incidents.read',
   'incidents.manage',
+  'legal_holds.read',
+  'legal_holds.manage',
   'operators.read',
   'operators.manage',
   'support.read',
@@ -88,6 +92,8 @@ const ROLE_PERMISSIONS: Record<OperatorRole, ReadonlySet<OperatorPermission>> = 
     'feature_flags.manage',
     'incidents.read',
     'incidents.manage',
+    'legal_holds.read',
+    'legal_holds.manage',
     'operators.read',
     'support.read',
     'support.manage',

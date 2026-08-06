@@ -104,6 +104,7 @@ function retentionState(
     events: dependencies.policies.listEvents(workspaceId),
     customRetentionEnabled: Boolean(entitlement?.enabled),
     canManage: hasWorkspacePermission(role, 'retention.manage'),
+    legalHoldActive: dependencies.policies.hasActiveLegalHold(workspaceId),
   };
 }
 

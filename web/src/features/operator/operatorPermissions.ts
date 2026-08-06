@@ -9,6 +9,7 @@ export type OperatorSection =
   | 'security'
   | 'flags'
   | 'incidents'
+  | 'holds'
   | 'support'
   | 'operators'
   | 'audit'
@@ -24,6 +25,7 @@ export function operatorSectionAllowed(
   }
   if (section === 'billing') return role === 'super_admin' || role === 'billing'
   if (section === 'security') return role === 'super_admin' || role === 'security'
+  if (section === 'holds') return role === 'super_admin' || role === 'security'
   if (section === 'support') return role === 'super_admin' || role === 'support' || role === 'security'
   if (section === 'operators') return role === 'super_admin' || role === 'support' || role === 'security'
   return role === 'super_admin' || role === 'security'
@@ -42,5 +44,9 @@ export function canUseSupport(role: OperatorRole): boolean {
 }
 
 export function canManageChangeControl(role: OperatorRole): boolean {
+  return role === 'super_admin' || role === 'security'
+}
+
+export function canManageLegalHolds(role: OperatorRole): boolean {
   return role === 'super_admin' || role === 'security'
 }

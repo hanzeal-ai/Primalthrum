@@ -25,7 +25,7 @@ export interface AccountPrivacyRequestRecord {
 }
 
 export interface AccountDeletionBlocker {
-  code: 'OWNERSHIP_TRANSFER_REQUIRED' | 'ACTIVE_PAID_SUBSCRIPTION';
+  code: 'OWNERSHIP_TRANSFER_REQUIRED' | 'ACTIVE_PAID_SUBSCRIPTION' | 'LEGAL_HOLD_ACTIVE';
   workspaceId: number;
   workspaceName: string;
 }
@@ -53,6 +53,11 @@ interface OwnedWorkspaceRow {
   member_count: number;
   plan_price_minor: number;
   subscription_state: string;
+}
+
+interface HeldWorkspaceRow {
+  workspace_id: number;
+  workspace_name: string;
 }
 
 const MAX_DELETION_ATTEMPTS = 3;
@@ -277,6 +282,24 @@ export class AccountPrivacyRepository {
           workspaceName: row.workspace_name,
         });
       }
+    }
+    const heldWorkspaces = this.db.query<HeldWorkspaceRow>(`
+      SELECT DISTINCT workspace.id AS workspace_id, workspace.name AS workspace_name
+      FROM workspace_memberships membership
+      JOIN workspaces workspace ON workspace.id = membership.workspace_id
+      JOIN workspace_legal_holds hold ON hold.workspace_id = workspace.id
+      WHERE membership.user_id = ${sqlValue(userId)}
+        AND membership.status = 'active'
+        AND workspace.deleted_at IS NULL
+        AND hold.status = 'active'
+      ORDER BY workspace.id ASC;
+    `);
+    for (const workspace of heldWorkspaces) {
+      blockers.push({
+        code: 'LEGAL_HOLD_ACTIVE',
+        workspaceId: Number(workspace.workspace_id),
+        workspaceName: workspace.workspace_name,
+      });
     }
     return blockers;
   }

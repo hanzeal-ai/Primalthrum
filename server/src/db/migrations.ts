@@ -136,6 +136,10 @@ export const MIGRATIONS: Migration[] = [
     id: '031_workspace_ownership_transfer',
     up: applyWorkspaceOwnershipTransfer,
   },
+  {
+    id: '032_workspace_legal_holds',
+    up: applyWorkspaceLegalHolds,
+  },
 ];
 
 export function runMigrations(db: DatabaseAdapter): void {
@@ -2098,6 +2102,141 @@ function applyWorkspaceOwnershipTransfer(db: DatabaseAdapter): void {
     BEGIN
       SELECT RAISE(ABORT, 'workspace ownership events are immutable');
     END;
+  `);
+}
+
+function applyWorkspaceLegalHolds(db: DatabaseAdapter): void {
+  db.run(`
+    PRAGMA foreign_keys = ON;
+    BEGIN IMMEDIATE;
+
+    CREATE TABLE workspace_legal_holds (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      hold_ref TEXT NOT NULL UNIQUE,
+      workspace_id INTEGER NOT NULL,
+      external_case_ref TEXT NOT NULL UNIQUE,
+      basis TEXT NOT NULL CHECK(basis IN (
+        'litigation', 'regulatory', 'investigation', 'tax', 'contractual'
+      )),
+      reason TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'active' CHECK(status IN ('active', 'released')),
+      revision INTEGER NOT NULL DEFAULT 1 CHECK(revision >= 1),
+      created_by_operator_id INTEGER NOT NULL,
+      released_by_operator_id INTEGER,
+      release_reason TEXT NOT NULL DEFAULT '',
+      released_at TEXT,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CHECK(
+        (status = 'active' AND released_by_operator_id IS NULL
+          AND release_reason = '' AND released_at IS NULL)
+        OR
+        (status = 'released' AND released_by_operator_id IS NOT NULL
+          AND release_reason <> '' AND released_at IS NOT NULL
+          AND released_by_operator_id <> created_by_operator_id)
+      ),
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE RESTRICT,
+      FOREIGN KEY(created_by_operator_id) REFERENCES operator_users(id) ON DELETE RESTRICT,
+      FOREIGN KEY(released_by_operator_id) REFERENCES operator_users(id) ON DELETE RESTRICT
+    );
+
+    CREATE TABLE workspace_legal_hold_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_id TEXT NOT NULL UNIQUE,
+      legal_hold_id INTEGER NOT NULL,
+      operator_user_id INTEGER NOT NULL,
+      action TEXT NOT NULL CHECK(action IN ('placed', 'released')),
+      revision INTEGER NOT NULL CHECK(revision >= 1),
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(legal_hold_id) REFERENCES workspace_legal_holds(id) ON DELETE RESTRICT,
+      FOREIGN KEY(operator_user_id) REFERENCES operator_users(id) ON DELETE RESTRICT
+    );
+
+    CREATE INDEX workspace_legal_holds_workspace_status_idx
+      ON workspace_legal_holds(workspace_id, status, created_at DESC, id DESC);
+    CREATE INDEX workspace_legal_hold_events_hold_time_idx
+      ON workspace_legal_hold_events(legal_hold_id, created_at ASC, id ASC);
+
+    CREATE TRIGGER workspace_legal_holds_no_delete
+    BEFORE DELETE ON workspace_legal_holds
+    BEGIN
+      SELECT RAISE(ABORT, 'workspace legal holds cannot be deleted');
+    END;
+
+    CREATE TRIGGER workspace_legal_holds_update_guard
+    BEFORE UPDATE ON workspace_legal_holds
+    WHEN
+      NEW.id IS NOT OLD.id
+      OR NEW.hold_ref IS NOT OLD.hold_ref
+      OR NEW.workspace_id IS NOT OLD.workspace_id
+      OR NEW.external_case_ref IS NOT OLD.external_case_ref
+      OR NEW.basis IS NOT OLD.basis
+      OR NEW.reason IS NOT OLD.reason
+      OR NEW.created_by_operator_id IS NOT OLD.created_by_operator_id
+      OR NEW.created_at IS NOT OLD.created_at
+      OR OLD.status <> 'active'
+      OR NEW.status <> 'released'
+      OR NEW.revision <> OLD.revision + 1
+      OR NEW.released_by_operator_id IS NULL
+      OR NEW.released_by_operator_id = OLD.created_by_operator_id
+      OR NEW.release_reason = ''
+      OR NEW.released_at IS NULL
+    BEGIN
+      SELECT RAISE(ABORT, 'workspace legal hold transition is invalid');
+    END;
+
+    CREATE TRIGGER workspace_legal_hold_events_no_update
+    BEFORE UPDATE ON workspace_legal_hold_events
+    BEGIN
+      SELECT RAISE(ABORT, 'workspace legal hold events are immutable');
+    END;
+
+    CREATE TRIGGER workspace_legal_hold_events_no_delete
+    BEFORE DELETE ON workspace_legal_hold_events
+    BEGIN
+      SELECT RAISE(ABORT, 'workspace legal hold events are immutable');
+    END;
+
+    DROP TRIGGER retention_events_no_update;
+    DROP TRIGGER retention_events_no_delete;
+    DROP INDEX retention_events_workspace_time_idx;
+    ALTER TABLE retention_events RENAME TO retention_events_legacy;
+
+    CREATE TABLE retention_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      workspace_id INTEGER NOT NULL,
+      event_type TEXT NOT NULL CHECK(
+        event_type IN ('policy_updated', 'enforcement_completed', 'enforcement_blocked')
+      ),
+      actor_user_id INTEGER,
+      policy_json TEXT NOT NULL,
+      result_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE,
+      FOREIGN KEY(actor_user_id) REFERENCES users(id) ON DELETE SET NULL
+    );
+
+    INSERT INTO retention_events (
+      id, workspace_id, event_type, actor_user_id, policy_json, result_json, created_at
+    )
+    SELECT id, workspace_id, event_type, actor_user_id, policy_json, result_json, created_at
+    FROM retention_events_legacy;
+    DROP TABLE retention_events_legacy;
+
+    CREATE INDEX retention_events_workspace_time_idx
+      ON retention_events(workspace_id, created_at DESC);
+    CREATE TRIGGER retention_events_no_update
+    BEFORE UPDATE ON retention_events
+    BEGIN
+      SELECT RAISE(ABORT, 'retention events are immutable');
+    END;
+    CREATE TRIGGER retention_events_no_delete
+    BEFORE DELETE ON retention_events
+    BEGIN
+      SELECT RAISE(ABORT, 'retention events are immutable');
+    END;
+
+    COMMIT;
   `);
 }
 

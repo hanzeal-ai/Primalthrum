@@ -9,6 +9,7 @@ import {
   Loader2,
   LogOut,
   RefreshCw,
+  Scale,
   ShieldAlert,
   ShieldCheck,
   Siren,
@@ -31,6 +32,7 @@ import {
   listOperatorFeatureFlags,
   listOperatorIncidents,
   listOperatorJobs,
+  listOperatorLegalHolds,
   listOperatorPayments,
   listOperatorSubscriptions,
   listOperatorUsage,
@@ -41,6 +43,7 @@ import {
 import { OperatorCustomerSection } from './OperatorCustomerSection'
 import { OperatorFlagsSection } from './OperatorFlagsSection'
 import { OperatorIncidentsSection } from './OperatorIncidentsSection'
+import { OperatorLegalHoldsSection } from './OperatorLegalHoldsSection'
 import { operatorRoleLabel } from './operatorFormatters'
 import { OperatorOverviewSection } from './OperatorOverviewSection'
 import {
@@ -68,6 +71,7 @@ import type {
   OperatorUsageSummary,
   OperatorWorkspaceSummary,
   SupportAccessGrant,
+  WorkspaceLegalHold,
 } from './operatorTypes'
 import { OperatorUsersSection } from './OperatorUsersSection'
 import { OperatorWorkspacesSection } from './OperatorWorkspacesSection'
@@ -81,6 +85,7 @@ const NAV_ITEMS = [
   { key: 'security', label: '安全', icon: ShieldAlert },
   { key: 'flags', label: '功能开关', icon: Flag },
   { key: 'incidents', label: '事故', icon: Siren },
+  { key: 'holds', label: '法务保全', icon: Scale },
   { key: 'support', label: '支持访问', icon: Headphones },
   { key: 'operators', label: 'Operators', icon: UserCog },
   { key: 'audit', label: '审计', icon: ClipboardList },
@@ -104,6 +109,7 @@ export function OperatorConsolePage({ onLogout, user }: OperatorConsolePageProps
   const [abuseEvents, setAbuseEvents] = useState<OperatorAbuseEventSummary[]>([])
   const [featureFlags, setFeatureFlags] = useState<OperatorFeatureFlag[]>([])
   const [incidents, setIncidents] = useState<OperatorIncidentSummary[]>([])
+  const [legalHolds, setLegalHolds] = useState<WorkspaceLegalHold[]>([])
   const [operators, setOperators] = useState<OperatorUser[]>([])
   const [grants, setGrants] = useState<SupportAccessGrant[]>([])
   const [audit, setAudit] = useState<OperatorAuditRecord[]>([])
@@ -154,6 +160,14 @@ export function OperatorConsolePage({ onLogout, user }: OperatorConsolePageProps
         setIncidents(loadedIncidents)
         setWorkspaces(loadedWorkspaces)
         setOperators(loadedOperators)
+      }
+      if (target === 'holds') {
+        const [loadedHolds, loadedWorkspaces] = await Promise.all([
+          listOperatorLegalHolds(),
+          listOperatorWorkspaces(),
+        ])
+        setLegalHolds(loadedHolds)
+        setWorkspaces(loadedWorkspaces)
       }
       if (target === 'operators') setOperators(await listOperators())
       if (target === 'audit') setAudit(await listOperatorAudit())
@@ -243,6 +257,7 @@ export function OperatorConsolePage({ onLogout, user }: OperatorConsolePageProps
               featureFlags={featureFlags}
               grants={grants}
               incidents={incidents}
+              legalHolds={legalHolds}
               onContext={async (grantId) => {
                 try {
                   setSupportContext((await getSupportContext(grantId)).context)
@@ -277,6 +292,7 @@ function OperatorSection(props: {
   featureFlags: OperatorFeatureFlag[]
   grants: SupportAccessGrant[]
   incidents: OperatorIncidentSummary[]
+  legalHolds: WorkspaceLegalHold[]
   onContext: (grantId: number) => Promise<void>
   onReload: () => Promise<void>
   jobs: OperatorJobSummary[]
@@ -298,6 +314,7 @@ function OperatorSection(props: {
   if (props.section === 'security') return <OperatorSecuritySection events={props.abuseEvents} />
   if (props.section === 'flags') return <OperatorFlagsSection flags={props.featureFlags} onReload={props.onReload} role={props.user.role} workspaces={props.workspaces} />
   if (props.section === 'incidents') return <OperatorIncidentsSection incidents={props.incidents} onReload={props.onReload} operators={props.operators} role={props.user.role} workspaces={props.workspaces} />
+  if (props.section === 'holds') return <OperatorLegalHoldsSection holds={props.legalHolds} onReload={props.onReload} user={props.user} workspaces={props.workspaces} />
   if (props.section === 'support') return <OperatorSupportSection {...props} />
   if (props.section === 'operators') return <OperatorUsersSection {...props} />
   return <OperatorAuditSection events={props.audit} />

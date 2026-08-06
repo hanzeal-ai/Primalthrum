@@ -15,6 +15,7 @@ import type {
   OperatorIncidentStatus,
   OperatorIncidentSummary,
   OperatorJobSummary,
+  LegalHoldBasis,
   OperatorOverviewResponse,
   OperatorPaymentSummary,
   OperatorSetupStatus,
@@ -22,6 +23,7 @@ import type {
   OperatorUser,
   OperatorUsageSummary,
   OperatorWorkspaceSummary,
+  WorkspaceLegalHold,
   SupportAccessGrant,
   SupportGrantPermission,
 } from './operatorTypes'
@@ -133,6 +135,32 @@ export function listOperatorJobs(): Promise<OperatorJobSummary[]> {
 
 export function listOperatorAbuseEvents(): Promise<OperatorAbuseEventSummary[]> {
   return operatorRequest('/api/operator/abuse-events')
+}
+
+export function listOperatorLegalHolds(): Promise<WorkspaceLegalHold[]> {
+  return operatorRequest('/api/operator/legal-holds')
+}
+
+export function createOperatorLegalHold(input: {
+  workspaceId: number
+  externalCaseRef: string
+  basis: LegalHoldBasis
+  reason: string
+}): Promise<WorkspaceLegalHold> {
+  return operatorRequest('/api/operator/legal-holds', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export function releaseOperatorLegalHold(
+  id: number,
+  input: { expectedRevision: number; releaseReason: string },
+): Promise<WorkspaceLegalHold> {
+  return operatorRequest(`/api/operator/legal-holds/${id}/release`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
 }
 
 export function listOperatorFeatureFlags(): Promise<OperatorFeatureFlag[]> {

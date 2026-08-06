@@ -50,6 +50,17 @@ test('@desktop operator control plane is ready and operational', async ({ page }
     .getByRole('button', { name: '支持访问' }).click()
   await expect(page.getByText('创建限时授权')).toBeVisible()
   await expectNoHorizontalOverflow(page)
+
+  await page.getByRole('navigation', { name: 'Operator 导航' })
+    .getByRole('button', { name: '法务保全' }).click()
+  await page.getByLabel('保全 Workspace').selectOption({ label: 'Local Workspace (#1)' })
+  await page.getByLabel('外部案件编号').fill('E2E-LEGAL-HOLD-001')
+  await page.getByLabel('保全依据').selectOption('regulatory')
+  await page.getByLabel('操作原因').fill('Preserve browser acceptance records for the authorized regulatory test.')
+  await page.getByRole('button', { name: '放置保全' }).click()
+  await expect(page.getByText('E2E-LEGAL-HOLD-001')).toBeVisible()
+  await expect(page.getByText('创建者不能自行释放，请由另一名授权 Operator 复核。')).toBeVisible()
+  await expectNoHorizontalOverflow(page)
   expect(clientErrors).toEqual([])
 })
 
@@ -59,7 +70,7 @@ test('@mobile operator control plane remains usable without overflow', async ({ 
   const navigation = page.getByRole('navigation', { name: '移动端 Operator 导航' })
   await expect(navigation).toBeVisible()
 
-  for (const section of ['Workspaces', '客户', '计费', '运行', '安全', '功能开关', '事故', '支持访问', 'Operators', '审计']) {
+  for (const section of ['Workspaces', '客户', '计费', '运行', '安全', '功能开关', '事故', '法务保全', '支持访问', 'Operators', '审计']) {
     await navigation.getByRole('button', { name: section }).click()
     await expectNoHorizontalOverflow(page)
   }

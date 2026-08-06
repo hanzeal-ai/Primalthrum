@@ -272,6 +272,31 @@ export interface OperatorIncidentDetail extends OperatorIncidentSummary {
   events: OperatorIncidentEvent[]
 }
 
+export type LegalHoldBasis =
+  | 'litigation'
+  | 'regulatory'
+  | 'investigation'
+  | 'tax'
+  | 'contractual'
+
+export interface WorkspaceLegalHold {
+  id: number
+  holdRef: string
+  workspaceId: number
+  workspaceName: string
+  externalCaseRef: string
+  basis: LegalHoldBasis
+  reason: string
+  status: 'active' | 'released'
+  revision: number
+  createdByOperatorId: number
+  releasedByOperatorId: number | null
+  releaseReason: string
+  releasedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
 export type SupportGrantPermission =
   | 'workspace.metadata.read'
   | 'workspace.agents.read'

@@ -117,6 +117,11 @@ Active runs are preserved. Billing, usage, security, API Key, privacy, and
 retention audit evidence is excluded from customer data cleanup. The execution
 history shows policy changes and completed cleanup counts.
 
+When a mandatory preservation policy is active, this section displays a generic
+notice and automatic or manual cleanup is paused. Case details are not available
+to Workspace users. Contact the organization's legal or support channel instead
+of attempting to bypass the preservation state.
+
 ## Generated Agent
 
 After creating an agent, generate the standalone project. The generated project includes a LangGraph skeleton, provider folders, and a demo test path.

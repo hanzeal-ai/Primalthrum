@@ -37,6 +37,12 @@ Before an expired run is removed, tool-call audit rows are copied into the
 immutable `retained_tool_audit_logs` archive. Existing audit APIs read both live
 and archived records.
 
+An active Workspace legal hold changes automatic and manual enforcement into an
+immutable blocked event. No retention-controlled metadata or physical file is
+deleted, and the next check is scheduled 24 hours later. Customers see only a
+generic mandatory-preservation notice. Restricted case management and the
+maker-checker release runbook are documented in `docs/LEGAL_HOLDS.md`.
+
 ## Excluded Records
 
 Workspace retention does not delete:
@@ -48,15 +54,16 @@ Workspace retention does not delete:
 - Agents, versions, deployments, Provider configuration, or team membership.
 
 Account and Owner-authorized Workspace export plus scheduled account deletion are
-documented in `docs/ACCOUNT_PRIVACY_RIGHTS.md`. Statutory retention schedules,
-legal-hold support, and production object-storage lifecycle rules remain part of
-the P21 compliance gate. Operators must align those controls with the approved
-privacy policy and regional obligations before launch.
+documented in `docs/ACCOUNT_PRIVACY_RIGHTS.md`. Legal holds are enforced by the
+platform, while jurisdiction-specific statutory schedules, approved legal text,
+and production object-storage lifecycle rules remain part of the P21 compliance
+gate. Operators must align those controls with approved regional obligations
+before launch.
 
 ## API
 
 - `GET /api/settings/retention`: policy, current deletion preview, entitlement,
-  role capability, and recent immutable events.
+  role capability, generic legal-hold state, and recent immutable events.
 - `PUT /api/settings/retention`: save a policy after role, entitlement, and
   current-password checks.
 - `POST /api/settings/retention/enforce`: run the effective policy immediately

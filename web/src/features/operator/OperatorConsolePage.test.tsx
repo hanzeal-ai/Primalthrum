@@ -10,6 +10,7 @@ const api = vi.hoisted(() => ({
   createOperatorFeatureFlagOverride: vi.fn(),
   createOperatorIncident: vi.fn(),
   createOperatorIncidentEvent: vi.fn(),
+  createOperatorLegalHold: vi.fn(),
   createSupportGrant: vi.fn(),
   getOperatorIncident: vi.fn(),
   getOperatorOverview: vi.fn(),
@@ -22,6 +23,7 @@ const api = vi.hoisted(() => ({
   listOperatorFeatureFlags: vi.fn(),
   listOperatorIncidents: vi.fn(),
   listOperatorJobs: vi.fn(),
+  listOperatorLegalHolds: vi.fn(),
   listOperatorPayments: vi.fn(),
   listOperatorSubscriptions: vi.fn(),
   listOperatorUsage: vi.fn(),
@@ -29,6 +31,7 @@ const api = vi.hoisted(() => ({
   listOperatorWorkspaces: vi.fn(),
   listSupportGrants: vi.fn(),
   revokeSupportGrant: vi.fn(),
+  releaseOperatorLegalHold: vi.fn(),
   revokeOperatorFeatureFlagOverride: vi.fn(),
   updateOperatorFeatureFlag: vi.fn(),
   updateOperatorIncident: vi.fn(),
@@ -67,6 +70,7 @@ describe('OperatorConsolePage', () => {
     api.listOperatorFeatureFlags.mockResolvedValue([])
     api.listOperatorIncidents.mockResolvedValue([])
     api.listOperatorJobs.mockResolvedValue([])
+    api.listOperatorLegalHolds.mockResolvedValue([])
     api.listOperatorPayments.mockResolvedValue({ invoices: [], refunds: [], webhookFailures: [] })
     api.listOperatorSubscriptions.mockResolvedValue([])
     api.listOperatorUsage.mockResolvedValue([])
@@ -90,6 +94,7 @@ describe('OperatorConsolePage', () => {
     expect(screen.queryByRole('button', { name: '计费' })).toBeNull()
     expect(screen.queryByRole('button', { name: '运行' })).toBeNull()
     expect(screen.queryByRole('button', { name: '安全' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '法务保全' })).toBeNull()
     expect(screen.getAllByRole('button', { name: '功能开关' }).length).toBeGreaterThan(0)
     expect(screen.getAllByRole('button', { name: '事故' }).length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: 'Operators' })).toBeNull()
@@ -122,6 +127,11 @@ describe('OperatorConsolePage', () => {
     fireEvent.click(screen.getAllByRole('button', { name: '事故' })[0])
     await waitFor(() => expect(api.listOperatorIncidents).toHaveBeenCalled())
     expect(await screen.findByRole('heading', { name: '创建事故' })).toBeTruthy()
+
+    fireEvent.click(screen.getAllByRole('button', { name: '法务保全' })[0])
+    await waitFor(() => expect(api.listOperatorLegalHolds).toHaveBeenCalled())
+    expect(api.listOperatorWorkspaces).toHaveBeenCalled()
+    expect(await screen.findByRole('heading', { name: '放置法务保全' })).toBeTruthy()
   })
 })
 

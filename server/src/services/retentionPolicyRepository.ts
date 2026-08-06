@@ -27,7 +27,7 @@ export interface RetentionEnforcementResult extends RetentionPreview {
 export interface RetentionEventRecord {
   id: number;
   workspaceId: number;
-  eventType: 'policy_updated' | 'enforcement_completed';
+  eventType: 'policy_updated' | 'enforcement_completed' | 'enforcement_blocked';
   actorUserId: number | null;
   policy: RetentionPolicySnapshot;
   result: Record<string, unknown>;
@@ -179,6 +179,10 @@ export class RetentionPolicyRepository {
       : null;
     const conditions = retentionConditions(snapshot, now);
     const policyJson = JSON.stringify(snapshot);
+    const activeHoldCount = `(SELECT COUNT(*) FROM workspace_legal_holds
+      WHERE workspace_id = ${sqlValue(workspaceId)} AND status = 'active')`;
+    const noActiveHold = `NOT EXISTS (SELECT 1 FROM workspace_legal_holds
+      WHERE workspace_id = ${sqlValue(workspaceId)} AND status = 'active')`;
 
     this.db.run(`
       PRAGMA foreign_keys = ON;
@@ -186,8 +190,13 @@ export class RetentionPolicyRepository {
       INSERT INTO retention_events (
         workspace_id, event_type, actor_user_id, policy_json, result_json, created_at
       )
-      SELECT ${sqlValue(workspaceId)}, 'enforcement_completed', ${sqlValue(actorUserId)},
-        ${sqlValue(policyJson)}, json_object(
+      SELECT ${sqlValue(workspaceId)},
+        CASE WHEN ${activeHoldCount} > 0
+          THEN 'enforcement_blocked' ELSE 'enforcement_completed' END,
+        ${sqlValue(actorUserId)}, ${sqlValue(policyJson)},
+        CASE WHEN ${activeHoldCount} > 0 THEN json_object(
+          'legalHoldCount', ${activeHoldCount}
+        ) ELSE json_object(
           'conversations', (SELECT COUNT(*) FROM conversations
             WHERE workspace_id = ${sqlValue(workspaceId)} AND ${conditions.conversations}),
           'runs', (SELECT COUNT(*) FROM runs
@@ -199,7 +208,7 @@ export class RetentionPolicyRepository {
           'filesQueued', (SELECT COUNT(*) FROM documents
             WHERE workspace_id = ${sqlValue(workspaceId)}
               AND ${conditions.documents} AND storage_ref <> '')
-        ), ${sqlValue(nowIso)};
+        ) END, ${sqlValue(nowIso)};
 
       INSERT OR IGNORE INTO retained_tool_audit_logs (
         original_audit_id, workspace_id, run_id, event_id, tool_name, status,
@@ -209,6 +218,7 @@ export class RetentionPolicyRepository {
         dangerous, node, payload_json, created_at, ${sqlValue(nowIso)}
       FROM tool_audit_logs
       WHERE workspace_id = ${sqlValue(workspaceId)}
+        AND ${noActiveHold}
         AND run_id IN (
           SELECT id FROM runs
           WHERE workspace_id = ${sqlValue(workspaceId)} AND ${conditions.runs}
@@ -218,6 +228,7 @@ export class RetentionPolicyRepository {
       SELECT workspace_id, storage_ref
       FROM documents
       WHERE workspace_id = ${sqlValue(workspaceId)}
+        AND ${noActiveHold}
         AND ${conditions.documents}
         AND storage_ref <> '';
 
@@ -225,6 +236,7 @@ export class RetentionPolicyRepository {
       SET status = 'failed', error = 'document removed by retention policy',
         completed_at = ${sqlValue(nowIso)}, updated_at = ${sqlValue(nowIso)}
       WHERE workspace_id = ${sqlValue(workspaceId)}
+        AND ${noActiveHold}
         AND type = 'document.index'
         AND status IN ('queued', 'retrying')
         AND CAST(json_extract(payload_json, '$.documentId') AS INTEGER) IN (
@@ -235,20 +247,26 @@ export class RetentionPolicyRepository {
       UPDATE runs
       SET conversation_id = NULL
       WHERE workspace_id = ${sqlValue(workspaceId)}
+        AND ${noActiveHold}
         AND conversation_id IN (
           SELECT id FROM conversations
           WHERE workspace_id = ${sqlValue(workspaceId)} AND ${conditions.conversations}
         );
 
       DELETE FROM conversations
-      WHERE workspace_id = ${sqlValue(workspaceId)} AND ${conditions.conversations};
+      WHERE workspace_id = ${sqlValue(workspaceId)} AND ${noActiveHold}
+        AND ${conditions.conversations};
       DELETE FROM runs
-      WHERE workspace_id = ${sqlValue(workspaceId)} AND ${conditions.runs};
+      WHERE workspace_id = ${sqlValue(workspaceId)} AND ${noActiveHold}
+        AND ${conditions.runs};
       DELETE FROM documents
-      WHERE workspace_id = ${sqlValue(workspaceId)} AND ${conditions.documents};
+      WHERE workspace_id = ${sqlValue(workspaceId)} AND ${noActiveHold}
+        AND ${conditions.documents};
 
       UPDATE workspace_retention_policies
-      SET last_enforced_at = ${sqlValue(nowIso)}, next_enforcement_at = ${sqlValue(next)},
+      SET last_enforced_at = CASE WHEN ${noActiveHold}
+          THEN ${sqlValue(nowIso)} ELSE last_enforced_at END,
+        next_enforcement_at = ${sqlValue(next)},
         updated_at = ${sqlValue(nowIso)}
       WHERE workspace_id = ${sqlValue(workspaceId)};
       COMMIT;
@@ -258,7 +276,7 @@ export class RetentionPolicyRepository {
       SELECT ${EVENT_COLUMNS}
       FROM retention_events
       WHERE workspace_id = ${sqlValue(workspaceId)}
-        AND event_type = 'enforcement_completed'
+        AND event_type IN ('enforcement_completed', 'enforcement_blocked')
       ORDER BY id DESC
       LIMIT 1;
     `)[0];
@@ -294,6 +312,11 @@ export class RetentionPolicyRepository {
       FROM retention_file_deletions
       WHERE workspace_id = ${sqlValue(workspaceId)}
         AND status IN ('pending', 'retrying')
+        AND NOT EXISTS (
+          SELECT 1 FROM workspace_legal_holds hold
+          WHERE hold.workspace_id = retention_file_deletions.workspace_id
+            AND hold.status = 'active'
+        )
       ORDER BY id
       LIMIT ${boundedLimit};
     `).map((row) => ({
@@ -302,6 +325,16 @@ export class RetentionPolicyRepository {
       storageRef: row.storage_ref,
       attempts: Number(row.attempts),
     }));
+  }
+
+  hasActiveLegalHold(workspaceId: number): boolean {
+    const row = this.db.query<{ active: number }>(`
+      SELECT EXISTS(
+        SELECT 1 FROM workspace_legal_holds
+        WHERE workspace_id = ${sqlValue(workspaceId)} AND status = 'active'
+      ) AS active;
+    `)[0];
+    return Number(row?.active ?? 0) === 1;
   }
 
   completeFileDeletion(id: number): void {

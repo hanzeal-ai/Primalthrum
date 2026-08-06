@@ -120,6 +120,7 @@ export function PrivacySettingsSection({ user }: { user: AuthUser }) {
 
 function blockerMessage(blocker: AccountDeletionBlocker): string {
   if (blocker.code === 'OWNERSHIP_TRANSFER_REQUIRED') return `${blocker.workspaceName} 仍有其他成员，请先处理所有权。`
+  if (blocker.code === 'LEGAL_HOLD_ACTIVE') return `${blocker.workspaceName} 受强制保全策略约束，暂时无法删除账号。`
   return `${blocker.workspaceName} 仍有生效中的付费订阅。`
 }
 

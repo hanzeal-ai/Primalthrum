@@ -27,6 +27,7 @@ const enabledState = {
   events: [],
   customRetentionEnabled: true,
   canManage: true,
+  legalHoldActive: false,
 }
 
 describe('RetentionSettingsSection', () => {
@@ -45,6 +46,7 @@ describe('RetentionSettingsSection', () => {
       },
       filesDeleted: 0,
       fileDeletionFailures: 0,
+      blockedByLegalHold: false,
     })
   })
 
@@ -90,5 +92,34 @@ describe('RetentionSettingsSection', () => {
     expect(await screen.findByText('Business 或 Enterprise 套餐可自定义留存周期')).toBeTruthy()
     expect(screen.queryByLabelText('留存设置当前密码')).toBeNull()
     expect(screen.queryByRole('button', { name: '立即执行' })).toBeNull()
+  })
+
+  it('shows only a generic preservation notice when cleanup is blocked', async () => {
+    api.getRetentionSettings.mockResolvedValue({
+      ...enabledState,
+      legalHoldActive: true,
+    })
+    api.enforceRetentionSettings.mockResolvedValue({
+      event: {
+        id: 3,
+        workspaceId: 1,
+        eventType: 'enforcement_blocked',
+        actorUserId: 1,
+        policy: { conversationDays: 90, runDays: 30, documentDays: null },
+        result: { legalHoldCount: 1 },
+        createdAt: '2026-08-01T12:00:00.000Z',
+      },
+      filesDeleted: 0,
+      fileDeletionFailures: 0,
+      blockedByLegalHold: true,
+    })
+    render(<RetentionSettingsSection workspaceId={1} />)
+
+    expect(await screen.findByText('强制保全策略生效中')).toBeTruthy()
+    fireEvent.change(screen.getByLabelText('留存设置当前密码'), { target: { value: 'current password' } })
+    fireEvent.click(screen.getByRole('button', { name: '立即执行' }))
+    fireEvent.click(screen.getByRole('button', { name: '确认立即清理' }))
+    expect(await screen.findByText('强制保全策略生效中，本次数据清理已暂停。')).toBeTruthy()
+    expect(screen.queryByText(/LEGAL-/)).toBeNull()
   })
 })
