@@ -18,7 +18,7 @@ import { SignupPage } from './features/onboarding/SignupPage'
 import { SecuritySettingsPage } from './features/settings/SecuritySettingsPage'
 import { InvitationAcceptPage } from './features/team/InvitationAcceptPage'
 import { TeamPage } from './features/team/TeamPage'
-import { canReadBilling } from './lib/workspacePermissions'
+import { canReadAgents, canReadBilling } from './lib/workspacePermissions'
 import './App.css'
 
 export default function App() {
@@ -163,6 +163,10 @@ export default function App() {
       return <WorkspaceAccessDeniedPage active="usage" user={auth.user} onLogout={auth.logout} />
     }
     return <UsagePage user={auth.user} onLogout={auth.logout} />
+  }
+
+  if (!canReadAgents(auth.user.role)) {
+    return <BillingPage user={auth.user} onLogout={auth.logout} />
   }
 
   return <AgentBuilderPage user={auth.user} onLogout={auth.logout} />

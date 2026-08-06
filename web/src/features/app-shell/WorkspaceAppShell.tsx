@@ -3,7 +3,7 @@ import type { ReactNode } from 'react'
 
 import type { AuthUser } from '../../api/types'
 import { Button } from '../../components/ui/button'
-import { canReadBilling } from '../../lib/workspacePermissions'
+import { canReadAgents, canReadBilling } from '../../lib/workspacePermissions'
 import { WorkspaceSwitcher } from '../workspaces/WorkspaceSwitcher'
 
 export type WorkspaceAppSection = 'builder' | 'team' | 'usage' | 'billing' | 'settings'
@@ -77,7 +77,8 @@ export function WorkspaceAppShell({
 }
 
 function navigationAllowed(section: WorkspaceAppSection, user: AuthUser): boolean {
-  return section === 'builder' || section === 'team' || section === 'settings' || canReadBilling(user.role)
+  if (section === 'builder') return canReadAgents(user.role)
+  return section === 'team' || section === 'settings' || canReadBilling(user.role)
 }
 
 function NavigationItem({ active, compact = false, item }: {

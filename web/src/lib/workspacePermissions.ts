@@ -1,5 +1,9 @@
 import type { WorkspaceRole } from '../api/types'
 
+export function canReadAgents(role: WorkspaceRole): boolean {
+  return role !== 'billing'
+}
+
 export function canReadBilling(role: WorkspaceRole): boolean {
   return role === 'owner' || role === 'admin' || role === 'billing'
 }

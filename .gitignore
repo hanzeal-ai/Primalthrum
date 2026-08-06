@@ -151,4 +151,5 @@ __pycache__/
 .ruff_cache/
 data/
 generated-agents/
+.e2e/
 agent/.primalthrum/

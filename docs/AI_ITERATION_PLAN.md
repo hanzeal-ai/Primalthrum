@@ -2004,9 +2004,12 @@ complete. Follow the same dependency and verification protocol used above.
   replay, Session upgrade, recovery, disablement, and invitation non-bypass; Web
   client and component tests cover challenge token handling, invitation verification,
   enrollment, one-time recovery-code display, and disablement. The security and
-  user workflow contracts are documented in `docs/MFA_SECURITY.md`. Complete
-  role-matrix browser E2E, live Stripe lifecycle evidence, and transactional
-  invitation email remain open.
+  user workflow contracts are documented in `docs/MFA_SECURITY.md`. The automated
+  Playwright gate now starts isolated React, Node, and Python Agent services,
+  provisions all six Workspace roles through real invitation acceptance, and
+  verifies desktop UI visibility, API authorization, Billing-role landing, and
+  mobile navigation/overflow/console behavior. Live Stripe lifecycle evidence
+  remains open.
 
 ### P20-01 Operator Administration And Support
 
