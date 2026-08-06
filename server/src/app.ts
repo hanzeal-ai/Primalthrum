@@ -48,7 +48,10 @@ import {
 import { DocumentUploadSecurityRepository } from './services/documentUploadSecurityRepository';
 import { DocumentUploadSecurityService } from './services/documentUploadSecurityService';
 import { DurableJobDispatcher } from './services/durableJobDispatcher';
-import { LocalDocumentStorage } from './services/fileStorage';
+import {
+  type DocumentFileStorage,
+  LocalDocumentStorage,
+} from './services/fileStorage';
 import { checkServerReadiness } from './services/healthReadiness';
 import { JsonConsoleLogger, type StructuredLogger } from './services/logger';
 import { MetricsRegistry } from './services/metricsRegistry';
@@ -155,9 +158,11 @@ export interface AppOptions {
   accountDeletionGracePeriodMs?: number;
   accountPrivacyNow?: () => Date;
   accountPrivacySchedulerIntervalMs?: number;
+  startBackgroundSchedulers?: boolean;
   agentBaseUrl?: string;
   dbPath?: string;
   documentMalwareScanner?: DocumentMalwareScanner;
+  documentStorage?: DocumentFileStorage;
   documentStorageDir?: string;
   generatedAgentsDir?: string;
   logger?: StructuredLogger;
@@ -280,7 +285,7 @@ export function createApp(options: AppOptions = {}): Koa {
     new DocumentUploadSecurityRepository(db),
   );
   const conversationRepository = new ConversationRepository(db);
-  const documentStorage = new LocalDocumentStorage(
+  const documentStorage = options.documentStorage ?? new LocalDocumentStorage(
     options.documentStorageDir ?? DEFAULT_DOCUMENT_STORAGE_DIR,
   );
   const userRepository = new UserRepository(db);
@@ -399,7 +404,7 @@ export function createApp(options: AppOptions = {}): Koa {
       let ragStorageCompleted = false;
       try {
         const content = existing.storageRef
-          ? documentStorage.read(existing.storageRef)
+          ? await documentStorage.read(existing.storageRef)
           : '';
         const chunks = chunkDocumentText(existing.id, content);
         const ragEnabled = !['none', 'null'].includes(agent.config.ragProvider);
@@ -475,12 +480,12 @@ export function createApp(options: AppOptions = {}): Koa {
         throw error;
       }
     },
-    'retention.enforce': (payload) => {
+    'retention.enforce': async (payload) => {
       const workspaceId = Number(payload.workspaceId);
       if (!Number.isSafeInteger(workspaceId) || workspaceId <= 0) {
         throw new Error('retention job workspaceId is invalid');
       }
-      return retentionService.enforce(workspaceId, null) as unknown as Record<string, unknown>;
+      return await retentionService.enforce(workspaceId, null) as unknown as Record<string, unknown>;
     },
     'account.delete': (payload) => {
       const requestId = typeof payload.requestId === 'string' ? payload.requestId : '';
@@ -505,9 +510,11 @@ export function createApp(options: AppOptions = {}): Koa {
     () => jobDispatcher.kick(),
     options.accountPrivacySchedulerIntervalMs,
   );
-  jobDispatcher.resume();
-  retentionScheduler.start();
-  accountPrivacyScheduler.start();
+  if (options.startBackgroundSchedulers !== false) {
+    jobDispatcher.resume();
+    retentionScheduler.start();
+    accountPrivacyScheduler.start();
+  }
 
   function authorize(ctx: Koa.Context, permission: WorkspacePermission): boolean {
     if (ctx.state.apiKey) {
@@ -553,7 +560,7 @@ export function createApp(options: AppOptions = {}): Koa {
     }
   }
 
-  function storeMeteredDocument(
+  async function storeMeteredDocument(
     ctx: Koa.Context,
     agentId: number,
     upload: ParsedDocumentUpload,
@@ -571,7 +578,7 @@ export function createApp(options: AppOptions = {}): Koa {
     let storageRef = '';
     try {
       document = documentRepository.create(agentId, upload);
-      const stored = documentStorage.save({
+      const stored = await documentStorage.save({
         workspaceId: document.workspaceId,
         agentId: document.agentId,
         documentId: document.id,
@@ -584,7 +591,20 @@ export function createApp(options: AppOptions = {}): Koa {
       meteredOperationService.complete(operation, { documentId: document.id });
       return result;
     } catch (error) {
-      if (storageRef) documentStorage.delete(storageRef);
+      if (storageRef) {
+        try {
+          await documentStorage.delete(storageRef);
+        } catch (cleanupError) {
+          logger.log({
+            level: 'error',
+            code: 'DOCUMENT_STORAGE_CLEANUP_FAILED',
+            message: cleanupError instanceof Error
+              ? cleanupError.message
+              : 'document storage cleanup failed',
+            context: { agentId },
+          });
+        }
+      }
       if (document) documentRepository.deleteByAgentDocument(agentId, document.id);
       releaseMeteredOperation(operation);
       throw error;
@@ -771,7 +791,7 @@ export function createApp(options: AppOptions = {}): Koa {
     identity: operatorIdentity,
     logger,
     reads: operatorReads,
-    readiness: () => checkServerReadiness({ db, agentBaseUrl }),
+    readiness: () => checkServerReadiness({ db, agentBaseUrl, documentStorage }),
     support: supportAccess,
   });
   registerOperatorDomainRoutes(operatorRouter, {
@@ -849,7 +869,7 @@ export function createApp(options: AppOptions = {}): Koa {
   });
 
   router.get('/ready', async (ctx) => {
-    const report = await checkServerReadiness({ db, agentBaseUrl });
+    const report = await checkServerReadiness({ db, agentBaseUrl, documentStorage });
     ctx.status = report.status === 'ready' ? 200 : 503;
     ctx.body = report;
   });
@@ -1471,7 +1491,7 @@ export function createApp(options: AppOptions = {}): Koa {
       });
       await inspectDocumentUpload(ctx, agentId, upload);
       ctx.status = 201;
-      ctx.body = storeMeteredDocument(ctx, agentId, upload);
+      ctx.body = await storeMeteredDocument(ctx, agentId, upload);
     } catch (error) {
       sendDocumentUploadError(ctx, error);
     }
@@ -1485,7 +1505,7 @@ export function createApp(options: AppOptions = {}): Koa {
       const upload = parseDocumentUpload(ctx.request.body as Record<string, unknown>);
       await inspectDocumentUpload(ctx, agentId, upload);
       ctx.status = 201;
-      ctx.body = storeMeteredDocument(ctx, agentId, upload);
+      ctx.body = await storeMeteredDocument(ctx, agentId, upload);
     } catch (error) {
       sendDocumentUploadError(ctx, error);
     }
@@ -1527,7 +1547,7 @@ export function createApp(options: AppOptions = {}): Koa {
     };
   });
 
-  router.delete('/api/agents/:id/documents/:documentId', (ctx) => {
+  router.delete('/api/agents/:id/documents/:documentId', async (ctx) => {
     const agentId = Number(ctx.params.id);
     if (!scopedAgent(ctx, agentId, 'agents.write')) return;
 
@@ -1544,7 +1564,7 @@ export function createApp(options: AppOptions = {}): Koa {
 
     const removedIndexEntries = documentIndexRepository.deleteByDocument(document.id);
     if (document.storageRef) {
-      documentStorage.delete(document.storageRef);
+      await documentStorage.delete(document.storageRef);
     }
     documentRepository.deleteByAgentDocument(agentId, documentId);
 

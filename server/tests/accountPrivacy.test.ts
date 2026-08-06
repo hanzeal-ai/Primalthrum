@@ -213,7 +213,7 @@ test('scheduled deletion can be cancelled and due execution anonymizes account d
     () => now,
     60_000,
   );
-  const result = deletion.execute(request.requestId);
+  const result = await deletion.execute(request.requestId);
   assert.equal(result.status, 'completed');
 
   const session = await fetch(`${baseUrl}/api/settings/privacy`, { headers: jsonHeaders() });

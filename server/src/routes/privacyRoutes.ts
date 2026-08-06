@@ -103,15 +103,15 @@ export function registerPrivacyRoutes(
     ctx.body = options.deletion.state(options.currentUserId(ctx));
   });
 
-  router.post('/api/settings/privacy/export', (ctx) => {
+  router.post('/api/settings/privacy/export', async (ctx) => {
     const body = ctx.request.body as Record<string, unknown>;
     const userId = options.currentUserId(ctx);
     if (!reauthenticate(ctx, options.logger, options.users, userId, body.password)) return;
     try {
       const scope = body.scope === 'workspace' ? 'workspace' : 'account';
-      const archive = scope === 'workspace'
+      const archive = await (scope === 'workspace'
         ? options.exports.exportWorkspace(userId, options.currentWorkspaceId(ctx))
-        : options.exports.exportAccount(userId);
+        : options.exports.exportAccount(userId));
       ctx.type = 'application/json';
       ctx.set(
         'Content-Disposition',

@@ -32,7 +32,7 @@ export class AccountDataExportService {
     return result;
   }
 
-  exportWorkspace(userId: number, workspaceId: number): AccountDataExport {
+  async exportWorkspace(userId: number, workspaceId: number): Promise<AccountDataExport> {
     const membership = this.db.query<{ role: string }>(`
       SELECT membership.role
       FROM workspace_memberships membership
@@ -52,7 +52,7 @@ export class AccountDataExportService {
       generatedAt,
       scope: 'workspace',
       account: this.accountData(userId),
-      workspace: this.workspaceData(workspaceId),
+      workspace: await this.workspaceData(workspaceId),
     };
     this.privacy.recordExport(userId, 'workspace', workspaceId);
     return result;
@@ -104,21 +104,21 @@ export class AccountDataExportService {
     };
   }
 
-  private workspaceData(workspaceId: number): Record<string, unknown> {
+  private async workspaceData(workspaceId: number): Promise<Record<string, unknown>> {
     const workspace = rows(this.db, `
       SELECT id, name, slug, created_at, updated_at
       FROM workspaces WHERE id = ${sqlValue(workspaceId)} AND deleted_at IS NULL LIMIT 1;
     `)[0];
     if (!workspace) throw new Error('workspace not found');
 
-    const documents = rows(this.db, `
+    const documents = await Promise.all(rows(this.db, `
       SELECT id, agent_id, filename, hash, status, collection, storage_ref,
         mime_type, size_bytes, created_at
       FROM documents WHERE workspace_id = ${sqlValue(workspaceId)} ORDER BY id ASC;
-    `).map((document) => ({
+    `).map(async (document) => ({
       ...document,
-      content: readDocument(this.storage, String(document.storage_ref ?? '')),
-    }));
+      content: await readDocument(this.storage, String(document.storage_ref ?? '')),
+    })));
 
     return {
       metadata: workspace,
@@ -240,10 +240,13 @@ function sanitizeValue(value: unknown): unknown {
   return value;
 }
 
-function readDocument(storage: DocumentFileStorage, storageRef: string): string | null {
+async function readDocument(
+  storage: DocumentFileStorage,
+  storageRef: string,
+): Promise<string | null> {
   if (!storageRef) return null;
   try {
-    return storage.read(storageRef);
+    return await storage.read(storageRef);
   } catch {
     return null;
   }

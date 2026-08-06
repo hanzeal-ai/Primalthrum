@@ -8,6 +8,8 @@ This guide installs Primalthrum for a local or single-node commercial pilot.
 - Python 3.11 or newer.
 - `sqlite3` CLI available on `PATH`.
 - A private ClamAV service for every production deployment.
+- A private, versioned S3-compatible bucket for production document storage.
+- Docker when running the object-storage integration smoke locally.
 
 ## Install Dependencies
 
@@ -25,7 +27,9 @@ pnpm install
 
 ## Runtime Directories
 
-Primalthrum writes local metadata, document files, backups, and generated agents outside the source folders by default.
+Primalthrum writes local metadata, backups, and generated agents outside the
+source folders by default. Local development may also write document files there;
+production requires the S3-compatible provider described in `docs/FILE_STORAGE.md`.
 
 Recommended production-style local paths:
 
@@ -35,6 +39,10 @@ export PRIMALTHRUM_BACKUP_DIR=/var/backups/primalthrum
 export CLAMAV_HOST=clamav
 export CLAMAV_PORT=3310
 ```
+
+For a production server, also configure `DOCUMENT_STORAGE_PROVIDER=s3` and every
+`OBJECT_STORAGE_*` value from `server/.env.example` through the deployment secret
+manager. Startup fails closed when production uses local storage or an HTTP endpoint.
 
 ## Start
 
@@ -55,4 +63,5 @@ curl http://127.0.0.1:3000/health
 curl http://127.0.0.1:3000/ready
 bash examples/research-agent/smoke.sh
 scripts/commercial-smoke.sh
+scripts/object-storage-smoke.sh
 ```

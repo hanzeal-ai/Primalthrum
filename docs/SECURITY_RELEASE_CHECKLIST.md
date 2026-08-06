@@ -37,6 +37,9 @@ Use this checklist before tagging or deploying a commercial Primalthrum build.
 - Legal holds are restricted to Super Admin and Security, immediately block
   retention and member account deletion, require a different Operator for
   release, and preserve immutable case, lifecycle, and minimized audit evidence.
+- Production startup rejects local document storage and non-TLS S3 endpoints.
+  Bucket access is private and prefix-scoped, versioning and encryption are on,
+  and external lifecycle rules cannot expire legally held versions.
 - API clients show standardized `error.code`, `error.message`, and `error.status` without exposing secrets.
 - Public endpoints are limited to liveness, readiness, metrics, setup, auth, and documented public flows.
 
@@ -65,6 +68,8 @@ Use this checklist before tagging or deploying a commercial Primalthrum build.
 - A fresh backup exists before release deployment.
 - Restore has been tested on a temporary database and document directory.
 - Document storage location is durable and outside ephemeral build directories.
+- `scripts/object-storage-smoke.sh` exits 0 with object version and delete-marker evidence.
+- The production bucket restore exercise is paired with its database snapshot and succeeds.
 
 ## Documentation Checklist
 
@@ -129,10 +134,13 @@ Confirm:
   from account deletion, self-release fails, and a second authorized Operator can
   release the current revision without case details entering customer UI or
   Operator audit metadata.
+- `/ready` reports `document_storage=ok`, and a production-like S3 failure removes
+  the server from traffic without exposing credentials or provider response bodies.
 
 ## Known Limitations
 
 - SQLite is the default local metadata store; Postgres is documented as a persistence path but not the default runtime.
-- Local document storage is the default file provider; object storage remains a future provider extension.
+- Existing `local://` documents require a controlled content/reference migration
+  before switching provider; no automatic local-to-S3 migration is included yet.
 - Demo provider config uses mock model defaults unless operators configure real LLM and embedding providers.
 - Metrics are in-memory process counters and reset on server restart.

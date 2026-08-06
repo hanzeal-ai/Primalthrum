@@ -1,4 +1,5 @@
 import { type DatabaseAdapter } from '../db/adapter';
+import { type DocumentFileStorage } from './fileStorage';
 
 export type ReadinessCheckStatus = 'ok' | 'failed';
 export type ReadinessStatus = 'ready' | 'not_ready';
@@ -20,17 +21,34 @@ export async function checkServerReadiness(input: {
   db: DatabaseAdapter;
   agentBaseUrl: string;
   agentTimeoutMs?: number;
+  documentStorage?: DocumentFileStorage;
 }): Promise<ReadinessReport> {
-  const checks = [
+  const checks: ReadinessCheck[] = [
     checkDatabase(input.db),
     await checkAgentRuntime(input.agentBaseUrl, input.agentTimeoutMs ?? 1500),
   ];
+  if (input.documentStorage) checks.push(await checkDocumentStorage(input.documentStorage));
 
   return {
     status: checks.every((check) => check.status === 'ok') ? 'ready' : 'not_ready',
     service: 'server',
     checks,
   };
+}
+
+async function checkDocumentStorage(storage: DocumentFileStorage): Promise<ReadinessCheck> {
+  const startedAt = Date.now();
+  try {
+    await storage.healthCheck();
+    return { name: 'document_storage', status: 'ok', latencyMs: Date.now() - startedAt };
+  } catch (error) {
+    return {
+      name: 'document_storage',
+      status: 'failed',
+      latencyMs: Date.now() - startedAt,
+      message: error instanceof Error ? error.message : 'document storage probe failed',
+    };
+  }
 }
 
 function checkDatabase(db: DatabaseAdapter): ReadinessCheck {

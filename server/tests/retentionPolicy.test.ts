@@ -21,7 +21,7 @@ afterEach(() => {
   for (const root of roots.splice(0)) rmSync(root, { recursive: true, force: true });
 });
 
-test('retention enforcement is tenant-scoped, durable, and preserves security audit evidence', () => {
+test('retention enforcement is tenant-scoped, durable, and preserves security audit evidence', async () => {
   const root = temporaryRoot();
   const db = new SqliteDatabase(join(root, 'platform.sqlite'));
   const now = new Date('2026-08-01T12:00:00.000Z');
@@ -56,7 +56,7 @@ test('retention enforcement is tenant-scoped, durable, and preserves security au
     conversations: 1, runs: 1, documents: 1, documentBytes: 3,
   });
 
-  const outcome = retention.enforce(1, user.id);
+  const outcome = await retention.enforce(1, user.id);
   assert.deepEqual(outcome.event.result, {
     conversations: 1,
     runs: 1,
@@ -122,7 +122,7 @@ test('retention scheduler creates one durable job for each due workspace', () =>
   scheduler.stop();
 });
 
-test('active legal hold atomically blocks retention records and physical file deletion', () => {
+test('active legal hold atomically blocks retention records and physical file deletion', async () => {
   const root = temporaryRoot();
   const db = new SqliteDatabase(join(root, 'platform.sqlite'));
   const now = new Date('2026-08-01T12:00:00.000Z');
@@ -153,7 +153,7 @@ test('active legal hold atomically blocks retention records and physical file de
     operatorUserId: 1,
   });
 
-  const outcome = retention.enforce(1, owner.id);
+  const outcome = await retention.enforce(1, owner.id);
 
   assert.equal(outcome.blockedByLegalHold, true);
   assert.equal(outcome.event.eventType, 'enforcement_blocked');

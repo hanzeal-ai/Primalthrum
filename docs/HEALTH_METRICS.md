@@ -7,7 +7,7 @@ Primalthrum exposes health, readiness, and metrics endpoints for production runt
 | Endpoint | Auth | Purpose |
 | --- | --- | --- |
 | `GET /health` | Public | Lightweight liveness check for the Node server process. |
-| `GET /ready` | Public | Readiness check for database access and Agent runtime reachability. |
+| `GET /ready` | Public | Readiness check for database, document storage, and Agent runtime access. |
 | `GET /metrics` | Public | Prometheus text metrics export. |
 
 `/ready` returns HTTP 200 when all checks pass and HTTP 503 when one or more dependencies fail.
@@ -18,12 +18,15 @@ Primalthrum exposes health, readiness, and metrics endpoints for production runt
   "service": "server",
   "checks": [
     { "name": "database", "status": "ok", "latencyMs": 4 },
+    { "name": "document_storage", "status": "ok", "latencyMs": 8 },
     { "name": "agent_runtime", "status": "ok", "latencyMs": 12 }
   ]
 }
 ```
 
-The server checks Agent readiness through `${AGENT_BASE_URL}/ready`.
+The server checks Agent readiness through `${AGENT_BASE_URL}/ready` and calls the
+configured storage provider health check. For S3-compatible storage this is a
+signed bucket `HEAD`; failed authentication, timeout, or bucket access returns 503.
 
 ## Agent Endpoints
 

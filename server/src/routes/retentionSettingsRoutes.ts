@@ -71,14 +71,14 @@ export function registerRetentionSettingsRoutes(
     }
   });
 
-  router.post('/api/settings/retention/enforce', (ctx) => {
+  router.post('/api/settings/retention/enforce', async (ctx) => {
     if (!authorize(ctx, 'retention.manage')) return;
     const workspaceId = currentWorkspaceId(ctx);
     if (!assertRetentionEntitled(ctx, logger, billing, workspaceId)) return;
     const body = ctx.request.body as Record<string, unknown>;
     if (!reauthenticate(ctx, logger, users, currentUserId(ctx), body.password)) return;
     try {
-      ctx.body = retention.enforce(workspaceId, currentUserId(ctx));
+      ctx.body = await retention.enforce(workspaceId, currentUserId(ctx));
     } catch (error) {
       sendApiError(ctx, logger, {
         status: 500,

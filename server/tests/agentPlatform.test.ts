@@ -299,6 +299,7 @@ test('schema migrations are ordered and idempotent', () => {
       documentStorageDir: join(migrationRootDir, 'documents'),
       generatedAgentsDir: join(migrationRootDir, 'generated-agents'),
       logger: { log: () => undefined },
+      startBackgroundSchedulers: false,
     });
     void app;
     const afterFirstRun = db.query<{ id: string }>(`
@@ -312,6 +313,7 @@ test('schema migrations are ordered and idempotent', () => {
       documentStorageDir: join(migrationRootDir, 'documents-2'),
       generatedAgentsDir: join(migrationRootDir, 'generated-agents-2'),
       logger: { log: () => undefined },
+      startBackgroundSchedulers: false,
     });
     void secondApp;
     const afterSecondRun = db.query<{ id: string }>(`
@@ -636,6 +638,7 @@ test('readiness checks dependencies and metrics exports counters', async () => {
         [
           ['database', 'ok'],
           ['agent_runtime', 'ok'],
+          ['document_storage', 'ok'],
         ],
       );
 

@@ -2091,16 +2091,28 @@ complete. Follow the same dependency and verification protocol used above.
   account deletion. API, database, Web, and browser tests cover role isolation,
   self-release denial, second-reviewer release, zero-delete enforcement, generic
   customer disclosure, and responsive operation. Legal-document approval,
-  jurisdiction-specific statutory schedules, production object lifecycle, and
-  independent manual security signoff remain open.
+  jurisdiction-specific statutory schedules, provider-native lifecycle/restore
+  evidence, and independent manual security signoff remain open. The fifth P21
+  slice makes all document storage consumers asynchronous, adds fail-closed S3
+  bucket/prefix scope validation and readiness, and preserves legal-hold,
+  retention, account-deletion, export, RAG, and upload failure semantics across
+  network storage. Real MinIO smoke evidence covers SigV4 health, write, read,
+  delete, object versioning, and delete markers without adding an S3 SDK runtime
+  dependency.
 
 ### P22-01 Production Data And Infrastructure
 
-- Status: Todo
+- Status: In Progress
 - Goal: Make PostgreSQL, Redis, object storage, workers, managed secrets,
   OpenTelemetry, deployment, migrations, backup, restore, rollback, and scaling real.
 - Dependencies: P21-01
 - Verification: production-like deploy, load, failure, restore, migration, and rollback tests.
+- Evidence: the first P22 slice adds an S3-compatible production document provider,
+  production HTTPS/local-provider startup gates, Docker Compose MinIO bootstrap,
+  versioning guidance, backup/restore ordering, and a repeatable real-provider
+  smoke. PostgreSQL, Redis, durable workers, managed-secret integration,
+  OpenTelemetry, deployment, scaling, local-to-S3 migration automation, and
+  production restore evidence remain open.
 
 ### P23-01 Full Commercial End-To-End Suite
 

@@ -1,4 +1,26 @@
 services:
+  object-storage:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: server /data --console-address :9001
+    environment:
+      MINIO_ROOT_USER: primalthrum-development
+      MINIO_ROOT_PASSWORD: primalthrum-development-secret
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+    volumes:
+      - object-storage-data:/data
+
+  object-storage-init:
+    image: minio/mc:RELEASE.2025-04-16T18-13-26Z
+    depends_on:
+      - object-storage
+    entrypoint: >-
+      /bin/sh -c "until mc alias set local http://object-storage:9000
+      primalthrum-development primalthrum-development-secret; do sleep 1; done;
+      mc mb --ignore-existing local/primalthrum-documents;
+      mc version enable local/primalthrum-documents"
+
   agent:
     image: python:3.12-slim
     working_dir: /app/agent
@@ -13,9 +35,19 @@ services:
     working_dir: /app/server
     command: sh -c "corepack enable && pnpm install && pnpm dev"
     depends_on:
-      - agent
+      agent:
+        condition: service_started
+      object-storage-init:
+        condition: service_completed_successfully
     environment:
       AGENT_BASE_URL: http://agent:8000
+      DOCUMENT_STORAGE_PROVIDER: s3
+      OBJECT_STORAGE_ENDPOINT: http://object-storage:9000
+      OBJECT_STORAGE_ACCESS_KEY_ID: primalthrum-development
+      OBJECT_STORAGE_SECRET_ACCESS_KEY: primalthrum-development-secret
+      OBJECT_STORAGE_BUCKET: primalthrum-documents
+      OBJECT_STORAGE_REGION: us-east-1
+      OBJECT_STORAGE_PREFIX: development
       PORT: "3000"
     ports:
       - "3000:3000"
@@ -34,3 +66,6 @@ services:
       - "5173:5173"
     volumes:
       - .:/app
+
+volumes:
+  object-storage-data:

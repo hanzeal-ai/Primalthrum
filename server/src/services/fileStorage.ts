@@ -1,5 +1,5 @@
-import { mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
-import { basename, dirname, join, relative, resolve } from 'node:path';
+import { accessSync, constants, mkdirSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { basename, dirname, relative, resolve } from 'node:path';
 
 export interface SaveDocumentFileInput {
   workspaceId: number;
@@ -11,13 +11,20 @@ export interface SaveDocumentFileInput {
 
 export interface StoredDocumentFile {
   storageRef: string;
+  absolutePath?: string;
+}
+
+export interface LocalStoredDocumentFile extends StoredDocumentFile {
   absolutePath: string;
 }
 
+export type StorageOperation<T> = T | Promise<T>;
+
 export interface DocumentFileStorage {
-  save(input: SaveDocumentFileInput): StoredDocumentFile;
-  read(storageRef: string): string;
-  delete(storageRef: string): void;
+  save(input: SaveDocumentFileInput): StorageOperation<StoredDocumentFile>;
+  read(storageRef: string): StorageOperation<string>;
+  delete(storageRef: string): StorageOperation<void>;
+  healthCheck(): StorageOperation<void>;
 }
 
 const STORAGE_REF_PREFIX = 'local://documents/';
@@ -30,16 +37,8 @@ export class LocalDocumentStorage implements DocumentFileStorage {
     mkdirSync(this.rootDir, { recursive: true });
   }
 
-  save(input: SaveDocumentFileInput): StoredDocumentFile {
-    const relativePath = join(
-      'workspaces',
-      String(input.workspaceId),
-      'agents',
-      String(input.agentId),
-      'documents',
-      String(input.documentId),
-      safeFilename(input.filename),
-    );
+  save(input: SaveDocumentFileInput): LocalStoredDocumentFile {
+    const relativePath = documentObjectPath(input);
     const absolutePath = this.resolveInsideRoot(relativePath);
 
     mkdirSync(dirname(absolutePath), { recursive: true });
@@ -57,6 +56,10 @@ export class LocalDocumentStorage implements DocumentFileStorage {
 
   delete(storageRef: string): void {
     rmSync(this.pathFromRef(storageRef), { force: true });
+  }
+
+  healthCheck(): void {
+    accessSync(this.rootDir, constants.R_OK | constants.W_OK);
   }
 
   private pathFromRef(storageRef: string): string {
@@ -79,4 +82,16 @@ export class LocalDocumentStorage implements DocumentFileStorage {
 function safeFilename(filename: string): string {
   const candidate = basename(filename.trim()).replace(/[^a-zA-Z0-9._-]+/g, '_');
   return candidate || 'document.txt';
+}
+
+export function documentObjectPath(input: SaveDocumentFileInput): string {
+  return [
+    'workspaces',
+    String(input.workspaceId),
+    'agents',
+    String(input.agentId),
+    'documents',
+    String(input.documentId),
+    safeFilename(input.filename),
+  ].join('/');
 }

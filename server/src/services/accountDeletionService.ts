@@ -55,7 +55,7 @@ export class AccountDeletionService {
     return this.privacy.cancelDeletion(userId);
   }
 
-  execute(requestId: string): Record<string, unknown> {
+  async execute(requestId: string): Promise<Record<string, unknown>> {
     const existing = this.privacy.findByRequestId(requestId);
     if (!existing || existing.requestType !== 'deletion') {
       throw new Error('account deletion request not found');
@@ -71,7 +71,7 @@ export class AccountDeletionService {
     try {
       const blockers = this.privacy.deletionBlockers(request.userId);
       if (blockers.length) throw new AccountDeletionBlockedError(blockers);
-      const result = this.eraseAccount(request.userId);
+      const result = await this.eraseAccount(request.userId);
       this.privacy.completeDeletion(requestId, result);
       return { requestId, status: 'completed', ...result };
     } catch (error) {
@@ -80,11 +80,11 @@ export class AccountDeletionService {
     }
   }
 
-  private eraseAccount(userId: number): {
+  private async eraseAccount(userId: number): Promise<{
     anonymizedWorkspaces: number;
     deletedDocuments: number;
     revokedApiKeys: number;
-  } {
+  }> {
     const user = this.db.query<{ email: string; deleted_at: string | null }>(`
       SELECT email, deleted_at FROM users WHERE id = ${sqlValue(userId)} LIMIT 1;
     `)[0];
@@ -109,7 +109,7 @@ export class AccountDeletionService {
       SELECT secret_ref FROM user_mfa_factors WHERE user_id = ${sqlValue(userId)};
     `).map((row) => row.secret_ref);
 
-    for (const storageRef of storageRefs) this.storage.delete(storageRef);
+    for (const storageRef of storageRefs) await this.storage.delete(storageRef);
 
     const now = this.now().toISOString();
     const anonymizedEmail = deletedEmail(userId, user.email);

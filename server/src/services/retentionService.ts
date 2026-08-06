@@ -17,12 +17,15 @@ export class RetentionService {
     private readonly storage: DocumentFileStorage,
   ) {}
 
-  enforce(workspaceId: number, actorUserId: number | null): RetentionEnforcementOutcome {
+  async enforce(
+    workspaceId: number,
+    actorUserId: number | null,
+  ): Promise<RetentionEnforcementOutcome> {
     const event = this.policies.enforce(workspaceId, actorUserId);
     const blockedByLegalHold = event.eventType === 'enforcement_blocked';
     const files = blockedByLegalHold
       ? { deleted: 0, failed: 0 }
-      : this.drainFileDeletions(workspaceId);
+      : await this.drainFileDeletions(workspaceId);
     return {
       event,
       filesDeleted: files.deleted,
@@ -31,12 +34,14 @@ export class RetentionService {
     };
   }
 
-  drainFileDeletions(workspaceId: number): { deleted: number; failed: number } {
+  async drainFileDeletions(
+    workspaceId: number,
+  ): Promise<{ deleted: number; failed: number }> {
     let deleted = 0;
     let failed = 0;
     for (const deletion of this.policies.pendingFileDeletions(workspaceId)) {
       try {
-        this.storage.delete(deletion.storageRef);
+        await this.storage.delete(deletion.storageRef);
         this.policies.completeFileDeletion(deletion.id);
         deleted += 1;
       } catch (error) {

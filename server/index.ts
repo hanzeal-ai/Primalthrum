@@ -5,10 +5,11 @@ import { StripePaymentAdapter } from './src/services/stripePaymentAdapter';
 import { HttpUsageMeterExporter } from './src/services/usageMeterExporter';
 import { createAccountEmailIntegration } from './src/services/accountEmailConfiguration';
 import { createAbuseProtectionConfiguration } from './src/services/abuseProtectionConfiguration';
+import { createDocumentFileStorage } from './src/services/documentStorageConfiguration';
 
 const port = Number(process.env.PORT ?? 3000);
 const agentBaseUrl = process.env.AGENT_BASE_URL ?? 'http://127.0.0.1:8000';
-const documentStorageDir = process.env.DOCUMENT_STORAGE_DIR;
+const documentStorage = createDocumentFileStorage(process.env);
 const stripeSecretKey = process.env.STRIPE_SECRET_KEY?.trim();
 const paymentAdapter = stripeSecretKey
   ? new StripePaymentAdapter(
@@ -38,7 +39,7 @@ const abuseProtection = createAbuseProtectionConfiguration(process.env);
 
 const app = createApp({
   agentBaseUrl,
-  documentStorageDir,
+  documentStorage,
   paymentAdapter,
   paymentPriceRefs,
   publicAppUrl: process.env.PUBLIC_APP_URL,
