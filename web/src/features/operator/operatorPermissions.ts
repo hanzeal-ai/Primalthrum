@@ -7,6 +7,8 @@ export type OperatorSection =
   | 'billing'
   | 'runtime'
   | 'security'
+  | 'flags'
+  | 'incidents'
   | 'support'
   | 'operators'
   | 'audit'
@@ -16,6 +18,7 @@ export function operatorSectionAllowed(
   section: OperatorSection,
 ): boolean {
   if (section === 'overview' || section === 'workspaces') return true
+  if (section === 'flags' || section === 'incidents') return true
   if (section === 'customers' || section === 'runtime') {
     return role === 'super_admin' || role === 'support' || role === 'security'
   }
@@ -36,4 +39,8 @@ export function canManageSupport(role: OperatorRole): boolean {
 
 export function canUseSupport(role: OperatorRole): boolean {
   return role === 'super_admin' || role === 'support'
+}
+
+export function canManageChangeControl(role: OperatorRole): boolean {
+  return role === 'super_admin' || role === 'security'
 }

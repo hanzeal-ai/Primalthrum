@@ -3,6 +3,7 @@ import {
   Building2,
   ClipboardList,
   CreditCard,
+  Flag,
   Headphones,
   LayoutDashboard,
   Loader2,
@@ -10,6 +11,7 @@ import {
   RefreshCw,
   ShieldAlert,
   ShieldCheck,
+  Siren,
   UserCog,
   Users,
 } from 'lucide-react'
@@ -26,6 +28,8 @@ import {
   listOperatorAgents,
   listOperatorAudit,
   listOperatorCustomerUsers,
+  listOperatorFeatureFlags,
+  listOperatorIncidents,
   listOperatorJobs,
   listOperatorPayments,
   listOperatorSubscriptions,
@@ -35,9 +39,12 @@ import {
   listSupportGrants,
 } from './operatorClient'
 import { OperatorCustomerSection } from './OperatorCustomerSection'
+import { OperatorFlagsSection } from './OperatorFlagsSection'
+import { OperatorIncidentsSection } from './OperatorIncidentsSection'
 import { operatorRoleLabel } from './operatorFormatters'
 import { OperatorOverviewSection } from './OperatorOverviewSection'
 import {
+  canManageChangeControl,
   canManageSupport,
   operatorSectionAllowed,
   type OperatorSection,
@@ -50,6 +57,8 @@ import type {
   OperatorAgentSummary,
   OperatorAuditRecord,
   OperatorCustomerUserSummary,
+  OperatorFeatureFlag,
+  OperatorIncidentSummary,
   OperatorJobSummary,
   OperatorOverviewResponse,
   OperatorPaymentSummary,
@@ -70,6 +79,8 @@ const NAV_ITEMS = [
   { key: 'billing', label: '计费', icon: CreditCard },
   { key: 'runtime', label: '运行', icon: Bot },
   { key: 'security', label: '安全', icon: ShieldAlert },
+  { key: 'flags', label: '功能开关', icon: Flag },
+  { key: 'incidents', label: '事故', icon: Siren },
   { key: 'support', label: '支持访问', icon: Headphones },
   { key: 'operators', label: 'Operators', icon: UserCog },
   { key: 'audit', label: '审计', icon: ClipboardList },
@@ -91,6 +102,8 @@ export function OperatorConsolePage({ onLogout, user }: OperatorConsolePageProps
   const [agents, setAgents] = useState<OperatorAgentSummary[]>([])
   const [jobs, setJobs] = useState<OperatorJobSummary[]>([])
   const [abuseEvents, setAbuseEvents] = useState<OperatorAbuseEventSummary[]>([])
+  const [featureFlags, setFeatureFlags] = useState<OperatorFeatureFlag[]>([])
+  const [incidents, setIncidents] = useState<OperatorIncidentSummary[]>([])
   const [operators, setOperators] = useState<OperatorUser[]>([])
   const [grants, setGrants] = useState<SupportAccessGrant[]>([])
   const [audit, setAudit] = useState<OperatorAuditRecord[]>([])
@@ -124,6 +137,24 @@ export function OperatorConsolePage({ onLogout, user }: OperatorConsolePageProps
         setJobs(loadedJobs)
       }
       if (target === 'security') setAbuseEvents(await listOperatorAbuseEvents())
+      if (target === 'flags') {
+        const [loadedFlags, loadedWorkspaces] = await Promise.all([
+          listOperatorFeatureFlags(),
+          canManageChangeControl(user.role) ? listOperatorWorkspaces() : Promise.resolve([]),
+        ])
+        setFeatureFlags(loadedFlags)
+        setWorkspaces(loadedWorkspaces)
+      }
+      if (target === 'incidents') {
+        const [loadedIncidents, loadedWorkspaces, loadedOperators] = await Promise.all([
+          listOperatorIncidents(),
+          canManageChangeControl(user.role) ? listOperatorWorkspaces() : Promise.resolve([]),
+          canManageChangeControl(user.role) ? listOperators() : Promise.resolve([]),
+        ])
+        setIncidents(loadedIncidents)
+        setWorkspaces(loadedWorkspaces)
+        setOperators(loadedOperators)
+      }
       if (target === 'operators') setOperators(await listOperators())
       if (target === 'audit') setAudit(await listOperatorAudit())
       if (target === 'support') {
@@ -209,7 +240,9 @@ export function OperatorConsolePage({ onLogout, user }: OperatorConsolePageProps
               agents={agents}
               audit={audit}
               customerUsers={customerUsers}
+              featureFlags={featureFlags}
               grants={grants}
+              incidents={incidents}
               onContext={async (grantId) => {
                 try {
                   setSupportContext((await getSupportContext(grantId)).context)
@@ -241,7 +274,9 @@ function OperatorSection(props: {
   agents: OperatorAgentSummary[]
   audit: OperatorAuditRecord[]
   customerUsers: OperatorCustomerUserSummary[]
+  featureFlags: OperatorFeatureFlag[]
   grants: SupportAccessGrant[]
+  incidents: OperatorIncidentSummary[]
   onContext: (grantId: number) => Promise<void>
   onReload: () => Promise<void>
   jobs: OperatorJobSummary[]
@@ -261,6 +296,8 @@ function OperatorSection(props: {
   if (props.section === 'billing') return <OperatorBillingSection payments={props.payments} subscriptions={props.subscriptions} usage={props.usage} />
   if (props.section === 'runtime') return <OperatorRuntimeSection agents={props.agents} jobs={props.jobs} />
   if (props.section === 'security') return <OperatorSecuritySection events={props.abuseEvents} />
+  if (props.section === 'flags') return <OperatorFlagsSection flags={props.featureFlags} onReload={props.onReload} role={props.user.role} workspaces={props.workspaces} />
+  if (props.section === 'incidents') return <OperatorIncidentsSection incidents={props.incidents} onReload={props.onReload} operators={props.operators} role={props.user.role} workspaces={props.workspaces} />
   if (props.section === 'support') return <OperatorSupportSection {...props} />
   if (props.section === 'operators') return <OperatorUsersSection {...props} />
   return <OperatorAuditSection events={props.audit} />

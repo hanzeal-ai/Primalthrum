@@ -4,6 +4,16 @@ import type {
   OperatorAuditRecord,
   OperatorAuthResponse,
   OperatorCustomerUserSummary,
+  OperatorFeatureFlag,
+  OperatorFeatureFlagEvent,
+  OperatorFeatureFlagOverride,
+  OperatorIncidentDetail,
+  OperatorIncidentEvent,
+  OperatorIncidentEventType,
+  OperatorIncidentScope,
+  OperatorIncidentSeverity,
+  OperatorIncidentStatus,
+  OperatorIncidentSummary,
   OperatorJobSummary,
   OperatorOverviewResponse,
   OperatorPaymentSummary,
@@ -123,6 +133,116 @@ export function listOperatorJobs(): Promise<OperatorJobSummary[]> {
 
 export function listOperatorAbuseEvents(): Promise<OperatorAbuseEventSummary[]> {
   return operatorRequest('/api/operator/abuse-events')
+}
+
+export function listOperatorFeatureFlags(): Promise<OperatorFeatureFlag[]> {
+  return operatorRequest('/api/operator/feature-flags')
+}
+
+export function createOperatorFeatureFlag(input: {
+  key: string
+  description: string
+  enabled: boolean
+  killSwitch: boolean
+  rolloutPercentage: number
+}): Promise<OperatorFeatureFlag> {
+  return operatorRequest('/api/operator/feature-flags', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export function updateOperatorFeatureFlag(
+  id: number,
+  input: {
+    description: string
+    enabled: boolean
+    killSwitch: boolean
+    rolloutPercentage: number
+    expectedRevision: number
+  },
+): Promise<OperatorFeatureFlag> {
+  return operatorRequest(`/api/operator/feature-flags/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  })
+}
+
+export function listOperatorFeatureFlagEvents(id: number): Promise<OperatorFeatureFlagEvent[]> {
+  return operatorRequest(`/api/operator/feature-flags/${id}/events`)
+}
+
+export function createOperatorFeatureFlagOverride(
+  flagId: number,
+  input: { workspaceId: number; enabled: boolean; reason: string },
+): Promise<OperatorFeatureFlagOverride> {
+  return operatorRequest(`/api/operator/feature-flags/${flagId}/overrides`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export function revokeOperatorFeatureFlagOverride(
+  flagId: number,
+  overrideId: number,
+  expectedRevision: number,
+): Promise<OperatorFeatureFlagOverride> {
+  return operatorRequest(`/api/operator/feature-flags/${flagId}/overrides/${overrideId}/revoke`, {
+    method: 'POST',
+    body: JSON.stringify({ expectedRevision }),
+  })
+}
+
+export function listOperatorIncidents(): Promise<OperatorIncidentSummary[]> {
+  return operatorRequest('/api/operator/incidents')
+}
+
+export function getOperatorIncident(id: number): Promise<OperatorIncidentDetail> {
+  return operatorRequest(`/api/operator/incidents/${id}`)
+}
+
+export function createOperatorIncident(input: {
+  title: string
+  severity: OperatorIncidentSeverity
+  impactScope: OperatorIncidentScope
+  workspaceId: number | null
+  summary: string
+  startedAt: string
+  ownerOperatorId: number | null
+}): Promise<OperatorIncidentDetail> {
+  return operatorRequest('/api/operator/incidents', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export function updateOperatorIncident(
+  id: number,
+  input: {
+    title: string
+    severity: OperatorIncidentSeverity
+    status: OperatorIncidentStatus
+    impactScope: OperatorIncidentScope
+    workspaceId: number | null
+    summary: string
+    ownerOperatorId: number | null
+    expectedRevision: number
+  },
+): Promise<OperatorIncidentDetail> {
+  return operatorRequest(`/api/operator/incidents/${id}`, {
+    method: 'PUT',
+    body: JSON.stringify(input),
+  })
+}
+
+export function createOperatorIncidentEvent(
+  id: number,
+  input: { eventType: OperatorIncidentEventType; message: string },
+): Promise<OperatorIncidentEvent> {
+  return operatorRequest(`/api/operator/incidents/${id}/events`, {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
 }
 
 export function listOperators(): Promise<OperatorUser[]> {

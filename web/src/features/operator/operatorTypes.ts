@@ -190,6 +190,88 @@ export interface OperatorAbuseEventSummary {
   createdAt: string
 }
 
+export interface OperatorFeatureFlagOverride {
+  id: number
+  featureFlagId: number
+  workspaceId: number
+  workspaceName: string
+  enabled: boolean
+  reason: string
+  active: boolean
+  revision: number
+  createdByOperatorId: number
+  updatedByOperatorId: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface OperatorFeatureFlag {
+  id: number
+  key: string
+  description: string
+  enabled: boolean
+  killSwitch: boolean
+  rolloutPercentage: number
+  revision: number
+  createdByOperatorId: number
+  updatedByOperatorId: number
+  createdAt: string
+  updatedAt: string
+  overrides: OperatorFeatureFlagOverride[]
+}
+
+export interface OperatorFeatureFlagEvent {
+  id: number
+  eventId: string
+  featureFlagId: number
+  operatorUserId: number
+  action: 'created' | 'updated' | 'override_created' | 'override_revoked'
+  snapshot: Record<string, unknown>
+  createdAt: string
+}
+
+export type OperatorIncidentSeverity = 'sev1' | 'sev2' | 'sev3' | 'sev4'
+export type OperatorIncidentStatus = 'investigating' | 'identified' | 'monitoring' | 'resolved'
+export type OperatorIncidentScope = 'platform' | 'multi_workspace' | 'workspace'
+export type OperatorIncidentEventType = 'note' | 'mitigation' | 'customer_update'
+
+export interface OperatorIncidentSummary {
+  id: number
+  incidentRef: string
+  title: string
+  severity: OperatorIncidentSeverity
+  status: OperatorIncidentStatus
+  impactScope: OperatorIncidentScope
+  workspaceId: number | null
+  workspaceName: string | null
+  summary: string
+  startedAt: string
+  resolvedAt: string | null
+  ownerOperatorId: number | null
+  revision: number
+  eventCount: number
+  createdByOperatorId: number
+  updatedByOperatorId: number
+  createdAt: string
+  updatedAt: string
+}
+
+export interface OperatorIncidentEvent {
+  id: number
+  eventId: string
+  incidentId: number
+  operatorUserId: number
+  eventType: 'created' | 'updated' | 'status_changed' | OperatorIncidentEventType
+  message: string
+  fromStatus: string
+  toStatus: string
+  createdAt: string
+}
+
+export interface OperatorIncidentDetail extends OperatorIncidentSummary {
+  events: OperatorIncidentEvent[]
+}
+
 export type SupportGrantPermission =
   | 'workspace.metadata.read'
   | 'workspace.agents.read'

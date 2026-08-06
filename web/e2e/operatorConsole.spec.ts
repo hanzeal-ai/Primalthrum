@@ -31,6 +31,22 @@ test('@desktop operator control plane is ready and operational', async ({ page }
   }
 
   await page.getByRole('navigation', { name: 'Operator 导航' })
+    .getByRole('button', { name: '功能开关' }).click()
+  await page.getByLabel('Key').fill('e2e.operator_flag')
+  await page.getByLabel('说明', { exact: true }).fill('Controls the audited Operator browser acceptance rollout.')
+  await page.getByRole('button', { name: '创建开关' }).click()
+  await expect(page.locator('strong').filter({ hasText: 'e2e.operator_flag' })).toBeVisible()
+  await expectNoHorizontalOverflow(page)
+
+  await page.getByRole('navigation', { name: 'Operator 导航' })
+    .getByRole('button', { name: '事故' }).click()
+  await page.getByLabel('标题', { exact: true }).fill('Operator browser acceptance incident')
+  await page.getByLabel('摘要', { exact: true }).fill('Validates the audited incident lifecycle in the browser gate.')
+  await page.getByRole('button', { name: '创建事故' }).click()
+  await expect(page.getByText('Operator browser acceptance incident')).toBeVisible()
+  await expectNoHorizontalOverflow(page)
+
+  await page.getByRole('navigation', { name: 'Operator 导航' })
     .getByRole('button', { name: '支持访问' }).click()
   await expect(page.getByText('创建限时授权')).toBeVisible()
   await expectNoHorizontalOverflow(page)
@@ -43,7 +59,7 @@ test('@mobile operator control plane remains usable without overflow', async ({ 
   const navigation = page.getByRole('navigation', { name: '移动端 Operator 导航' })
   await expect(navigation).toBeVisible()
 
-  for (const section of ['Workspaces', '客户', '计费', '运行', '安全', '支持访问', 'Operators', '审计']) {
+  for (const section of ['Workspaces', '客户', '计费', '运行', '安全', '功能开关', '事故', '支持访问', 'Operators', '审计']) {
     await navigation.getByRole('button', { name: section }).click()
     await expectNoHorizontalOverflow(page)
   }

@@ -16,6 +16,10 @@ export type OperatorPermission =
   | 'agents.read'
   | 'jobs.read'
   | 'abuse.read'
+  | 'feature_flags.read'
+  | 'feature_flags.manage'
+  | 'incidents.read'
+  | 'incidents.manage'
   | 'operators.read'
   | 'operators.manage'
   | 'support.read'
@@ -40,6 +44,10 @@ const ALL_OPERATOR_PERMISSIONS: readonly OperatorPermission[] = [
   'agents.read',
   'jobs.read',
   'abuse.read',
+  'feature_flags.read',
+  'feature_flags.manage',
+  'incidents.read',
+  'incidents.manage',
   'operators.read',
   'operators.manage',
   'support.read',
@@ -56,6 +64,8 @@ const ROLE_PERMISSIONS: Record<OperatorRole, ReadonlySet<OperatorPermission>> = 
     'customer_users.read',
     'agents.read',
     'jobs.read',
+    'feature_flags.read',
+    'incidents.read',
     'operators.read',
     'support.read',
     'support.use',
@@ -64,6 +74,8 @@ const ROLE_PERMISSIONS: Record<OperatorRole, ReadonlySet<OperatorPermission>> = 
     'overview.read',
     'workspaces.read',
     'billing.read',
+    'feature_flags.read',
+    'incidents.read',
   ]),
   security: new Set([
     'overview.read',
@@ -72,6 +84,10 @@ const ROLE_PERMISSIONS: Record<OperatorRole, ReadonlySet<OperatorPermission>> = 
     'agents.read',
     'jobs.read',
     'abuse.read',
+    'feature_flags.read',
+    'feature_flags.manage',
+    'incidents.read',
+    'incidents.manage',
     'operators.read',
     'support.read',
     'support.manage',
@@ -80,6 +96,8 @@ const ROLE_PERMISSIONS: Record<OperatorRole, ReadonlySet<OperatorPermission>> = 
   viewer: new Set([
     'overview.read',
     'workspaces.read',
+    'feature_flags.read',
+    'incidents.read',
   ]),
 };
 

@@ -6,13 +6,21 @@ import { OperatorConsolePage } from './OperatorConsolePage'
 
 const api = vi.hoisted(() => ({
   createOperator: vi.fn(),
+  createOperatorFeatureFlag: vi.fn(),
+  createOperatorFeatureFlagOverride: vi.fn(),
+  createOperatorIncident: vi.fn(),
+  createOperatorIncidentEvent: vi.fn(),
   createSupportGrant: vi.fn(),
+  getOperatorIncident: vi.fn(),
   getOperatorOverview: vi.fn(),
   getSupportContext: vi.fn(),
   listOperatorAbuseEvents: vi.fn(),
   listOperatorAgents: vi.fn(),
   listOperatorAudit: vi.fn(),
   listOperatorCustomerUsers: vi.fn(),
+  listOperatorFeatureFlagEvents: vi.fn(),
+  listOperatorFeatureFlags: vi.fn(),
+  listOperatorIncidents: vi.fn(),
   listOperatorJobs: vi.fn(),
   listOperatorPayments: vi.fn(),
   listOperatorSubscriptions: vi.fn(),
@@ -21,6 +29,9 @@ const api = vi.hoisted(() => ({
   listOperatorWorkspaces: vi.fn(),
   listSupportGrants: vi.fn(),
   revokeSupportGrant: vi.fn(),
+  revokeOperatorFeatureFlagOverride: vi.fn(),
+  updateOperatorFeatureFlag: vi.fn(),
+  updateOperatorIncident: vi.fn(),
 }))
 
 vi.mock('./operatorClient', () => api)
@@ -52,6 +63,9 @@ describe('OperatorConsolePage', () => {
     api.listOperatorAbuseEvents.mockResolvedValue([])
     api.listOperatorAgents.mockResolvedValue([])
     api.listOperatorCustomerUsers.mockResolvedValue([])
+    api.listOperatorFeatureFlagEvents.mockResolvedValue([])
+    api.listOperatorFeatureFlags.mockResolvedValue([])
+    api.listOperatorIncidents.mockResolvedValue([])
     api.listOperatorJobs.mockResolvedValue([])
     api.listOperatorPayments.mockResolvedValue({ invoices: [], refunds: [], webhookFailures: [] })
     api.listOperatorSubscriptions.mockResolvedValue([])
@@ -76,6 +90,8 @@ describe('OperatorConsolePage', () => {
     expect(screen.queryByRole('button', { name: '计费' })).toBeNull()
     expect(screen.queryByRole('button', { name: '运行' })).toBeNull()
     expect(screen.queryByRole('button', { name: '安全' })).toBeNull()
+    expect(screen.getAllByRole('button', { name: '功能开关' }).length).toBeGreaterThan(0)
+    expect(screen.getAllByRole('button', { name: '事故' }).length).toBeGreaterThan(0)
     expect(screen.queryByRole('button', { name: 'Operators' })).toBeNull()
     expect(screen.queryByRole('button', { name: '审计' })).toBeNull()
     expect(screen.getAllByRole('button', { name: 'Workspaces' }).length).toBeGreaterThan(0)
@@ -98,6 +114,14 @@ describe('OperatorConsolePage', () => {
     expect(api.listOperatorUsage).toHaveBeenCalled()
     expect(api.listOperatorPayments).toHaveBeenCalled()
     expect(await screen.findByText('支付事件')).toBeTruthy()
+
+    fireEvent.click(screen.getAllByRole('button', { name: '功能开关' })[0])
+    await waitFor(() => expect(api.listOperatorFeatureFlags).toHaveBeenCalled())
+    expect(await screen.findByText('创建功能开关')).toBeTruthy()
+
+    fireEvent.click(screen.getAllByRole('button', { name: '事故' })[0])
+    await waitFor(() => expect(api.listOperatorIncidents).toHaveBeenCalled())
+    expect(await screen.findByRole('heading', { name: '创建事故' })).toBeTruthy()
   })
 })
 

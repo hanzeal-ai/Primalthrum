@@ -120,6 +120,10 @@ export const MIGRATIONS: Migration[] = [
     id: '027_operator_control_plane',
     up: applyOperatorControlPlane,
   },
+  {
+    id: '028_operator_change_control',
+    up: applyOperatorChangeControl,
+  },
 ];
 
 export function runMigrations(db: DatabaseAdapter): void {
@@ -1752,6 +1756,204 @@ function applyOperatorControlPlane(db: DatabaseAdapter): void {
       OR NEW.revoked_by_operator_id IS NULL
     BEGIN
       SELECT RAISE(ABORT, 'operator support grant fields are immutable');
+    END;
+  `);
+}
+
+function applyOperatorChangeControl(db: DatabaseAdapter): void {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS operator_feature_flags (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      key TEXT NOT NULL UNIQUE,
+      description TEXT NOT NULL,
+      enabled INTEGER NOT NULL DEFAULT 0 CHECK(enabled IN (0, 1)),
+      kill_switch INTEGER NOT NULL DEFAULT 0 CHECK(kill_switch IN (0, 1)),
+      rollout_percentage INTEGER NOT NULL DEFAULT 0
+        CHECK(rollout_percentage BETWEEN 0 AND 100),
+      revision INTEGER NOT NULL DEFAULT 1 CHECK(revision >= 1),
+      created_by_operator_id INTEGER NOT NULL,
+      updated_by_operator_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(created_by_operator_id) REFERENCES operator_users(id) ON DELETE RESTRICT,
+      FOREIGN KEY(updated_by_operator_id) REFERENCES operator_users(id) ON DELETE RESTRICT
+    );
+
+    CREATE TABLE IF NOT EXISTS operator_feature_flag_overrides (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      feature_flag_id INTEGER NOT NULL,
+      workspace_id INTEGER NOT NULL,
+      enabled INTEGER NOT NULL CHECK(enabled IN (0, 1)),
+      reason TEXT NOT NULL,
+      active INTEGER NOT NULL DEFAULT 1 CHECK(active IN (0, 1)),
+      revision INTEGER NOT NULL DEFAULT 1 CHECK(revision >= 1),
+      created_by_operator_id INTEGER NOT NULL,
+      updated_by_operator_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(feature_flag_id) REFERENCES operator_feature_flags(id) ON DELETE RESTRICT,
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE RESTRICT,
+      FOREIGN KEY(created_by_operator_id) REFERENCES operator_users(id) ON DELETE RESTRICT,
+      FOREIGN KEY(updated_by_operator_id) REFERENCES operator_users(id) ON DELETE RESTRICT
+    );
+
+    CREATE TABLE IF NOT EXISTS operator_feature_flag_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_id TEXT NOT NULL UNIQUE,
+      feature_flag_id INTEGER NOT NULL,
+      operator_user_id INTEGER NOT NULL,
+      action TEXT NOT NULL CHECK(action IN (
+        'created', 'updated', 'override_created', 'override_revoked'
+      )),
+      snapshot_json TEXT NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(feature_flag_id) REFERENCES operator_feature_flags(id) ON DELETE RESTRICT,
+      FOREIGN KEY(operator_user_id) REFERENCES operator_users(id) ON DELETE RESTRICT
+    );
+
+    CREATE TABLE IF NOT EXISTS operator_incidents (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      incident_ref TEXT NOT NULL UNIQUE,
+      title TEXT NOT NULL,
+      severity TEXT NOT NULL CHECK(severity IN ('sev1', 'sev2', 'sev3', 'sev4')),
+      status TEXT NOT NULL CHECK(status IN (
+        'investigating', 'identified', 'monitoring', 'resolved'
+      )),
+      impact_scope TEXT NOT NULL CHECK(impact_scope IN (
+        'platform', 'multi_workspace', 'workspace'
+      )),
+      workspace_id INTEGER,
+      summary TEXT NOT NULL,
+      started_at TEXT NOT NULL,
+      resolved_at TEXT,
+      owner_operator_id INTEGER,
+      revision INTEGER NOT NULL DEFAULT 1 CHECK(revision >= 1),
+      created_by_operator_id INTEGER NOT NULL,
+      updated_by_operator_id INTEGER NOT NULL,
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CHECK(
+        (impact_scope = 'workspace' AND workspace_id IS NOT NULL)
+        OR (impact_scope <> 'workspace' AND workspace_id IS NULL)
+      ),
+      CHECK(
+        (status = 'resolved' AND resolved_at IS NOT NULL)
+        OR (status <> 'resolved' AND resolved_at IS NULL)
+      ),
+      FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE RESTRICT,
+      FOREIGN KEY(owner_operator_id) REFERENCES operator_users(id) ON DELETE RESTRICT,
+      FOREIGN KEY(created_by_operator_id) REFERENCES operator_users(id) ON DELETE RESTRICT,
+      FOREIGN KEY(updated_by_operator_id) REFERENCES operator_users(id) ON DELETE RESTRICT
+    );
+
+    CREATE TABLE IF NOT EXISTS operator_incident_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_id TEXT NOT NULL UNIQUE,
+      incident_id INTEGER NOT NULL,
+      operator_user_id INTEGER NOT NULL,
+      event_type TEXT NOT NULL CHECK(event_type IN (
+        'created', 'updated', 'status_changed', 'note', 'mitigation', 'customer_update'
+      )),
+      message TEXT NOT NULL,
+      from_status TEXT NOT NULL DEFAULT '',
+      to_status TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      FOREIGN KEY(incident_id) REFERENCES operator_incidents(id) ON DELETE RESTRICT,
+      FOREIGN KEY(operator_user_id) REFERENCES operator_users(id) ON DELETE RESTRICT
+    );
+
+    CREATE UNIQUE INDEX IF NOT EXISTS operator_flag_active_workspace_override_idx
+      ON operator_feature_flag_overrides(feature_flag_id, workspace_id)
+      WHERE active = 1;
+    CREATE INDEX IF NOT EXISTS operator_feature_flag_events_time_idx
+      ON operator_feature_flag_events(feature_flag_id, created_at DESC, id DESC);
+    CREATE INDEX IF NOT EXISTS operator_incidents_status_time_idx
+      ON operator_incidents(status, severity, started_at DESC);
+    CREATE INDEX IF NOT EXISTS operator_incident_events_time_idx
+      ON operator_incident_events(incident_id, created_at ASC, id ASC);
+
+    CREATE TRIGGER IF NOT EXISTS operator_feature_flags_no_delete
+    BEFORE DELETE ON operator_feature_flags
+    BEGIN
+      SELECT RAISE(ABORT, 'operator feature flags cannot be deleted');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS operator_feature_flags_update_guard
+    BEFORE UPDATE ON operator_feature_flags
+    WHEN
+      NEW.id IS NOT OLD.id
+      OR NEW.key IS NOT OLD.key
+      OR NEW.created_by_operator_id IS NOT OLD.created_by_operator_id
+      OR NEW.created_at IS NOT OLD.created_at
+      OR NEW.revision <> OLD.revision + 1
+    BEGIN
+      SELECT RAISE(ABORT, 'operator feature flag revision is invalid');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS operator_feature_flag_overrides_no_delete
+    BEFORE DELETE ON operator_feature_flag_overrides
+    BEGIN
+      SELECT RAISE(ABORT, 'operator feature flag overrides cannot be deleted');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS operator_feature_flag_overrides_update_guard
+    BEFORE UPDATE ON operator_feature_flag_overrides
+    WHEN
+      NEW.id IS NOT OLD.id
+      OR NEW.feature_flag_id IS NOT OLD.feature_flag_id
+      OR NEW.workspace_id IS NOT OLD.workspace_id
+      OR NEW.enabled IS NOT OLD.enabled
+      OR NEW.reason IS NOT OLD.reason
+      OR NEW.created_by_operator_id IS NOT OLD.created_by_operator_id
+      OR NEW.created_at IS NOT OLD.created_at
+      OR OLD.active <> 1
+      OR NEW.active <> 0
+      OR NEW.revision <> OLD.revision + 1
+    BEGIN
+      SELECT RAISE(ABORT, 'operator feature flag override is immutable');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS operator_feature_flag_events_no_update
+    BEFORE UPDATE ON operator_feature_flag_events
+    BEGIN
+      SELECT RAISE(ABORT, 'operator feature flag events are immutable');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS operator_feature_flag_events_no_delete
+    BEFORE DELETE ON operator_feature_flag_events
+    BEGIN
+      SELECT RAISE(ABORT, 'operator feature flag events are immutable');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS operator_incidents_no_delete
+    BEFORE DELETE ON operator_incidents
+    BEGIN
+      SELECT RAISE(ABORT, 'operator incidents cannot be deleted');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS operator_incidents_update_guard
+    BEFORE UPDATE ON operator_incidents
+    WHEN
+      NEW.id IS NOT OLD.id
+      OR NEW.incident_ref IS NOT OLD.incident_ref
+      OR NEW.started_at IS NOT OLD.started_at
+      OR NEW.created_by_operator_id IS NOT OLD.created_by_operator_id
+      OR NEW.created_at IS NOT OLD.created_at
+      OR NEW.revision <> OLD.revision + 1
+    BEGIN
+      SELECT RAISE(ABORT, 'operator incident revision is invalid');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS operator_incident_events_no_update
+    BEFORE UPDATE ON operator_incident_events
+    BEGIN
+      SELECT RAISE(ABORT, 'operator incident events are immutable');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS operator_incident_events_no_delete
+    BEFORE DELETE ON operator_incident_events
+    BEGIN
+      SELECT RAISE(ABORT, 'operator incident events are immutable');
     END;
   `);
 }

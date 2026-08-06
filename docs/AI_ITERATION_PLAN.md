@@ -2013,7 +2013,7 @@ complete. Follow the same dependency and verification protocol used above.
 
 ### P20-01 Operator Administration And Support
 
-- Status: In Progress
+- Status: Done
 - Goal: Deliver audited operations for workspaces, users, subscriptions, usage,
   payments, Agents, jobs, abuse, support access, flags, and system health.
 - Dependencies: P19-02
@@ -2039,7 +2039,16 @@ complete. Follow the same dependency and verification protocol used above.
   are excluded. HTTP tests exercise all five roles, Workspace filtering, audit,
   and seeded sensitive-field non-disclosure. Responsive desktop and mobile
   acceptance traverses every new section without page overflow or browser errors.
-  Feature-flag and incident lifecycle views remain open.
+  Migration 028 completes change control with deterministic percentage rollout,
+  kill-switch precedence, one active Workspace override, optimistic revisions,
+  and immutable Flag history. It also adds scoped SEV1-SEV4 incidents with guarded
+  state transitions, resolution/reopen semantics, and append-only notes,
+  mitigations, and customer updates. Every Operator role can read Flag and incident
+  state, while only Super Admin and Security can mutate it. Real HTTP tests cover
+  permissions, rollout determinism, override and kill precedence, stale-write
+  rejection, incident scope and transition validation, immutable event storage,
+  and sanitized Operator audit evidence. React and responsive browser acceptance
+  cover both lifecycle views without horizontal overflow or browser errors.
 
 ### P21-01 Security, Privacy, And Compliance Baseline
 

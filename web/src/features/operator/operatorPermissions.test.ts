@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 
 import {
+  canManageChangeControl,
   canManageOperators,
   canManageSupport,
   canUseSupport,
@@ -21,11 +22,14 @@ describe('operator permission matrix', () => {
   ) => {
     expect(operatorSectionAllowed(role, 'overview')).toBe(true)
     expect(operatorSectionAllowed(role, 'workspaces')).toBe(true)
+    expect(operatorSectionAllowed(role, 'flags')).toBe(true)
+    expect(operatorSectionAllowed(role, 'incidents')).toBe(true)
     for (const section of ['customers', 'billing', 'runtime', 'security', 'support', 'operators', 'audit'] as const) {
       expect(operatorSectionAllowed(role, section)).toBe(allowed.includes(section))
     }
     expect(canManageOperators(role)).toBe(role === 'super_admin')
     expect(canManageSupport(role)).toBe(role === 'super_admin' || role === 'security')
     expect(canUseSupport(role)).toBe(role === 'super_admin' || role === 'support')
+    expect(canManageChangeControl(role)).toBe(role === 'super_admin' || role === 'security')
   })
 })

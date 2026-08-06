@@ -45,5 +45,10 @@ preserving all existing account email delivery evidence.
 Migration `027_operator_control_plane` adds isolated Operator users and hashed
 sessions, explicit time-limited Workspace support grants, and immutable minimized
 Operator audit evidence.
+Migration `028_operator_change_control` adds audited Feature Flags, one active
+Workspace override per Flag and Workspace, deterministic percentage rollout,
+immutable Flag history, scoped operational incidents, and immutable incident
+timelines. Database guards reject deletion, stale revisions, invalid incident
+resolution state, and mutation of historical events.
 
 See [Postgres Persistence Path](POSTGRES_PERSISTENCE.md) before adding migrations that rely on SQLite-only SQL.

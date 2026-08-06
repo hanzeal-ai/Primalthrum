@@ -110,6 +110,7 @@ import { registerAbuseRoutes } from './routes/abuseRoutes';
 import { registerSecuritySettingsRoutes } from './routes/securitySettingsRoutes';
 import { registerRetentionSettingsRoutes } from './routes/retentionSettingsRoutes';
 import { registerMfaRoutes } from './routes/mfaRoutes';
+import { registerOperatorChangeRoutes } from './routes/operatorChangeRoutes';
 import { registerOperatorDomainRoutes } from './routes/operatorDomainRoutes';
 import { registerOperatorRoutes } from './routes/operatorRoutes';
 import { ApiKeyRepository } from './services/apiKeyRepository';
@@ -127,6 +128,8 @@ import { OperatorIdentityRepository } from './services/operatorIdentityRepositor
 import { OperatorAuditRepository } from './services/operatorAuditRepository';
 import { OperatorBillingReadRepository } from './services/operatorBillingReadRepository';
 import { OperatorCustomerReadRepository } from './services/operatorCustomerReadRepository';
+import { OperatorFeatureFlagRepository } from './services/operatorFeatureFlagRepository';
+import { OperatorIncidentRepository } from './services/operatorIncidentRepository';
 import { OperatorReadRepository } from './services/operatorReadRepository';
 import { OperatorRuntimeReadRepository } from './services/operatorRuntimeReadRepository';
 import { OperatorSecurityReadRepository } from './services/operatorSecurityReadRepository';
@@ -263,6 +266,8 @@ export function createApp(options: AppOptions = {}): Koa {
   const operatorAudit = new OperatorAuditRepository(db);
   const operatorBillingReads = new OperatorBillingReadRepository(db);
   const operatorCustomerReads = new OperatorCustomerReadRepository(db);
+  const operatorFeatureFlags = new OperatorFeatureFlagRepository(db);
+  const operatorIncidents = new OperatorIncidentRepository(db);
   const operatorReads = new OperatorReadRepository(db);
   const operatorRuntimeReads = new OperatorRuntimeReadRepository(db);
   const operatorSecurityReads = new OperatorSecurityReadRepository(db);
@@ -674,6 +679,13 @@ export function createApp(options: AppOptions = {}): Koa {
     logger,
     runtimeReads: operatorRuntimeReads,
     securityReads: operatorSecurityReads,
+  });
+  registerOperatorChangeRoutes(operatorRouter, {
+    audit: operatorAudit,
+    featureFlags: operatorFeatureFlags,
+    identity: operatorIdentity,
+    incidents: operatorIncidents,
+    logger,
   });
 
   app.use(async (ctx, next) => {
