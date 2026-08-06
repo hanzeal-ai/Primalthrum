@@ -47,10 +47,11 @@ Workspace retention does not delete:
 - archived tool security audit records;
 - Agents, versions, deployments, Provider configuration, or team membership.
 
-Account export and deletion, statutory retention schedules, legal-hold support,
-and production object-storage lifecycle rules remain part of the P21 compliance
-gate. Operators must align those controls with the approved privacy policy and
-regional obligations before launch.
+Account and Owner-authorized Workspace export plus scheduled account deletion are
+documented in `docs/ACCOUNT_PRIVACY_RIGHTS.md`. Statutory retention schedules,
+legal-hold support, and production object-storage lifecycle rules remain part of
+the P21 compliance gate. Operators must align those controls with the approved
+privacy policy and regional obligations before launch.
 
 ## API
 

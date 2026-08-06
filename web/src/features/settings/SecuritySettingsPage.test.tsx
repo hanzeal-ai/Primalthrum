@@ -5,18 +5,22 @@ import { SecuritySettingsPage } from './SecuritySettingsPage'
 
 const api = vi.hoisted(() => ({
   beginMfaSetup: vi.fn(),
+  cancelAccountDeletion: vi.fn(),
   confirmMfaSetup: vi.fn(),
   createWorkspaceApiKey: vi.fn(),
   disableMfa: vi.fn(),
   enforceRetentionSettings: vi.fn(),
   getRetentionSettings: vi.fn(),
   getMfaStatus: vi.fn(),
+  getAccountPrivacyState: vi.fn(),
   listSecuritySessions: vi.fn(),
   listWorkspaceApiKeys: vi.fn(),
   listWorkspaces: vi.fn(),
+  requestPrivacyExport: vi.fn(),
   revokeOtherSecuritySessions: vi.fn(),
   revokeSecuritySession: vi.fn(),
   revokeWorkspaceApiKey: vi.fn(),
+  scheduleAccountDeletion: vi.fn(),
   regenerateMfaRecoveryCodes: vi.fn(),
   updateRetentionSettings: vi.fn(),
 }))
@@ -43,6 +47,22 @@ describe('SecuritySettingsPage', () => {
       preview: { conversations: 0, runs: 0, documents: 0, documentBytes: 0 },
       events: [], customRetentionEnabled: false, canManage: true,
     })
+    api.getAccountPrivacyState.mockResolvedValue({
+      deletion: null, blockers: [], gracePeriodDays: 7, requests: [],
+    })
+    api.requestPrivacyExport.mockResolvedValue({
+      format: 'primalthrum-account-data', version: 1,
+      generatedAt: '2026-08-06T00:00:00.000Z', scope: 'account', account: {},
+    })
+    api.scheduleAccountDeletion.mockResolvedValue({
+      id: 1, requestId: 'request-id', userId: 1, workspaceId: 1,
+      requestType: 'deletion', scope: 'account', status: 'scheduled', attempts: 0,
+      scheduledFor: '2026-08-13T00:00:00.000Z', completedAt: null,
+      cancelledAt: null, failureReason: '', createdAt: '2026-08-06T00:00:00.000Z',
+      updatedAt: '2026-08-06T00:00:00.000Z',
+    })
+    Object.defineProperty(URL, 'createObjectURL', { configurable: true, value: vi.fn(() => 'blob:test') })
+    Object.defineProperty(URL, 'revokeObjectURL', { configurable: true, value: vi.fn() })
   })
 
   afterEach(() => {
@@ -89,5 +109,25 @@ describe('SecuritySettingsPage', () => {
     expect(await screen.findByText('当前会话')).toBeTruthy()
     expect(screen.queryByLabelText('密钥名称')).toBeNull()
     expect(api.listWorkspaceApiKeys).not.toHaveBeenCalled()
+  })
+
+  it('exports account data and schedules deletion after reauthentication', async () => {
+    render(<SecuritySettingsPage onLogout={vi.fn()} user={{
+      id: 1, workspaceId: 1, email: 'owner@example.com', role: 'owner',
+    }} />)
+
+    expect(await screen.findByRole('heading', { name: '数据与隐私' })).toBeTruthy()
+    fireEvent.change(await screen.findByLabelText('导出数据当前密码'), { target: { value: 'current password' } })
+    fireEvent.click(screen.getByRole('button', { name: '导出账号' }))
+    await waitFor(() => expect(api.requestPrivacyExport).toHaveBeenCalledWith({
+      password: 'current password', scope: 'account',
+    }))
+
+    fireEvent.change(screen.getByLabelText('确认删除邮箱'), { target: { value: 'owner@example.com' } })
+    fireEvent.change(screen.getByLabelText('删除账号当前密码'), { target: { value: 'current password' } })
+    fireEvent.click(screen.getByRole('button', { name: '安排删除' }))
+    await waitFor(() => expect(api.scheduleAccountDeletion).toHaveBeenCalledWith({
+      password: 'current password', confirmEmail: 'owner@example.com',
+    }))
   })
 })

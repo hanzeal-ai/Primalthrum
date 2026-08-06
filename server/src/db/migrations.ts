@@ -128,6 +128,10 @@ export const MIGRATIONS: Migration[] = [
     id: '029_document_upload_security',
     up: applyDocumentUploadSecurity,
   },
+  {
+    id: '030_account_privacy_rights',
+    up: applyAccountPrivacyRights,
+  },
 ];
 
 export function runMigrations(db: DatabaseAdapter): void {
@@ -1993,6 +1997,67 @@ function applyDocumentUploadSecurity(db: DatabaseAdapter): void {
     BEFORE DELETE ON document_upload_security_events
     BEGIN
       SELECT RAISE(ABORT, 'document upload security events are immutable');
+    END;
+  `);
+}
+
+function applyAccountPrivacyRights(db: DatabaseAdapter): void {
+  ensureColumn(db, 'users', 'deleted_at', 'TEXT');
+  ensureColumn(db, 'workspaces', 'deleted_at', 'TEXT');
+  db.run(`
+    CREATE TABLE IF NOT EXISTS account_privacy_requests (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      request_id TEXT NOT NULL UNIQUE,
+      user_id INTEGER NOT NULL,
+      workspace_id INTEGER,
+      request_type TEXT NOT NULL CHECK(request_type IN ('export', 'deletion')),
+      scope TEXT NOT NULL CHECK(scope IN ('account', 'workspace')),
+      status TEXT NOT NULL CHECK(status IN (
+        'completed', 'scheduled', 'processing', 'cancelled', 'failed'
+      )),
+      attempts INTEGER NOT NULL DEFAULT 0 CHECK(attempts >= 0),
+      scheduled_for TEXT,
+      completed_at TEXT,
+      cancelled_at TEXT,
+      failure_reason TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE TABLE IF NOT EXISTS account_privacy_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_id TEXT NOT NULL UNIQUE,
+      request_id TEXT NOT NULL,
+      subject_hash TEXT NOT NULL CHECK(length(subject_hash) = 64),
+      event_type TEXT NOT NULL CHECK(event_type IN (
+        'export_completed', 'deletion_scheduled', 'deletion_cancelled',
+        'deletion_started', 'deletion_completed', 'deletion_failed'
+      )),
+      metadata_json TEXT NOT NULL DEFAULT '{}',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS account_privacy_requests_user_time_idx
+      ON account_privacy_requests(user_id, created_at DESC, id DESC);
+    CREATE INDEX IF NOT EXISTS account_privacy_requests_due_idx
+      ON account_privacy_requests(status, scheduled_for, id);
+    CREATE INDEX IF NOT EXISTS account_privacy_events_request_idx
+      ON account_privacy_events(request_id, id);
+
+    CREATE UNIQUE INDEX IF NOT EXISTS account_privacy_active_deletion_idx
+      ON account_privacy_requests(user_id)
+      WHERE request_type = 'deletion' AND status IN ('scheduled', 'processing');
+
+    CREATE TRIGGER IF NOT EXISTS account_privacy_events_no_update
+    BEFORE UPDATE ON account_privacy_events
+    BEGIN
+      SELECT RAISE(ABORT, 'account privacy events are immutable');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS account_privacy_events_no_delete
+    BEFORE DELETE ON account_privacy_events
+    BEGIN
+      SELECT RAISE(ABORT, 'account privacy events are immutable');
     END;
   `);
 }

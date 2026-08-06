@@ -1,7 +1,14 @@
 import Router from '@koa/router';
+import type Koa from 'koa';
 
+import { AccountDataExportService } from '../services/accountDataExportService';
+import {
+  AccountDeletionBlockedError,
+  AccountDeletionService,
+} from '../services/accountDeletionService';
 import { sendApiError } from '../services/apiErrors';
 import { type StructuredLogger } from '../services/logger';
+import { verifyPassword } from '../services/passwordHash';
 import {
   ANALYTICS_EVENT_NAMES,
   PRIVACY_POLICY_VERSION,
@@ -9,13 +16,22 @@ import {
   type AnalyticsEventName,
   type ConsentSource,
 } from '../services/privacyAnalyticsRepository';
+import { normalizeEmail, UserRepository } from '../services/userRepository';
 
 const OPAQUE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PROPERTY_KEYS = new Set(['source', 'planKey', 'authenticated']);
 
 export function registerPrivacyRoutes(
   router: Router,
-  options: { analytics: PrivacyAnalyticsRepository; logger: StructuredLogger },
+  options: {
+    analytics: PrivacyAnalyticsRepository;
+    currentUserId: (ctx: Koa.Context) => number;
+    currentWorkspaceId: (ctx: Koa.Context) => number;
+    deletion: AccountDeletionService;
+    exports: AccountDataExportService;
+    logger: StructuredLogger;
+    users: UserRepository;
+  },
 ): void {
   router.get('/api/public/privacy/config', (ctx) => {
     ctx.body = {
@@ -82,6 +98,96 @@ export function registerPrivacyRoutes(
       });
     }
   });
+
+  router.get('/api/settings/privacy', (ctx) => {
+    ctx.body = options.deletion.state(options.currentUserId(ctx));
+  });
+
+  router.post('/api/settings/privacy/export', (ctx) => {
+    const body = ctx.request.body as Record<string, unknown>;
+    const userId = options.currentUserId(ctx);
+    if (!reauthenticate(ctx, options.logger, options.users, userId, body.password)) return;
+    try {
+      const scope = body.scope === 'workspace' ? 'workspace' : 'account';
+      const archive = scope === 'workspace'
+        ? options.exports.exportWorkspace(userId, options.currentWorkspaceId(ctx))
+        : options.exports.exportAccount(userId);
+      ctx.type = 'application/json';
+      ctx.set(
+        'Content-Disposition',
+        `attachment; filename="primalthrum-${scope}-data-${new Date().toISOString().slice(0, 10)}.json"`,
+      );
+      ctx.body = archive;
+    } catch (error) {
+      sendApiError(ctx, options.logger, {
+        status: error instanceof Error && error.message.includes('owner access') ? 403 : 400,
+        code: 'PRIVACY_EXPORT_FAILED',
+        message: error instanceof Error ? error.message : 'privacy data export failed',
+      });
+    }
+  });
+
+  router.post('/api/settings/privacy/deletion', (ctx) => {
+    const body = ctx.request.body as Record<string, unknown>;
+    const userId = options.currentUserId(ctx);
+    const user = options.users.findById(userId);
+    if (!reauthenticate(ctx, options.logger, options.users, userId, body.password)) return;
+    try {
+      if (!user || normalizeEmail(body.confirmEmail) !== user.email) {
+        throw new Error('account email confirmation does not match');
+      }
+      ctx.status = 202;
+      ctx.body = options.deletion.request(userId, options.currentWorkspaceId(ctx));
+    } catch (error) {
+      if (error instanceof AccountDeletionBlockedError) {
+        sendApiError(ctx, options.logger, {
+          status: 409,
+          code: 'ACCOUNT_DELETION_BLOCKED',
+          message: error.message,
+          details: { blockers: error.blockers },
+        });
+        return;
+      }
+      sendApiError(ctx, options.logger, {
+        status: 400,
+        code: 'ACCOUNT_DELETION_INVALID',
+        message: error instanceof Error ? error.message : 'account deletion request is invalid',
+      });
+    }
+  });
+
+  router.delete('/api/settings/privacy/deletion', (ctx) => {
+    const body = ctx.request.body as Record<string, unknown>;
+    const userId = options.currentUserId(ctx);
+    if (!reauthenticate(ctx, options.logger, options.users, userId, body.password)) return;
+    try {
+      ctx.body = options.deletion.cancel(userId);
+    } catch (error) {
+      sendApiError(ctx, options.logger, {
+        status: 400,
+        code: 'ACCOUNT_DELETION_INVALID',
+        message: error instanceof Error ? error.message : 'account deletion cancellation failed',
+      });
+    }
+  });
+}
+
+function reauthenticate(
+  ctx: Koa.Context,
+  logger: StructuredLogger,
+  users: UserRepository,
+  userId: number,
+  passwordValue: unknown,
+): boolean {
+  const user = users.findById(userId);
+  const password = typeof passwordValue === 'string' ? passwordValue : '';
+  if (user && verifyPassword(password, user.passwordHash)) return true;
+  sendApiError(ctx, logger, {
+    status: 401,
+    code: 'REAUTHENTICATION_REQUIRED',
+    message: 'current password is required for privacy changes',
+  });
+  return false;
 }
 
 function opaqueId(value: unknown, field: string): string {

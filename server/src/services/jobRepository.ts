@@ -110,6 +110,17 @@ export class JobRepository {
     return Number(row?.count ?? 0) > 0;
   }
 
+  hasActiveForPayload(type: string, key: string, value: string): boolean {
+    if (!/^[a-zA-Z][a-zA-Z0-9_]*$/.test(key)) throw new Error('job payload key is invalid');
+    const row = this.db.query<{ count: number }>(`
+      SELECT COUNT(*) AS count FROM jobs
+      WHERE type = ${sqlValue(type)}
+        AND json_extract(payload_json, ${sqlValue(`$.${key}`)}) = ${sqlValue(value)}
+        AND status IN ('queued', 'running', 'retrying');
+    `)[0];
+    return Number(row?.count ?? 0) > 0;
+  }
+
   nextRunnable(types: string[]): JobRecord | null {
     if (!types.length) return null;
     const rows = this.db.query<JobRow>(`

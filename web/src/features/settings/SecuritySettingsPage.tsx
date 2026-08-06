@@ -34,6 +34,7 @@ import { canManageApiKeys } from '../../lib/workspacePermissions'
 import { WorkspaceAppShell } from '../app-shell/WorkspaceAppShell'
 import { RetentionSettingsSection } from './RetentionSettingsSection'
 import { MfaSettingsSection } from './MfaSettingsSection'
+import { PrivacySettingsSection } from './PrivacySettingsSection'
 
 const API_KEY_SCOPE_OPTIONS: Array<{ scope: ApiKeyScope; label: string; description: string }> = [
   { scope: 'agents:read', label: '读取', description: '读取 Agent、版本、对话和运行记录' },
@@ -195,6 +196,8 @@ export function SecuritySettingsPage({ onLogout, user }: SecuritySettingsPagePro
         </section> : null}
 
         <RetentionSettingsSection key={user.workspaceId} workspaceId={user.workspaceId} />
+
+        <PrivacySettingsSection user={user} />
 
         <section className="min-w-0" aria-labelledby="sessions-title">
           <div className="flex flex-wrap items-end justify-between gap-4"><div className="flex items-center gap-3"><span className="grid size-9 place-items-center rounded-md bg-emerald-50 text-emerald-700"><ShieldCheck className="size-4" /></span><div><h2 className="text-xl font-semibold" id="sessions-title">登录会话</h2><p className="mt-1 text-sm text-zinc-500">检查当前账号仍处于登录状态的会话。</p></div></div><Button disabled={Boolean(busy) || sessions.every((session) => session.current)} onClick={() => void revokeOtherSessions()} variant="outline">{busy === 'sessions' ? <Loader2 className="animate-spin" /> : <LogOut />}退出其他会话</Button></div>

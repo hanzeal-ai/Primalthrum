@@ -26,6 +26,12 @@ Use this checklist before tagging or deploying a commercial Primalthrum build.
 - Runtime egress permits only approved Provider destinations. ClamAV, the Python
   Agent service, cloud metadata ranges, RFC1918, and link-local networks are not
   reachable through customer-configurable Provider URLs.
+- Account and Workspace exports require current-password reauthentication,
+  preserve tenant scope, and contain no password, token, MFA recovery, or Secret
+  material. Export completion has immutable evidence.
+- Account deletion enforces its grace period and paid/shared-ownership blockers,
+  revokes every Session and user-created API Key, deletes physical knowledge
+  files, anonymizes identity data, and preserves billing/legal evidence.
 - API clients show standardized `error.code`, `error.message`, and `error.status` without exposing secrets.
 - Public endpoints are limited to liveness, readiness, metrics, setup, auth, and documented public flows.
 
@@ -64,6 +70,7 @@ Use this checklist before tagging or deploying a commercial Primalthrum build.
 - `docs/TROUBLESHOOTING.md` exists.
 - `docs/API_KEYS_AND_SESSIONS.md` exists.
 - `docs/DATA_RETENTION.md` exists.
+- `docs/ACCOUNT_PRIVACY_RIGHTS.md` exists.
 - `docs/MFA_SECURITY.md` exists.
 - `docs/DEMO_RESEARCH_AGENT.md` exists.
 
@@ -108,6 +115,9 @@ Confirm:
   `DOCUMENT_SCAN_UNAVAILABLE` without accepting the upload.
 - A Provider endpoint resolving to any private or metadata address is rejected
   before network transport, including mixed public/private DNS answers.
+- Account and Workspace export archives pass a forbidden-field scan, and a
+  deletion smoke run proves cancellation, due execution, Session revocation,
+  credential removal, physical file deletion, and immutable transition evidence.
 
 ## Known Limitations
 

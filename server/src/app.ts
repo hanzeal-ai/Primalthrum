@@ -107,6 +107,10 @@ import { AccountEmailOutboxRepository } from './services/accountEmailOutboxRepos
 import { AccountEmailDispatcher } from './services/accountEmailDispatcher';
 import { type AccountEmailSender } from './services/accountEmailSender';
 import { AccountIdentityService } from './services/accountIdentityService';
+import { AccountDataExportService } from './services/accountDataExportService';
+import { AccountDeletionService } from './services/accountDeletionService';
+import { AccountPrivacyRepository } from './services/accountPrivacyRepository';
+import { AccountPrivacyScheduler } from './services/accountPrivacyScheduler';
 import { PrivacyAnalyticsRepository } from './services/privacyAnalyticsRepository';
 import { registerPrivacyRoutes } from './routes/privacyRoutes';
 import { registerAccountEmailRoutes } from './routes/accountEmailRoutes';
@@ -144,6 +148,9 @@ import { OperatorSecurityReadRepository } from './services/operatorSecurityReadR
 import { SupportAccessRepository } from './services/supportAccessRepository';
 
 export interface AppOptions {
+  accountDeletionGracePeriodMs?: number;
+  accountPrivacyNow?: () => Date;
+  accountPrivacySchedulerIntervalMs?: number;
   agentBaseUrl?: string;
   dbPath?: string;
   documentMalwareScanner?: DocumentMalwareScanner;
@@ -343,6 +350,20 @@ export function createApp(options: AppOptions = {}): Koa {
     publicAppUrl,
   );
   const privacyAnalyticsRepository = new PrivacyAnalyticsRepository(db);
+  const accountPrivacyRepository = new AccountPrivacyRepository(db, options.accountPrivacyNow);
+  const accountDataExports = new AccountDataExportService(
+    db,
+    documentStorage,
+    accountPrivacyRepository,
+    options.accountPrivacyNow,
+  );
+  const accountDeletionService = new AccountDeletionService(
+    db,
+    accountPrivacyRepository,
+    documentStorage,
+    options.accountPrivacyNow,
+    options.accountDeletionGracePeriodMs,
+  );
   const retentionPolicies = new RetentionPolicyRepository(db);
   const retentionService = new RetentionService(retentionPolicies, documentStorage);
   if (options.accountEmailSender) {
@@ -455,6 +476,11 @@ export function createApp(options: AppOptions = {}): Koa {
       }
       return retentionService.enforce(workspaceId, null) as unknown as Record<string, unknown>;
     },
+    'account.delete': (payload) => {
+      const requestId = typeof payload.requestId === 'string' ? payload.requestId : '';
+      if (!requestId) throw new Error('account deletion job requestId is invalid');
+      return accountDeletionService.execute(requestId);
+    },
   }, (error) => {
     logger.log({
       level: 'error',
@@ -467,8 +493,15 @@ export function createApp(options: AppOptions = {}): Koa {
     jobRepository,
     () => jobDispatcher.kick(),
   );
+  const accountPrivacyScheduler = new AccountPrivacyScheduler(
+    accountPrivacyRepository,
+    jobRepository,
+    () => jobDispatcher.kick(),
+    options.accountPrivacySchedulerIntervalMs,
+  );
   jobDispatcher.resume();
   retentionScheduler.start();
+  accountPrivacyScheduler.start();
 
   function authorize(ctx: Koa.Context, permission: WorkspacePermission): boolean {
     if (ctx.state.apiKey) {
@@ -642,7 +675,12 @@ export function createApp(options: AppOptions = {}): Koa {
   });
   registerPrivacyRoutes(router, {
     analytics: privacyAnalyticsRepository,
+    currentUserId,
+    currentWorkspaceId,
+    deletion: accountDeletionService,
+    exports: accountDataExports,
     logger,
+    users: userRepository,
   });
   registerAccountEmailRoutes(router, {
     outbox: accountEmailOutbox,

@@ -583,6 +583,47 @@ export interface PrivacyConsentReceipt {
   recordedAt: string
 }
 
+export type AccountPrivacyRequestStatus = 'completed' | 'scheduled' | 'processing' | 'cancelled' | 'failed'
+
+export interface AccountPrivacyRequestRecord {
+  id: number
+  requestId: string
+  userId: number
+  workspaceId: number | null
+  requestType: 'export' | 'deletion'
+  scope: 'account' | 'workspace'
+  status: AccountPrivacyRequestStatus
+  attempts: number
+  scheduledFor: string | null
+  completedAt: string | null
+  cancelledAt: string | null
+  failureReason: string
+  createdAt: string
+  updatedAt: string
+}
+
+export interface AccountDeletionBlocker {
+  code: 'OWNERSHIP_TRANSFER_REQUIRED' | 'ACTIVE_PAID_SUBSCRIPTION'
+  workspaceId: number
+  workspaceName: string
+}
+
+export interface AccountPrivacyState {
+  deletion: AccountPrivacyRequestRecord | null
+  blockers: AccountDeletionBlocker[]
+  gracePeriodDays: number
+  requests: AccountPrivacyRequestRecord[]
+}
+
+export interface AccountDataExport {
+  format: 'primalthrum-account-data'
+  version: 1
+  generatedAt: string
+  scope: 'account' | 'workspace'
+  account: Record<string, unknown>
+  workspace?: Record<string, unknown>
+}
+
 export type AnalyticsEventName =
   | 'page_view'
   | 'agent_intent_started'

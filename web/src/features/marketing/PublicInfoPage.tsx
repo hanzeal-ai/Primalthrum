@@ -32,7 +32,8 @@ const CONTENT: Record<string, { title: string; summary: string; sections: Array<
     sections: [
       { title: '数据处理', body: 'Agent 配置、对话、文档、运行和计费证据仅用于提供产品功能。Provider 凭据由服务端 Secret Vault 保存。' },
       { title: '产品分析', body: '产品分析默认关闭。只有明确授权后，平台才以匿名标识记录页面和注册漏斗；不会记录邮箱、提示词、文档或 Agent 对话内容。' },
-      { title: '你的选择', body: '你可以通过页脚的 Cookie 设置拒绝或撤回产品分析。正式上线前仍须补充适用地区、处理者、保留期限和数据主体权利条款并完成法务审核。' },
+      { title: '你的选择', body: '你可以通过页脚撤回产品分析，并在设置中导出账号数据；Workspace Owner 可导出租户数据。账号删除提供宽限期，并受共享所有权和有效订阅约束。' },
+      { title: '保留与删除', body: '账号删除会清除客户内容和凭据，同时以匿名形式保留税务、计费、反欺诈和安全证据。具体法定期限、处理者信息和地区条款必须在公开上线前完成法务审核。' },
     ],
   },
   'legal/terms': {

@@ -32,10 +32,22 @@ for (const access of ROLE_MATRIX) {
     await expect(page.getByRole('heading', { name: '多因素认证' })).toBeVisible()
     await expect(page.getByRole('heading', { name: 'API Keys' })).toHaveCount(access.settingsManage ? 1 : 0)
     await expect(page.getByRole('heading', { name: '数据留存' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '数据与隐私' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '导出账号' })).toBeVisible()
+    await expect(page.getByRole('button', { name: '导出 Workspace' }))
+      .toHaveCount(access.role === 'owner' ? 1 : 0)
     if (access.settingsManage) {
       await expect(page.getByLabel('对话记录留存周期')).toBeEnabled()
     } else {
       await expect(page.getByLabel('对话记录留存周期')).toBeDisabled()
+    }
+    if (access.role === 'owner') {
+      await page.getByLabel('导出数据当前密码').fill(PASSWORD)
+      const [download] = await Promise.all([
+        page.waitForEvent('download'),
+        page.getByRole('button', { name: '导出账号' }).click(),
+      ])
+      expect(download.suggestedFilename()).toMatch(/^primalthrum-account-data-/)
     }
     await expectNoHorizontalOverflow(page)
 

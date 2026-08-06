@@ -54,5 +54,9 @@ Migration `029_document_upload_security` adds immutable minimized upload-scan
 evidence. It stores tenant/resource/actor IDs, filename and content hashes, MIME,
 size, scanner, result, and bounded threat metadata without storing the filename
 or document content. Database triggers reject update and deletion.
+Migration `030_account_privacy_rights` adds account and Workspace deletion
+tombstones, durable export/deletion request state, retry counters, and immutable
+hashed data-rights lifecycle events. It preserves billing and security evidence
+while allowing customer content and credentials to be erased.
 
 See [Postgres Persistence Path](POSTGRES_PERSISTENCE.md) before adding migrations that rely on SQLite-only SQL.

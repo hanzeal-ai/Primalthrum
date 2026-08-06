@@ -1,5 +1,8 @@
 import type {
   AbuseProtectionConfig,
+  AccountDataExport,
+  AccountPrivacyRequestRecord,
+  AccountPrivacyState,
   AgentRecord,
   AnalyticsEventInput,
   AgentDeploymentRecord,
@@ -270,6 +273,37 @@ export async function recordAnalyticsEvent(input: AnalyticsEventInput): Promise<
     keepalive: true,
     method: 'POST',
     body: JSON.stringify(input),
+  })
+}
+
+export function getAccountPrivacyState(): Promise<AccountPrivacyState> {
+  return apiFetch<AccountPrivacyState>('/api/settings/privacy')
+}
+
+export function requestPrivacyExport(input: {
+  password: string
+  scope: 'account' | 'workspace'
+}): Promise<AccountDataExport> {
+  return apiFetch<AccountDataExport>('/api/settings/privacy/export', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export function scheduleAccountDeletion(input: {
+  password: string
+  confirmEmail: string
+}): Promise<AccountPrivacyRequestRecord> {
+  return apiFetch<AccountPrivacyRequestRecord>('/api/settings/privacy/deletion', {
+    method: 'POST',
+    body: JSON.stringify(input),
+  })
+}
+
+export function cancelAccountDeletion(password: string): Promise<AccountPrivacyRequestRecord> {
+  return apiFetch<AccountPrivacyRequestRecord>('/api/settings/privacy/deletion', {
+    method: 'DELETE',
+    body: JSON.stringify({ password }),
   })
 }
 

@@ -2068,9 +2068,19 @@ complete. Follow the same dependency and verification protocol used above.
   discovery. Unit, protocol, real HTTP, database immutability, and all Agent
   provider tests cover clean, EICAR, scanner failure, literal-address, metadata,
   and DNS paths. Production infrastructure must still prove the documented
-  ClamAV deployment and egress allowlist. Threat-model signoff, account/workspace
-  privacy export and deletion, remaining legal documents, and independent manual
-  security evidence remain open.
+  ClamAV deployment and egress allowlist. Threat-model signoff, remaining legal
+  documents, and independent manual security evidence remain open.
+  The second P21 slice adds password-confirmed account and Owner Workspace JSON
+  exports, credential redaction, immutable export evidence, and a seven-day
+  cancellable account-deletion lifecycle. Shared ownership and live paid
+  subscriptions block deletion, while due durable jobs revoke Sessions and
+  user-created API Keys, erase sole-owner Workspace content and physical files,
+  anonymize identity/email data, and retain pseudonymous billing and security
+  evidence. Real HTTP, tenant-role, retry scheduling, blocker, cancellation,
+  deletion, immutable-event, responsive Web, and browser download coverage is
+  included. Legal-document approval, statutory retention/legal hold, ownership
+  transfer UX, production object lifecycle, and independent manual security
+  signoff remain open.
 
 ### P22-01 Production Data And Infrastructure
 

@@ -94,6 +94,7 @@ export class SessionRepository {
         u.email_verified_at
       FROM sessions s
       JOIN users u ON u.id = s.user_id
+      JOIN workspaces w ON w.id = s.active_workspace_id
       JOIN workspace_memberships m
         ON m.user_id = u.id
         AND m.workspace_id = s.active_workspace_id
@@ -101,6 +102,8 @@ export class SessionRepository {
       WHERE s.token_hash = ${sqlValue(hashToken(token))}
         AND s.revoked_at IS NULL
         AND s.expires_at > ${sqlValue(new Date().toISOString())}
+        AND u.deleted_at IS NULL
+        AND w.deleted_at IS NULL
       LIMIT 1;
     `);
 
@@ -230,6 +233,10 @@ export class SessionRepository {
           WHERE m.workspace_id = ${sqlValue(workspaceId)}
             AND m.user_id = ${sqlValue(userId)}
             AND m.status = 'active'
+            AND EXISTS (
+              SELECT 1 FROM workspaces w
+              WHERE w.id = m.workspace_id AND w.deleted_at IS NULL
+            )
         );
     `);
 
