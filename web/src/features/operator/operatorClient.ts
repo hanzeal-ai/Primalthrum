@@ -1,9 +1,16 @@
 import type {
+  OperatorAbuseEventSummary,
+  OperatorAgentSummary,
   OperatorAuditRecord,
   OperatorAuthResponse,
+  OperatorCustomerUserSummary,
+  OperatorJobSummary,
   OperatorOverviewResponse,
+  OperatorPaymentSummary,
   OperatorSetupStatus,
+  OperatorSubscriptionSummary,
   OperatorUser,
+  OperatorUsageSummary,
   OperatorWorkspaceSummary,
   SupportAccessGrant,
   SupportGrantPermission,
@@ -88,6 +95,34 @@ export function getOperatorOverview(): Promise<OperatorOverviewResponse> {
 
 export function listOperatorWorkspaces(): Promise<OperatorWorkspaceSummary[]> {
   return operatorRequest('/api/operator/workspaces')
+}
+
+export function listOperatorCustomerUsers(): Promise<OperatorCustomerUserSummary[]> {
+  return operatorRequest('/api/operator/customer-users')
+}
+
+export function listOperatorSubscriptions(): Promise<OperatorSubscriptionSummary[]> {
+  return operatorRequest('/api/operator/subscriptions')
+}
+
+export function listOperatorUsage(): Promise<OperatorUsageSummary[]> {
+  return operatorRequest('/api/operator/usage')
+}
+
+export function listOperatorPayments(): Promise<OperatorPaymentSummary> {
+  return operatorRequest('/api/operator/payments')
+}
+
+export function listOperatorAgents(): Promise<OperatorAgentSummary[]> {
+  return operatorRequest('/api/operator/agents')
+}
+
+export function listOperatorJobs(): Promise<OperatorJobSummary[]> {
+  return operatorRequest('/api/operator/jobs')
+}
+
+export function listOperatorAbuseEvents(): Promise<OperatorAbuseEventSummary[]> {
+  return operatorRequest('/api/operator/abuse-events')
 }
 
 export function listOperators(): Promise<OperatorUser[]> {

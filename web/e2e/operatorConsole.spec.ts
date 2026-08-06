@@ -18,6 +18,18 @@ test('@desktop operator control plane is ready and operational', async ({ page }
   await expect(page.getByText('Local Workspace')).toBeVisible()
   await expectNoHorizontalOverflow(page)
 
+  for (const [section, heading] of [
+    ['客户', '客户用户'],
+    ['计费', '支付事件'],
+    ['运行', '后台任务'],
+    ['安全', '滥用防护事件'],
+  ] as const) {
+    await page.getByRole('navigation', { name: 'Operator 导航' })
+      .getByRole('button', { name: section }).click()
+    await expect(page.getByRole('heading', { name: heading })).toBeVisible()
+    await expectNoHorizontalOverflow(page)
+  }
+
   await page.getByRole('navigation', { name: 'Operator 导航' })
     .getByRole('button', { name: '支持访问' }).click()
   await expect(page.getByText('创建限时授权')).toBeVisible()
@@ -31,7 +43,7 @@ test('@mobile operator control plane remains usable without overflow', async ({ 
   const navigation = page.getByRole('navigation', { name: '移动端 Operator 导航' })
   await expect(navigation).toBeVisible()
 
-  for (const section of ['Workspaces', '支持访问', 'Operators', '审计']) {
+  for (const section of ['Workspaces', '客户', '计费', '运行', '安全', '支持访问', 'Operators', '审计']) {
     await navigation.getByRole('button', { name: section }).click()
     await expectNoHorizontalOverflow(page)
   }

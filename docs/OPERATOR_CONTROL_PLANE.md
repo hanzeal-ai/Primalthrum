@@ -26,16 +26,30 @@ Operator session and returns one new 12-hour session.
 
 ## Roles
 
-| Role | Platform overview | Workspaces | Billing | Operators | Support | Audit |
-| --- | --- | --- | --- | --- | --- | --- |
-| Super Admin | Read | Read | Read | Manage | Grant/use | Read |
-| Support | Read | Read | None | Read | Assigned grants only | None |
-| Billing | Read | Read | Read | None | None | None |
-| Security | Read | Read | None | Read | Grant/revoke | Read |
-| Viewer | Read | Read | None | None | None | None |
+| Role | Overview / Workspaces | Customers | Billing | Runtime | Abuse | Operators | Support | Audit |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| Super Admin | Read | Read | Read | Read | Read | Manage | Grant/use | Read |
+| Support | Read | Read | None | Read | None | Read | Assigned grants only | None |
+| Billing | Read | None | Read | None | None | None | None | None |
+| Security | Read | Read | None | Read | Read | Read | Grant/revoke | Read |
+| Viewer | Read | None | None | None | None | None | None | None |
 
 Server authorization is authoritative. Web navigation mirrors the same matrix but
 is not a security boundary.
+
+## Operational Data Minimization
+
+Global customer and runtime views are for triage, not customer impersonation.
+Customer users are represented by a stable `USR-xxxxxx` reference without email.
+Agents are represented by `AGT-xxxxxx` without name, slug, description, source
+path, configuration, or Provider binding. Jobs expose scheduling, status, and an
+error-presence flag without payload, result, or error text.
+
+Billing views expose plan/state, monthly meter aggregates, invoice/refund amounts,
+and failed Webhook status. Provider customer, subscription, invoice, payment,
+refund, and event references; hosted URLs; raw Webhook payloads; and error text
+are excluded. Abuse events exclude subject hashes and request metadata. Every
+successful domain read creates an immutable Operator audit event.
 
 ## Support Access
 
@@ -73,11 +87,23 @@ Database triggers reject audit updates and deletion.
 - `GET /api/operator/overview`
 - `GET /api/operator/workspaces`
 - `GET /api/operator/workspaces/:id`
+- `GET /api/operator/customer-users`
+- `GET /api/operator/subscriptions`
+- `GET /api/operator/usage`
+- `GET /api/operator/payments`
+- `GET /api/operator/agents`
+- `GET /api/operator/jobs`
+- `GET /api/operator/abuse-events`
 - `GET/POST /api/operator/operators`
 - `GET/POST /api/operator/support-grants`
 - `DELETE /api/operator/support-grants/:id`
 - `GET /api/operator/support-grants/:id/context`
 - `GET /api/operator/audit`
+
+Customer, billing, Agent, and Job endpoints accept an optional positive
+`workspaceId` query filter and a bounded `limit` of at most 200. The abuse event
+endpoint accepts the same bounded `limit` without a Workspace filter because its
+stored subjects are intentionally one-way hashes with no retained Workspace link.
 
 Operator setup and login use the same durable IP/identity abuse protection as the
 public authentication surfaces. Do not publish `/metrics` or the internal Python

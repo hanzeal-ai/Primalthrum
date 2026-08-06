@@ -190,6 +190,90 @@ test('operator RBAC restricts support, billing, security, and viewer duties', as
   assert.ok(['ready', 'not_ready'].includes(payload.readiness.status));
 });
 
+test('operator domain views enforce RBAC and return minimized operational data', async () => {
+  seedOperatorDomainEvidence();
+  const endpoints: Array<{
+    path: string;
+    allowed: OperatorRole[];
+  }> = [
+    { path: '/api/operator/customer-users', allowed: ['super_admin', 'support', 'security'] },
+    { path: '/api/operator/subscriptions', allowed: ['super_admin', 'billing'] },
+    { path: '/api/operator/usage', allowed: ['super_admin', 'billing'] },
+    { path: '/api/operator/payments', allowed: ['super_admin', 'billing'] },
+    { path: '/api/operator/agents', allowed: ['super_admin', 'support', 'security'] },
+    { path: '/api/operator/jobs', allowed: ['super_admin', 'support', 'security'] },
+    { path: '/api/operator/abuse-events', allowed: ['super_admin', 'security'] },
+  ];
+
+  for (const endpoint of endpoints) {
+    for (const role of ['super_admin', 'support', 'billing', 'security', 'viewer'] as const) {
+      const response = await get(endpoint.path, auth(requireToken(role)));
+      assert.equal(
+        response.status,
+        endpoint.allowed.includes(role) ? 200 : 403,
+        `${role} ${endpoint.path}`,
+      );
+    }
+  }
+
+  const customerUsers = await json('/api/operator/customer-users', 'super_admin');
+  assert.equal(customerUsers[0].userRef, 'USR-000001');
+  assert.equal(customerUsers[0].emailVerified, true);
+
+  const subscriptions = await json('/api/operator/subscriptions?workspaceId=1', 'billing');
+  assert.equal(subscriptions[0].planKey, 'free');
+
+  const usage = await json('/api/operator/usage', 'billing');
+  assert.equal(usage[0].meter, 'llm.input_tokens');
+  assert.equal(usage[0].creditsCharged, 20);
+
+  const payments = await json('/api/operator/payments', 'billing') as unknown as {
+    invoices: Array<Record<string, unknown>>;
+    refunds: Array<Record<string, unknown>>;
+    webhookFailures: Array<Record<string, unknown>>;
+  };
+  assert.equal(payments.invoices[0]?.amountDueMinor, 2900);
+  assert.equal(payments.refunds[0]?.amountMinor, 500);
+  assert.equal(payments.webhookFailures[0]?.errorPresent, true);
+
+  const agents = await json('/api/operator/agents', 'support');
+  assert.equal(agents[0].agentRef, 'AGT-000001');
+  const jobs = await json('/api/operator/jobs', 'security');
+  assert.equal(jobs[0].hasError, true);
+  const abuse = await json('/api/operator/abuse-events', 'security');
+  assert.equal(abuse[0].ruleKey, 'auth.login');
+
+  const serialized = JSON.stringify({ customerUsers, subscriptions, usage, payments, agents, jobs, abuse });
+  for (const sensitive of [
+    'workspace-owner@example.com',
+    'customer-password-hash',
+    'provider-customer-sensitive',
+    'provider-subscription-sensitive',
+    'provider-invoice-sensitive',
+    'provider-refund-sensitive',
+    'hosted-invoice-sensitive',
+    'webhook-payload-sensitive',
+    'webhook-error-sensitive',
+    'agent-source-path-sensitive',
+    'Operator test Agent',
+    'operator-test-agent',
+    'agent-config-sensitive',
+    'job-payload-sensitive',
+    'job-result-sensitive',
+    'job-error-sensitive',
+    'abuse-subject-sensitive',
+    'abuse-metadata-sensitive',
+  ]) {
+    assert.equal(serialized.includes(sensitive), false, sensitive);
+  }
+
+  assert.equal((await get(
+    '/api/operator/agents?workspaceId=invalid',
+    auth(superToken),
+  )).status, 400);
+  assert.deepEqual(await json('/api/operator/agents?workspaceId=9999', 'super_admin'), []);
+});
+
 test('support access is assigned, scoped, time-limited, revocable, and audited', async () => {
   const supportUser = requireUser('support');
   const tooLong = await post('/api/operator/support-grants', {
@@ -321,6 +405,75 @@ function requireToken(role: OperatorRole): string {
   const token = operatorTokens.get(role);
   assert.ok(token, `missing token for ${role}`);
   return token;
+}
+
+async function json(path: string, role: OperatorRole): Promise<Array<Record<string, unknown>>> {
+  const response = await get(path, auth(requireToken(role)));
+  assert.equal(response.status, 200);
+  return response.json() as Promise<Array<Record<string, unknown>>>;
+}
+
+function seedOperatorDomainEvidence(): void {
+  const meterPrice = database.query<{ id: number }>(`
+    SELECT id FROM meter_prices WHERE meter = 'llm.input_tokens' LIMIT 1;
+  `)[0];
+  assert.ok(meterPrice);
+  database.run(`
+    UPDATE users SET password_hash = 'customer-password-hash' WHERE id = 1;
+    INSERT INTO agents (workspace_id, name, slug, description, path, status)
+    VALUES (1, 'Operator test Agent', 'operator-test-agent', '',
+      'agent-source-path-sensitive', 'published');
+    INSERT INTO agent_configs (agent_id, config_json)
+    VALUES (last_insert_rowid(), '{"secret":"agent-config-sensitive"}');
+    INSERT INTO jobs (
+      workspace_id, type, status, attempts, max_attempts,
+      payload_json, result_json, error
+    ) VALUES (
+      1, 'agent.validation', 'failed', 3, 3,
+      '{"secret":"job-payload-sensitive"}',
+      '{"secret":"job-result-sensitive"}',
+      'job-error-sensitive'
+    );
+    INSERT INTO rated_usage_events (
+      workspace_id, idempotency_key, meter, provider, model, quantity,
+      billable_units, credits_charged, provider_cost_micros, meter_price_id,
+      resource_type, resource_id, metadata_json, occurred_at
+    ) VALUES (
+      1, 'operator-usage-test', 'llm.input_tokens', 'mock', 'mock-model', 2000,
+      2, 20, 3000, ${sqlValue(meterPrice.id)}, 'run', '1', '{}', CURRENT_TIMESTAMP
+    );
+    INSERT INTO billing_invoices (
+      workspace_id, provider, provider_invoice_ref, provider_customer_ref,
+      provider_subscription_ref, status, currency, amount_due_minor,
+      amount_paid_minor, hosted_invoice_url, invoice_pdf_url
+    ) VALUES (
+      1, 'stripe', 'provider-invoice-sensitive', 'provider-customer-sensitive',
+      'provider-subscription-sensitive', 'open', 'usd', 2900, 0,
+      'hosted-invoice-sensitive', 'invoice-pdf-sensitive'
+    );
+    INSERT INTO billing_refunds (
+      workspace_id, provider, provider_refund_ref, provider_payment_ref,
+      provider_invoice_ref, status, amount_minor, currency, reason
+    ) VALUES (
+      1, 'stripe', 'provider-refund-sensitive', 'provider-payment-sensitive',
+      'provider-invoice-sensitive', 'succeeded', 500, 'usd', 'private-reason-sensitive'
+    );
+    INSERT INTO payment_webhook_events (
+      provider, provider_event_ref, event_type, payload_json,
+      workspace_id, status, error
+    ) VALUES (
+      'stripe', 'provider-event-sensitive', 'invoice.payment_failed',
+      '{"secret":"webhook-payload-sensitive"}', 1, 'failed', 'webhook-error-sensitive'
+    );
+    INSERT INTO abuse_enforcement_events (
+      event_id, rule_key, action, subject_hash, outcome,
+      retry_after_seconds, metadata_json
+    ) VALUES (
+      'abuse-event-operator-test', 'auth.login', 'rate_limit',
+      'abuse-subject-sensitive', 'rate_limited', 60,
+      '{"secret":"abuse-metadata-sensitive"}'
+    );
+  `);
 }
 
 function requireUser(role: OperatorRole): OperatorUser {

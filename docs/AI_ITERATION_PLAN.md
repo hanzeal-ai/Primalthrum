@@ -2031,8 +2031,15 @@ complete. Follow the same dependency and verification protocol used above.
   immutability, and sensitive metadata filtering. React tests mirror the role
   matrix; isolated desktop and Pixel 5 Playwright checks cover login, readiness,
   Workspace and support views, console health, and horizontal overflow. Detailed
-  user, subscription, payment, Agent, Job, abuse, feature-flag, and incident views
-  remain open.
+  minimized customer-user, subscription, monthly usage, invoice/refund/Webhook,
+  Agent, Job, and abuse views are now isolated behind domain-specific Operator
+  permissions. Stable customer and Agent references replace customer email,
+  Agent names, and slugs; payment Provider references/payloads/errors, Agent
+  configuration/source paths, Job payload/results/errors, and abuse subject hashes
+  are excluded. HTTP tests exercise all five roles, Workspace filtering, audit,
+  and seeded sensitive-field non-disclosure. Responsive desktop and mobile
+  acceptance traverses every new section without page overflow or browser errors.
+  Feature-flag and incident lifecycle views remain open.
 
 ### P21-01 Security, Privacy, And Compliance Baseline
 

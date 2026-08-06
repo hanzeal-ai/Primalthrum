@@ -110,6 +110,7 @@ import { registerAbuseRoutes } from './routes/abuseRoutes';
 import { registerSecuritySettingsRoutes } from './routes/securitySettingsRoutes';
 import { registerRetentionSettingsRoutes } from './routes/retentionSettingsRoutes';
 import { registerMfaRoutes } from './routes/mfaRoutes';
+import { registerOperatorDomainRoutes } from './routes/operatorDomainRoutes';
 import { registerOperatorRoutes } from './routes/operatorRoutes';
 import { ApiKeyRepository } from './services/apiKeyRepository';
 import { MfaRepository } from './services/mfaRepository';
@@ -124,7 +125,11 @@ import {
 } from './services/workspaceAuthorization';
 import { OperatorIdentityRepository } from './services/operatorIdentityRepository';
 import { OperatorAuditRepository } from './services/operatorAuditRepository';
+import { OperatorBillingReadRepository } from './services/operatorBillingReadRepository';
+import { OperatorCustomerReadRepository } from './services/operatorCustomerReadRepository';
 import { OperatorReadRepository } from './services/operatorReadRepository';
+import { OperatorRuntimeReadRepository } from './services/operatorRuntimeReadRepository';
+import { OperatorSecurityReadRepository } from './services/operatorSecurityReadRepository';
 import { SupportAccessRepository } from './services/supportAccessRepository';
 
 export interface AppOptions {
@@ -256,7 +261,11 @@ export function createApp(options: AppOptions = {}): Koa {
   const sessionRepository = new SessionRepository(db);
   const operatorIdentity = new OperatorIdentityRepository(db);
   const operatorAudit = new OperatorAuditRepository(db);
+  const operatorBillingReads = new OperatorBillingReadRepository(db);
+  const operatorCustomerReads = new OperatorCustomerReadRepository(db);
   const operatorReads = new OperatorReadRepository(db);
+  const operatorRuntimeReads = new OperatorRuntimeReadRepository(db);
+  const operatorSecurityReads = new OperatorSecurityReadRepository(db);
   const supportAccess = new SupportAccessRepository(db);
   const localSecretVault = new LocalSecretVault(db);
   const mfaService = new MfaService(new MfaRepository(db, localSecretVault));
@@ -656,6 +665,15 @@ export function createApp(options: AppOptions = {}): Koa {
     reads: operatorReads,
     readiness: () => checkServerReadiness({ db, agentBaseUrl }),
     support: supportAccess,
+  });
+  registerOperatorDomainRoutes(operatorRouter, {
+    audit: operatorAudit,
+    billingReads: operatorBillingReads,
+    customerReads: operatorCustomerReads,
+    identity: operatorIdentity,
+    logger,
+    runtimeReads: operatorRuntimeReads,
+    securityReads: operatorSecurityReads,
   });
 
   app.use(async (ctx, next) => {

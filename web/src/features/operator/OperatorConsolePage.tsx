@@ -1,27 +1,40 @@
 import {
+  Bot,
   Building2,
   ClipboardList,
+  CreditCard,
   Headphones,
   LayoutDashboard,
   Loader2,
   LogOut,
   RefreshCw,
+  ShieldAlert,
   ShieldCheck,
   UserCog,
+  Users,
 } from 'lucide-react'
 import { useCallback, useEffect, useState } from 'react'
 
 import { Badge } from '../../components/ui/badge'
 import { Button } from '../../components/ui/button'
 import { OperatorAuditSection } from './OperatorAuditSection'
+import { OperatorBillingSection } from './OperatorBillingSection'
 import {
   getOperatorOverview,
   getSupportContext,
+  listOperatorAbuseEvents,
+  listOperatorAgents,
   listOperatorAudit,
+  listOperatorCustomerUsers,
+  listOperatorJobs,
+  listOperatorPayments,
+  listOperatorSubscriptions,
+  listOperatorUsage,
   listOperators,
   listOperatorWorkspaces,
   listSupportGrants,
 } from './operatorClient'
+import { OperatorCustomerSection } from './OperatorCustomerSection'
 import { operatorRoleLabel } from './operatorFormatters'
 import { OperatorOverviewSection } from './OperatorOverviewSection'
 import {
@@ -30,11 +43,20 @@ import {
   type OperatorSection,
 } from './operatorPermissions'
 import { OperatorSupportSection } from './OperatorSupportSection'
+import { OperatorRuntimeSection } from './OperatorRuntimeSection'
+import { OperatorSecuritySection } from './OperatorSecuritySection'
 import type {
+  OperatorAbuseEventSummary,
+  OperatorAgentSummary,
   OperatorAuditRecord,
+  OperatorCustomerUserSummary,
+  OperatorJobSummary,
   OperatorOverviewResponse,
+  OperatorPaymentSummary,
   OperatorRole,
+  OperatorSubscriptionSummary,
   OperatorUser,
+  OperatorUsageSummary,
   OperatorWorkspaceSummary,
   SupportAccessGrant,
 } from './operatorTypes'
@@ -44,6 +66,10 @@ import { OperatorWorkspacesSection } from './OperatorWorkspacesSection'
 const NAV_ITEMS = [
   { key: 'overview', label: '概览', icon: LayoutDashboard },
   { key: 'workspaces', label: 'Workspaces', icon: Building2 },
+  { key: 'customers', label: '客户', icon: Users },
+  { key: 'billing', label: '计费', icon: CreditCard },
+  { key: 'runtime', label: '运行', icon: Bot },
+  { key: 'security', label: '安全', icon: ShieldAlert },
   { key: 'support', label: '支持访问', icon: Headphones },
   { key: 'operators', label: 'Operators', icon: UserCog },
   { key: 'audit', label: '审计', icon: ClipboardList },
@@ -58,6 +84,13 @@ export function OperatorConsolePage({ onLogout, user }: OperatorConsolePageProps
   const [section, setSection] = useState<OperatorSection>(sectionFromUrl(user.role))
   const [overview, setOverview] = useState<OperatorOverviewResponse | null>(null)
   const [workspaces, setWorkspaces] = useState<OperatorWorkspaceSummary[]>([])
+  const [customerUsers, setCustomerUsers] = useState<OperatorCustomerUserSummary[]>([])
+  const [subscriptions, setSubscriptions] = useState<OperatorSubscriptionSummary[]>([])
+  const [usage, setUsage] = useState<OperatorUsageSummary[]>([])
+  const [payments, setPayments] = useState<OperatorPaymentSummary>({ invoices: [], refunds: [], webhookFailures: [] })
+  const [agents, setAgents] = useState<OperatorAgentSummary[]>([])
+  const [jobs, setJobs] = useState<OperatorJobSummary[]>([])
+  const [abuseEvents, setAbuseEvents] = useState<OperatorAbuseEventSummary[]>([])
   const [operators, setOperators] = useState<OperatorUser[]>([])
   const [grants, setGrants] = useState<SupportAccessGrant[]>([])
   const [audit, setAudit] = useState<OperatorAuditRecord[]>([])
@@ -71,6 +104,26 @@ export function OperatorConsolePage({ onLogout, user }: OperatorConsolePageProps
     try {
       if (target === 'overview') setOverview(await getOperatorOverview())
       if (target === 'workspaces') setWorkspaces(await listOperatorWorkspaces())
+      if (target === 'customers') setCustomerUsers(await listOperatorCustomerUsers())
+      if (target === 'billing') {
+        const [loadedSubscriptions, loadedUsage, loadedPayments] = await Promise.all([
+          listOperatorSubscriptions(),
+          listOperatorUsage(),
+          listOperatorPayments(),
+        ])
+        setSubscriptions(loadedSubscriptions)
+        setUsage(loadedUsage)
+        setPayments(loadedPayments)
+      }
+      if (target === 'runtime') {
+        const [loadedAgents, loadedJobs] = await Promise.all([
+          listOperatorAgents(),
+          listOperatorJobs(),
+        ])
+        setAgents(loadedAgents)
+        setJobs(loadedJobs)
+      }
+      if (target === 'security') setAbuseEvents(await listOperatorAbuseEvents())
       if (target === 'operators') setOperators(await listOperators())
       if (target === 'audit') setAudit(await listOperatorAudit())
       if (target === 'support') {
@@ -152,7 +205,10 @@ export function OperatorConsolePage({ onLogout, user }: OperatorConsolePageProps
             </div>
           ) : (
             <OperatorSection
+              abuseEvents={abuseEvents}
+              agents={agents}
               audit={audit}
+              customerUsers={customerUsers}
               grants={grants}
               onContext={async (grantId) => {
                 try {
@@ -164,8 +220,12 @@ export function OperatorConsolePage({ onLogout, user }: OperatorConsolePageProps
               onReload={() => loadSection(section)}
               operators={operators}
               overview={overview}
+              payments={payments}
               section={section}
+              jobs={jobs}
+              subscriptions={subscriptions}
               supportContext={supportContext}
+              usage={usage}
               user={user}
               workspaces={workspaces}
             />
@@ -177,19 +237,30 @@ export function OperatorConsolePage({ onLogout, user }: OperatorConsolePageProps
 }
 
 function OperatorSection(props: {
+  abuseEvents: OperatorAbuseEventSummary[]
+  agents: OperatorAgentSummary[]
   audit: OperatorAuditRecord[]
+  customerUsers: OperatorCustomerUserSummary[]
   grants: SupportAccessGrant[]
   onContext: (grantId: number) => Promise<void>
   onReload: () => Promise<void>
+  jobs: OperatorJobSummary[]
   operators: OperatorUser[]
   overview: OperatorOverviewResponse | null
+  payments: OperatorPaymentSummary
   section: OperatorSection
+  subscriptions: OperatorSubscriptionSummary[]
   supportContext: Record<string, unknown> | null
+  usage: OperatorUsageSummary[]
   user: OperatorUser
   workspaces: OperatorWorkspaceSummary[]
 }) {
   if (props.section === 'overview') return <OperatorOverviewSection data={props.overview} />
   if (props.section === 'workspaces') return <OperatorWorkspacesSection workspaces={props.workspaces} />
+  if (props.section === 'customers') return <OperatorCustomerSection users={props.customerUsers} />
+  if (props.section === 'billing') return <OperatorBillingSection payments={props.payments} subscriptions={props.subscriptions} usage={props.usage} />
+  if (props.section === 'runtime') return <OperatorRuntimeSection agents={props.agents} jobs={props.jobs} />
+  if (props.section === 'security') return <OperatorSecuritySection events={props.abuseEvents} />
   if (props.section === 'support') return <OperatorSupportSection {...props} />
   if (props.section === 'operators') return <OperatorUsersSection {...props} />
   return <OperatorAuditSection events={props.audit} />

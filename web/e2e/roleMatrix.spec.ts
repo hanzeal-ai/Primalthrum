@@ -21,6 +21,8 @@ for (const access of ROLE_MATRIX) {
 
     await page.goto('/app/team')
     await expect(page.getByRole('heading', { name: '团队成员' })).toBeVisible()
+    await expect(page.getByRole('heading', { name: '成员', exact: true }))
+      .toBeVisible({ timeout: 15_000 })
     await expect(page.getByLabel('邀请邮箱')).toHaveCount(access.membersManage ? 1 : 0)
     await expectDesktopNavigation(page, access)
     await expectNoHorizontalOverflow(page)

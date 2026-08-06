@@ -16,12 +16,15 @@ import { OperatorReadRepository } from '../services/operatorReadRepository';
 import { hashPassword, verifyPassword, verifyPasswordOrDummy } from '../services/passwordHash';
 import { SupportAccessRepository } from '../services/supportAccessRepository';
 
-interface OperatorRouteOptions {
+export interface OperatorRouteSecurityOptions {
   audit: OperatorAuditRepository;
-  bootstrapToken?: string;
-  enforceAbuse: (ctx: Koa.Context) => Promise<boolean>;
   identity: OperatorIdentityRepository;
   logger: StructuredLogger;
+}
+
+interface OperatorRouteOptions extends OperatorRouteSecurityOptions {
+  bootstrapToken?: string;
+  enforceAbuse: (ctx: Koa.Context) => Promise<boolean>;
   reads: OperatorReadRepository;
   readiness: () => Promise<unknown>;
   support: SupportAccessRepository;
@@ -311,9 +314,9 @@ export function registerOperatorRoutes(
   });
 }
 
-function requireOperator(
+export function requireOperator(
   ctx: Koa.Context,
-  options: OperatorRouteOptions,
+  options: OperatorRouteSecurityOptions,
   permission?: OperatorPermission,
   allowPasswordChange = false,
 ): AuthenticatedOperatorSession | null {
@@ -397,7 +400,7 @@ function operatorRequestError(
   );
 }
 
-function operatorError(
+export function operatorError(
   ctx: Koa.Context,
   logger: StructuredLogger,
   status: number,

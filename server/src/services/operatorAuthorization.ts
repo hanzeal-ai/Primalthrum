@@ -11,7 +11,10 @@ export type OperatorRole = typeof OPERATOR_ROLES[number];
 export type OperatorPermission =
   | 'overview.read'
   | 'workspaces.read'
+  | 'customer_users.read'
   | 'billing.read'
+  | 'agents.read'
+  | 'jobs.read'
   | 'abuse.read'
   | 'operators.read'
   | 'operators.manage'
@@ -32,7 +35,10 @@ export type SupportGrantPermission = typeof SUPPORT_GRANT_PERMISSIONS[number];
 const ALL_OPERATOR_PERMISSIONS: readonly OperatorPermission[] = [
   'overview.read',
   'workspaces.read',
+  'customer_users.read',
   'billing.read',
+  'agents.read',
+  'jobs.read',
   'abuse.read',
   'operators.read',
   'operators.manage',
@@ -47,6 +53,9 @@ const ROLE_PERMISSIONS: Record<OperatorRole, ReadonlySet<OperatorPermission>> = 
   support: new Set([
     'overview.read',
     'workspaces.read',
+    'customer_users.read',
+    'agents.read',
+    'jobs.read',
     'operators.read',
     'support.read',
     'support.use',
@@ -59,6 +68,9 @@ const ROLE_PERMISSIONS: Record<OperatorRole, ReadonlySet<OperatorPermission>> = 
   security: new Set([
     'overview.read',
     'workspaces.read',
+    'customer_users.read',
+    'agents.read',
+    'jobs.read',
     'abuse.read',
     'operators.read',
     'support.read',

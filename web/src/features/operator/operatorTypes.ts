@@ -68,6 +68,128 @@ export interface OperatorWorkspaceSummary {
   createdAt: string
 }
 
+export interface OperatorCustomerUserSummary {
+  userId: number
+  userRef: string
+  workspaceId: number
+  workspaceName: string
+  role: string
+  status: string
+  emailVerified: boolean
+  mfaEnabled: boolean
+  lastSessionAt: string | null
+  createdAt: string
+}
+
+export interface OperatorSubscriptionSummary {
+  workspaceId: number
+  workspaceName: string
+  planKey: string
+  state: string
+  pendingPlanKey: string
+  provider: string
+  periodStartsAt: string
+  periodEndsAt: string | null
+  trialEndsAt: string | null
+  graceEndsAt: string | null
+  cancelAtPeriodEnd: boolean
+  updatedAt: string
+}
+
+export interface OperatorUsageSummary {
+  workspaceId: number
+  workspaceName: string
+  meter: string
+  quantity: number
+  billableUnits: number
+  creditsCharged: number
+  providerCostMicros: number
+  lastOccurredAt: string
+}
+
+export interface OperatorInvoiceSummary {
+  id: number
+  workspaceId: number
+  workspaceName: string
+  status: string
+  currency: string
+  amountDueMinor: number
+  amountPaidMinor: number
+  amountRefundedMinor: number
+  dueAt: string | null
+  paidAt: string | null
+  createdAt: string
+}
+
+export interface OperatorRefundSummary {
+  id: number
+  workspaceId: number
+  workspaceName: string
+  status: string
+  currency: string
+  amountMinor: number
+  createdAt: string
+}
+
+export interface OperatorWebhookFailureSummary {
+  id: number
+  provider: string
+  eventType: string
+  livemode: boolean
+  workspaceId: number | null
+  status: string
+  attempts: number
+  errorPresent: boolean
+  receivedAt: string
+  processedAt: string | null
+}
+
+export interface OperatorPaymentSummary {
+  invoices: OperatorInvoiceSummary[]
+  refunds: OperatorRefundSummary[]
+  webhookFailures: OperatorWebhookFailureSummary[]
+}
+
+export interface OperatorAgentSummary {
+  id: number
+  agentRef: string
+  workspaceId: number
+  workspaceName: string
+  status: string
+  versionCount: number
+  activeDeploymentCount: number
+  previewVersionId: number | null
+  publishedVersionId: number | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface OperatorJobSummary {
+  id: number
+  workspaceId: number
+  workspaceName: string
+  type: string
+  status: string
+  attempts: number
+  maxAttempts: number
+  hasError: boolean
+  runAt: string
+  startedAt: string | null
+  completedAt: string | null
+  createdAt: string
+  updatedAt: string
+}
+
+export interface OperatorAbuseEventSummary {
+  id: number
+  eventId: string
+  ruleKey: string
+  action: string
+  outcome: string
+  retryAfterSeconds: number
+  createdAt: string
+}
+
 export type SupportGrantPermission =
   | 'workspace.metadata.read'
   | 'workspace.agents.read'

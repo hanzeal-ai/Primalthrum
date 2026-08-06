@@ -9,7 +9,14 @@ const api = vi.hoisted(() => ({
   createSupportGrant: vi.fn(),
   getOperatorOverview: vi.fn(),
   getSupportContext: vi.fn(),
+  listOperatorAbuseEvents: vi.fn(),
+  listOperatorAgents: vi.fn(),
   listOperatorAudit: vi.fn(),
+  listOperatorCustomerUsers: vi.fn(),
+  listOperatorJobs: vi.fn(),
+  listOperatorPayments: vi.fn(),
+  listOperatorSubscriptions: vi.fn(),
+  listOperatorUsage: vi.fn(),
   listOperators: vi.fn(),
   listOperatorWorkspaces: vi.fn(),
   listSupportGrants: vi.fn(),
@@ -42,6 +49,13 @@ describe('OperatorConsolePage', () => {
   beforeEach(() => {
     window.history.replaceState(null, '', '/operator')
     api.getOperatorOverview.mockResolvedValue(overview)
+    api.listOperatorAbuseEvents.mockResolvedValue([])
+    api.listOperatorAgents.mockResolvedValue([])
+    api.listOperatorCustomerUsers.mockResolvedValue([])
+    api.listOperatorJobs.mockResolvedValue([])
+    api.listOperatorPayments.mockResolvedValue({ invoices: [], refunds: [], webhookFailures: [] })
+    api.listOperatorSubscriptions.mockResolvedValue([])
+    api.listOperatorUsage.mockResolvedValue([])
     api.listOperatorWorkspaces.mockResolvedValue([])
     api.listOperators.mockResolvedValue([])
     api.listSupportGrants.mockResolvedValue([])
@@ -58,6 +72,10 @@ describe('OperatorConsolePage', () => {
 
     expect(await screen.findByText('18')).toBeTruthy()
     expect(screen.queryByRole('button', { name: '支持访问' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '客户' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '计费' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '运行' })).toBeNull()
+    expect(screen.queryByRole('button', { name: '安全' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Operators' })).toBeNull()
     expect(screen.queryByRole('button', { name: '审计' })).toBeNull()
     expect(screen.getAllByRole('button', { name: 'Workspaces' }).length).toBeGreaterThan(0)
@@ -74,6 +92,12 @@ describe('OperatorConsolePage', () => {
     expect(api.listOperatorWorkspaces).toHaveBeenCalled()
     expect(api.listOperators).toHaveBeenCalled()
     expect(await screen.findByText('创建限时授权')).toBeTruthy()
+
+    fireEvent.click(screen.getAllByRole('button', { name: '计费' })[0])
+    await waitFor(() => expect(api.listOperatorSubscriptions).toHaveBeenCalled())
+    expect(api.listOperatorUsage).toHaveBeenCalled()
+    expect(api.listOperatorPayments).toHaveBeenCalled()
+    expect(await screen.findByText('支付事件')).toBeTruthy()
   })
 })
 

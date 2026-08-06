@@ -9,25 +9,23 @@ import {
 import type { OperatorRole } from './operatorTypes'
 
 describe('operator permission matrix', () => {
-  it.each<[OperatorRole, boolean, boolean, boolean, boolean]>([
-    ['super_admin', true, true, true, true],
-    ['support', true, false, true, false],
-    ['billing', false, false, false, false],
-    ['security', true, true, false, true],
-    ['viewer', false, false, false, false],
+  it.each<[OperatorRole, string[]]>([
+    ['super_admin', ['customers', 'billing', 'runtime', 'security', 'support', 'operators', 'audit']],
+    ['support', ['customers', 'runtime', 'support', 'operators']],
+    ['billing', ['billing']],
+    ['security', ['customers', 'runtime', 'security', 'support', 'operators', 'audit']],
+    ['viewer', []],
   ])('matches control-plane duties for %s', (
     role,
-    supportVisible,
-    supportManage,
-    supportUse,
-    auditVisible,
+    allowed,
   ) => {
     expect(operatorSectionAllowed(role, 'overview')).toBe(true)
     expect(operatorSectionAllowed(role, 'workspaces')).toBe(true)
-    expect(operatorSectionAllowed(role, 'support')).toBe(supportVisible)
-    expect(operatorSectionAllowed(role, 'audit')).toBe(auditVisible)
+    for (const section of ['customers', 'billing', 'runtime', 'security', 'support', 'operators', 'audit'] as const) {
+      expect(operatorSectionAllowed(role, section)).toBe(allowed.includes(section))
+    }
     expect(canManageOperators(role)).toBe(role === 'super_admin')
-    expect(canManageSupport(role)).toBe(supportManage)
-    expect(canUseSupport(role)).toBe(supportUse)
+    expect(canManageSupport(role)).toBe(role === 'super_admin' || role === 'security')
+    expect(canUseSupport(role)).toBe(role === 'super_admin' || role === 'support')
   })
 })
