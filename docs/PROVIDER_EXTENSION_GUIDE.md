@@ -69,3 +69,8 @@ if config.memory_provider == "example":
 - Speech providers use the same encrypted workspace secret boundary. Browser audio
   must go through the authenticated Node API; keep Agent `/internal/speech/*`
   endpoints on the trusted service network.
+- Every customer-configurable provider endpoint must pass
+  `runtime.endpoint_policy` immediately before the outbound request. Do not enable
+  redirects, environment proxy discovery, private addresses, metadata hostnames,
+  or a provider-specific bypass. Mock transports may skip DNS resolution in tests,
+  but they must still pass URL and literal-address validation.

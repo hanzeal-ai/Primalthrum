@@ -19,6 +19,13 @@ Use this checklist before tagging or deploying a commercial Primalthrum build.
   active runs, billing evidence, and security audit archives survive enforcement.
 - A retention smoke run proves tenant-scoped metadata deletion and physical
   document removal without leaving a pending file-deletion outbox backlog.
+- Production startup fails without a private ClamAV service, and clean, rejected,
+  and scanner-error upload paths have passing HTTP and immutable audit evidence.
+- Provider endpoints reject credentials, non-HTTPS URLs, query/fragment ambiguity,
+  private/reserved literals, metadata hostnames, and private or mixed DNS answers.
+- Runtime egress permits only approved Provider destinations. ClamAV, the Python
+  Agent service, cloud metadata ranges, RFC1918, and link-local networks are not
+  reachable through customer-configurable Provider URLs.
 - API clients show standardized `error.code`, `error.message`, and `error.status` without exposing secrets.
 - Public endpoints are limited to liveness, readiness, metrics, setup, auth, and documented public flows.
 
@@ -96,6 +103,11 @@ Confirm:
   reused values fail, and an invitation remains pending until MFA succeeds.
 - A Business or Enterprise test Workspace saves and enforces a finite retention
   policy while a second Workspace and active runs remain unchanged.
+- An EICAR test upload returns `DOCUMENT_THREAT_DETECTED` without creating a
+  document or charging storage, and a stopped ClamAV returns
+  `DOCUMENT_SCAN_UNAVAILABLE` without accepting the upload.
+- A Provider endpoint resolving to any private or metadata address is rejected
+  before network transport, including mixed public/private DNS answers.
 
 ## Known Limitations
 

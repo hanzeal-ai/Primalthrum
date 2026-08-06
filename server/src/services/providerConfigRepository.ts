@@ -1,6 +1,7 @@
 import { initializeSchema } from '../db/schema';
 import { SqliteDatabase, sqlValue } from '../db/sqlite';
 import { LocalSecretVault } from './localSecretVault';
+import { normalizeProviderBaseUrl } from './providerEndpointPolicy';
 
 export interface ProviderConfigRecord {
   id: number;
@@ -168,7 +169,14 @@ function normalizeConfig(value: unknown): Record<string, unknown> {
     throw new Error('provider config must be an object');
   }
 
-  return value as Record<string, unknown>;
+  const config = { ...value as Record<string, unknown> };
+  if (typeof config.baseUrl !== 'undefined') {
+    if (typeof config.baseUrl !== 'string') {
+      throw new Error('provider baseUrl must be a string');
+    }
+    config.baseUrl = normalizeProviderBaseUrl(config.baseUrl);
+  }
+  return config;
 }
 
 function normalizeSecret(secret: unknown): string {

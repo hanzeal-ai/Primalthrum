@@ -20,6 +20,10 @@ DOCUMENT_STORAGE_DIR=/var/lib/primalthrum/documents pnpm start
 
 Document records store only a `storageRef`, such as `local://documents/...`; API responses never include the original file content after registration.
 
+Every upload is parsed and malware-scanned before credit reservation, metadata
+creation, or file persistence. Production startup requires a configured ClamAV
+service. See [Upload And Provider Egress Security](UPLOAD_EGRESS_SECURITY.md).
+
 ## Provider Contract
 
 Storage providers implement:

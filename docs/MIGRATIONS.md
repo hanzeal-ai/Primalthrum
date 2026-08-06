@@ -50,5 +50,9 @@ Workspace override per Flag and Workspace, deterministic percentage rollout,
 immutable Flag history, scoped operational incidents, and immutable incident
 timelines. Database guards reject deletion, stale revisions, invalid incident
 resolution state, and mutation of historical events.
+Migration `029_document_upload_security` adds immutable minimized upload-scan
+evidence. It stores tenant/resource/actor IDs, filename and content hashes, MIME,
+size, scanner, result, and bounded threat metadata without storing the filename
+or document content. Database triggers reject update and deletion.
 
 See [Postgres Persistence Path](POSTGRES_PERSISTENCE.md) before adding migrations that rely on SQLite-only SQL.

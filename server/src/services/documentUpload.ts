@@ -1,4 +1,5 @@
-import { extname } from 'node:path';
+import { createHash } from 'node:crypto';
+import { basename, extname } from 'node:path';
 
 const MAX_DOCUMENT_BYTES = 2 * 1024 * 1024;
 const ALLOWED_TYPES: Record<string, ReadonlySet<string>> = {
@@ -20,12 +21,14 @@ export interface ParsedDocumentUpload {
   filename: string;
   mimeType: string;
   sizeBytes: number;
+  bytes: Buffer;
+  contentSha256: string;
   content: string;
   collection: string;
 }
 
 export function parseDocumentUpload(input: DocumentUploadInput): ParsedDocumentUpload {
-  const filename = requiredText(input.filename, 'filename');
+  const filename = normalizedFilename(input.filename);
   const mimeType = normalizeMimeType(input.mimeType);
   const extension = extname(filename).toLowerCase();
   const allowedTypes = ALLOWED_TYPES[extension];
@@ -64,9 +67,25 @@ export function parseDocumentUpload(input: DocumentUploadInput): ParsedDocumentU
     filename,
     mimeType,
     sizeBytes: bytes.length,
+    bytes,
+    contentSha256: createHash('sha256').update(bytes).digest('hex'),
     content,
     collection: optionalText(input.collection) || 'default',
   };
+}
+
+function normalizedFilename(value: unknown): string {
+  const filename = requiredText(value, 'filename').normalize('NFKC');
+  if (
+    filename.length > 255
+    || filename.includes('\\')
+    || basename(filename) !== filename
+    || filename === '.'
+    || filename === '..'
+  ) {
+    throw new Error('filename must be a bounded base name');
+  }
+  return filename;
 }
 
 function normalizeMimeType(value: unknown): string {

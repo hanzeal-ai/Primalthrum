@@ -6,6 +6,7 @@ from typing import Protocol
 import httpx
 
 from .config import ModelProviderConfig
+from .endpoint_policy import secure_provider_base_url
 from .llm import ProviderRequestError, mock_embedding
 
 
@@ -44,11 +45,16 @@ class OpenAIEmbeddingProvider:
             raise ValueError(f"api_key is required for {self.name}")
 
     def embed(self, texts: list[str]) -> list[list[float]]:
-        base_url = self.config.base_url or "https://api.openai.com/v1"
+        base_url = secure_provider_base_url(
+            self.config.base_url or "https://api.openai.com/v1",
+            resolve_dns=self.transport is None,
+        )
         try:
             with httpx.Client(
                 timeout=httpx.Timeout(60.0, connect=10.0),
                 transport=self.transport,
+                follow_redirects=False,
+                trust_env=False,
             ) as client:
                 response = client.post(
                     f"{base_url.rstrip('/')}/embeddings",

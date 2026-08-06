@@ -6,6 +6,7 @@ import httpx
 
 from runtime.config import ModelProviderConfig
 from runtime.embeddings import OpenAIEmbeddingProvider
+from runtime.endpoint_policy import ProviderEndpointPolicyError
 from runtime.llm import AnthropicChatProvider, OpenAIChatProvider
 
 
@@ -131,6 +132,34 @@ class ModelProviderTest(unittest.TestCase):
             json.loads(requests[0].content),
             {"model": "embedding-test", "input": ["first", "second"]},
         )
+
+    def test_model_providers_reject_private_endpoints_before_mock_transport(self) -> None:
+        async def handler(_request: httpx.Request) -> httpx.Response:
+            self.fail("private endpoint must be rejected before transport")
+
+        chat = OpenAIChatProvider(
+            ModelProviderConfig(
+                provider="openai-compatible",
+                model="chat-test",
+                api_key="secret",
+                base_url="https://127.0.0.1/v1",
+            ),
+            transport=httpx.MockTransport(handler),
+        )
+        with self.assertRaises(ProviderEndpointPolicyError):
+            asyncio.run(collect(chat, [{"role": "user", "content": "hello"}]))
+
+        embedding = OpenAIEmbeddingProvider(
+            ModelProviderConfig(
+                provider="openai-compatible",
+                model="embedding-test",
+                api_key="secret",
+                base_url="https://169.254.169.254/v1",
+            ),
+            transport=httpx.MockTransport(lambda _request: self.fail("must not send")),
+        )
+        with self.assertRaises(ProviderEndpointPolicyError):
+            embedding.embed(["hello"])
 
 
 if __name__ == "__main__":

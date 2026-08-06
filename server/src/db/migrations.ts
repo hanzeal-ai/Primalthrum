@@ -124,6 +124,10 @@ export const MIGRATIONS: Migration[] = [
     id: '028_operator_change_control',
     up: applyOperatorChangeControl,
   },
+  {
+    id: '029_document_upload_security',
+    up: applyDocumentUploadSecurity,
+  },
 ];
 
 export function runMigrations(db: DatabaseAdapter): void {
@@ -1954,6 +1958,41 @@ function applyOperatorChangeControl(db: DatabaseAdapter): void {
     BEFORE DELETE ON operator_incident_events
     BEGIN
       SELECT RAISE(ABORT, 'operator incident events are immutable');
+    END;
+  `);
+}
+
+function applyDocumentUploadSecurity(db: DatabaseAdapter): void {
+  db.run(`
+    CREATE TABLE IF NOT EXISTS document_upload_security_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_id TEXT NOT NULL UNIQUE,
+      workspace_id INTEGER NOT NULL,
+      agent_id INTEGER NOT NULL,
+      user_id INTEGER NOT NULL,
+      filename_hash TEXT NOT NULL CHECK(length(filename_hash) = 64),
+      content_sha256 TEXT NOT NULL CHECK(length(content_sha256) = 64),
+      mime_type TEXT NOT NULL,
+      size_bytes INTEGER NOT NULL CHECK(size_bytes > 0),
+      scanner TEXT NOT NULL,
+      status TEXT NOT NULL CHECK(status IN ('clean', 'rejected', 'error')),
+      threat_name TEXT NOT NULL DEFAULT '',
+      created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+    );
+
+    CREATE INDEX IF NOT EXISTS document_upload_security_workspace_time_idx
+      ON document_upload_security_events(workspace_id, created_at DESC, id DESC);
+
+    CREATE TRIGGER IF NOT EXISTS document_upload_security_events_no_update
+    BEFORE UPDATE ON document_upload_security_events
+    BEGIN
+      SELECT RAISE(ABORT, 'document upload security events are immutable');
+    END;
+
+    CREATE TRIGGER IF NOT EXISTS document_upload_security_events_no_delete
+    BEFORE DELETE ON document_upload_security_events
+    BEGIN
+      SELECT RAISE(ABORT, 'document upload security events are immutable');
     END;
   `);
 }

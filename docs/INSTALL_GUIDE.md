@@ -7,6 +7,7 @@ This guide installs Primalthrum for a local or single-node commercial pilot.
 - Node.js and pnpm.
 - Python 3.11 or newer.
 - `sqlite3` CLI available on `PATH`.
+- A private ClamAV service for every production deployment.
 
 ## Install Dependencies
 
@@ -31,6 +32,8 @@ Recommended production-style local paths:
 ```bash
 export DOCUMENT_STORAGE_DIR=/var/lib/primalthrum/documents
 export PRIMALTHRUM_BACKUP_DIR=/var/backups/primalthrum
+export CLAMAV_HOST=clamav
+export CLAMAV_PORT=3310
 ```
 
 ## Start

@@ -5,6 +5,7 @@ import httpx
 
 from runtime.audio import OpenAISpeechProvider
 from runtime.config import ModelProviderConfig
+from runtime.endpoint_policy import ProviderEndpointPolicyError
 
 
 class AudioProviderTest(unittest.TestCase):
@@ -63,6 +64,19 @@ class AudioProviderTest(unittest.TestCase):
                 "response_format": "mp3",
             },
         )
+
+    def test_speech_provider_rejects_metadata_endpoint_before_transport(self) -> None:
+        provider = OpenAISpeechProvider(
+            ModelProviderConfig(
+                provider="openai-compatible",
+                model="speech-test",
+                api_key="speech-secret",
+                base_url="https://169.254.169.254/v1",
+            ),
+            transport=httpx.MockTransport(lambda _request: self.fail("must not send")),
+        )
+        with self.assertRaises(ProviderEndpointPolicyError):
+            provider.synthesize("blocked")
 
 
 if __name__ == "__main__":

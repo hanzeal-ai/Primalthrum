@@ -39,6 +39,14 @@ import {
   parseDocumentUpload,
   type ParsedDocumentUpload,
 } from './services/documentUpload';
+import {
+  createDocumentMalwareScanner,
+  type DocumentMalwareScanner,
+  DocumentScanUnavailableError,
+  DocumentThreatDetectedError,
+} from './services/documentMalwareScanner';
+import { DocumentUploadSecurityRepository } from './services/documentUploadSecurityRepository';
+import { DocumentUploadSecurityService } from './services/documentUploadSecurityService';
 import { DurableJobDispatcher } from './services/durableJobDispatcher';
 import { LocalDocumentStorage } from './services/fileStorage';
 import { checkServerReadiness } from './services/healthReadiness';
@@ -138,6 +146,7 @@ import { SupportAccessRepository } from './services/supportAccessRepository';
 export interface AppOptions {
   agentBaseUrl?: string;
   dbPath?: string;
+  documentMalwareScanner?: DocumentMalwareScanner;
   documentStorageDir?: string;
   generatedAgentsDir?: string;
   logger?: StructuredLogger;
@@ -255,6 +264,10 @@ export function createApp(options: AppOptions = {}): Koa {
   const streamEventRepository = new StreamEventRepository(db);
   const documentRepository = new DocumentRepository(db);
   const documentIndexRepository = new DocumentIndexRepository(db);
+  const documentUploadSecurity = new DocumentUploadSecurityService(
+    options.documentMalwareScanner ?? createDocumentMalwareScanner(),
+    new DocumentUploadSecurityRepository(db),
+  );
   const conversationRepository = new ConversationRepository(db);
   const documentStorage = new LocalDocumentStorage(
     options.documentStorageDir ?? DEFAULT_DOCUMENT_STORAGE_DIR,
@@ -537,6 +550,44 @@ export function createApp(options: AppOptions = {}): Koa {
       releaseMeteredOperation(operation);
       throw error;
     }
+  }
+
+  async function inspectDocumentUpload(
+    ctx: Koa.Context,
+    agentId: number,
+    upload: ParsedDocumentUpload,
+  ): Promise<void> {
+    await documentUploadSecurity.inspect({
+      workspaceId: currentWorkspaceId(ctx),
+      agentId,
+      userId: currentUserId(ctx),
+      upload,
+    });
+  }
+
+  function sendDocumentUploadError(ctx: Koa.Context, error: unknown): void {
+    if (error instanceof DocumentThreatDetectedError) {
+      sendApiError(ctx, logger, {
+        status: 422,
+        code: 'DOCUMENT_THREAT_DETECTED',
+        message: 'document failed malware scan',
+      });
+      return;
+    }
+    if (error instanceof DocumentScanUnavailableError) {
+      sendApiError(ctx, logger, {
+        status: 503,
+        code: 'DOCUMENT_SCAN_UNAVAILABLE',
+        message: 'document malware scanner is unavailable',
+      });
+      return;
+    }
+    const quotaFailure = error instanceof BillingError || error instanceof UsageRatingError;
+    sendApiError(ctx, logger, {
+      status: quotaFailure ? 402 : 400,
+      code: quotaFailure ? 'CREDIT_LIMIT_EXCEEDED' : 'DOCUMENT_INVALID',
+      message: error instanceof Error ? error.message : 'failed to upload document',
+    });
   }
 
   function scopedAgent(
@@ -1347,7 +1398,7 @@ export function createApp(options: AppOptions = {}): Koa {
     }
   });
 
-  router.post('/api/agents/:id/documents', (ctx) => {
+  router.post('/api/agents/:id/documents', async (ctx) => {
     const agentId = Number(ctx.params.id);
     if (!scopedAgent(ctx, agentId, 'agents.write')) return;
 
@@ -1360,33 +1411,25 @@ export function createApp(options: AppOptions = {}): Koa {
         dataBase64: Buffer.from(content, 'utf8').toString('base64'),
         collection: input.collection,
       });
+      await inspectDocumentUpload(ctx, agentId, upload);
       ctx.status = 201;
       ctx.body = storeMeteredDocument(ctx, agentId, upload);
     } catch (error) {
-      const quotaFailure = error instanceof BillingError || error instanceof UsageRatingError;
-      sendApiError(ctx, logger, {
-        status: quotaFailure ? 402 : 400,
-        code: quotaFailure ? 'CREDIT_LIMIT_EXCEEDED' : 'DOCUMENT_INVALID',
-        message: error instanceof Error ? error.message : 'failed to register document',
-      });
+      sendDocumentUploadError(ctx, error);
     }
   });
 
-  router.post('/api/agents/:id/documents/upload', (ctx) => {
+  router.post('/api/agents/:id/documents/upload', async (ctx) => {
     const agentId = Number(ctx.params.id);
     if (!scopedAgent(ctx, agentId, 'agents.write')) return;
 
     try {
       const upload = parseDocumentUpload(ctx.request.body as Record<string, unknown>);
+      await inspectDocumentUpload(ctx, agentId, upload);
       ctx.status = 201;
       ctx.body = storeMeteredDocument(ctx, agentId, upload);
     } catch (error) {
-      const quotaFailure = error instanceof BillingError || error instanceof UsageRatingError;
-      sendApiError(ctx, logger, {
-        status: quotaFailure ? 402 : 400,
-        code: quotaFailure ? 'CREDIT_LIMIT_EXCEEDED' : 'DOCUMENT_INVALID',
-        message: error instanceof Error ? error.message : 'failed to upload document',
-      });
+      sendDocumentUploadError(ctx, error);
     }
   });
 

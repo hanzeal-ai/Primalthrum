@@ -10,6 +10,7 @@ from typing import Protocol
 import httpx
 
 from .config import ModelProviderConfig
+from .endpoint_policy import secure_provider_base_url_async
 
 
 MOCK_EMBEDDING_DIMENSIONS = 8
@@ -74,7 +75,10 @@ class OpenAIChatProvider:
 
     async def stream_chat(self, messages: list[ChatMessage]) -> AsyncIterator[str]:
         self.usage = LLMUsage()
-        base_url = self.config.base_url or "https://api.openai.com/v1"
+        base_url = await secure_provider_base_url_async(
+            self.config.base_url or "https://api.openai.com/v1",
+            resolve_dns=self.transport is None,
+        )
         payload: dict[str, object] = {
             "model": self.model,
             "messages": messages,
@@ -90,6 +94,8 @@ class OpenAIChatProvider:
             async with httpx.AsyncClient(
                 timeout=httpx.Timeout(60.0, connect=10.0),
                 transport=self.transport,
+                follow_redirects=False,
+                trust_env=False,
             ) as client:
                 async with client.stream(
                     "POST",
@@ -135,7 +141,10 @@ class AnthropicChatProvider:
 
     async def stream_chat(self, messages: list[ChatMessage]) -> AsyncIterator[str]:
         self.usage = LLMUsage()
-        base_url = self.config.base_url or "https://api.anthropic.com/v1"
+        base_url = await secure_provider_base_url_async(
+            self.config.base_url or "https://api.anthropic.com/v1",
+            resolve_dns=self.transport is None,
+        )
         system = "\n\n".join(
             message["content"] for message in messages
             if message.get("role") == "system"
@@ -158,6 +167,8 @@ class AnthropicChatProvider:
             async with httpx.AsyncClient(
                 timeout=httpx.Timeout(60.0, connect=10.0),
                 transport=self.transport,
+                follow_redirects=False,
+                trust_env=False,
             ) as client:
                 async with client.stream(
                     "POST",

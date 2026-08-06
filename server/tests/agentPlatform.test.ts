@@ -218,6 +218,13 @@ test('document upload validation enforces type encoding content and size', () =>
     mimeType: 'text/plain',
     dataBase64: Buffer.alloc(2 * 1024 * 1024 + 1, 65).toString('base64'),
   }), /exceeds/);
+  for (const filename of ['../secret.txt', 'folder\\secret.txt', '/tmp/secret.txt']) {
+    assert.throws(() => parseDocumentUpload({
+      filename,
+      mimeType: 'text/plain',
+      dataBase64: Buffer.from('blocked').toString('base64'),
+    }), /base name/);
+  }
 });
 
 test('document chunking is deterministic and preserves bounded overlap', () => {
@@ -1048,7 +1055,7 @@ test('provider config APIs store secrets as redacted references', async () => {
   });
   assert.throws(() => secretVault.read(updated.secretRef, 2), /secret not found/);
 
-  const unsafe = providerRepository.create({
+  assert.throws(() => providerRepository.create({
     name: 'unsafe-provider-endpoint',
     type: 'llm',
     config: {
@@ -1057,16 +1064,7 @@ test('provider config APIs store secrets as redacted references', async () => {
       baseUrl: 'http://attacker.example/v1',
     },
     secret: 'must-not-be-forwarded',
-  }, 1);
-  assert.throws(() => resolver.resolve({
-    ...runtimeConfig,
-    modelConfig: {
-      default: {
-        provider: 'openai-compatible',
-        providerConfigId: unsafe.id,
-      },
-    },
-  }, 1), /HTTPS or loopback HTTP/);
+  }, 1), /must use HTTPS/);
 });
 
 test('speech APIs resolve encrypted STT and TTS provider configs', async () => {

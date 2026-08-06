@@ -2052,11 +2052,25 @@ complete. Follow the same dependency and verification protocol used above.
 
 ### P21-01 Security, Privacy, And Compliance Baseline
 
-- Status: Todo
+- Status: In Progress
 - Goal: Complete threat model, MFA, session hardening, tenant isolation, upload
   security, SSRF controls, secret management, privacy rights, retention, and legal docs.
 - Dependencies: P17-03, P18-03, P20-01
 - Verification: automated security matrix plus independent manual checklist evidence.
+- Evidence: the first P21 slice adds production-fail-closed ClamAV document
+  scanning before storage and billing, explicit threat/unavailable API errors,
+  and migration 029 immutable minimized scan evidence containing hashes rather
+  than filenames or content. Node Provider configuration now rejects ambiguous,
+  non-HTTPS, credential-bearing, metadata, private, and reserved targets before
+  persistence. The Python Agent independently revalidates every configured LLM,
+  Embedding, STT, and TTS endpoint immediately before transport, rejects mixed
+  public/private DNS answers, and disables redirects and environment proxy
+  discovery. Unit, protocol, real HTTP, database immutability, and all Agent
+  provider tests cover clean, EICAR, scanner failure, literal-address, metadata,
+  and DNS paths. Production infrastructure must still prove the documented
+  ClamAV deployment and egress allowlist. Threat-model signoff, account/workspace
+  privacy export and deletion, remaining legal documents, and independent manual
+  security evidence remain open.
 
 ### P22-01 Production Data And Infrastructure
 
