@@ -1,10 +1,10 @@
-import type { AgentRepository } from './agentRepository';
+import type { AgentStore } from './agentStore';
 import type { AgentVersionRepository } from './agentVersionRepository';
 import {
   CapabilityDisabledError,
   type CapabilitySettingsRepository,
 } from './capabilitySettingsRepository';
-import type { RunRepository } from './runRepository';
+import type { RunStore } from './runStore';
 import type {
   RuntimeModelEndpoint,
   RuntimeProviderResolver,
@@ -38,23 +38,23 @@ export interface StreamRunIdentity {
   requestHash: string;
 }
 
-export function resolveStreamRequest(
+export async function resolveStreamRequest(
   body: unknown,
-  agentRepository: AgentRepository,
-  runRepository: RunRepository,
+  agentRepository: AgentStore,
+  runRepository: RunStore,
   workspaceId?: number,
   agentVersionRepository?: AgentVersionRepository,
   runtimeProviderResolver?: RuntimeProviderResolver,
   capabilitySettings?: CapabilitySettingsRepository,
   runIdentity?: StreamRunIdentity,
-): ResolvedStreamRequest {
+): Promise<ResolvedStreamRequest> {
   const candidate = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
   const agentId = Number(candidate.agentId);
 
   if (Number.isInteger(agentId) && agentId > 0) {
     const agent = typeof workspaceId === 'number'
-      ? agentRepository.findByIdInWorkspace(agentId, workspaceId)
-      : agentRepository.findById(agentId);
+      ? await agentRepository.findByIdInWorkspace(agentId, workspaceId)
+      : await agentRepository.findById(agentId);
     if (!agent) {
       throw new StreamRequestError(404, 'agent not found');
     }
@@ -89,7 +89,7 @@ export function resolveStreamRequest(
       throw new StreamRequestError(400, 'run input is required');
     }
 
-    const run = runRepository.create({
+    const run = await runRepository.create({
       agentId: agent.id,
       agentVersionId: version?.id,
       idempotencyKey: runIdentity?.idempotencyKey,

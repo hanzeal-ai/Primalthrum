@@ -4,10 +4,12 @@ export interface ParsedSseEvent {
   payload: Record<string, unknown>;
 }
 
+type EventRecorder = (event: ParsedSseEvent) => Promise<number | undefined> | number | undefined;
+
 export async function pipeSseStream(
   response: Response,
   downstream: NodeJS.WritableStream,
-  onEvent?: (event: ParsedSseEvent) => number | undefined,
+  onEvent?: EventRecorder,
 ): Promise<void> {
   if (!response.body) {
     throw new Error('Agent stream response has no body');
@@ -32,7 +34,7 @@ export async function pipeSseStream(
       for (const block of blocks) {
         const parsed = parseSseBlock(block);
         if (parsed) {
-          downstream.write(formatSseEvent(parsed, onEvent(parsed)));
+          downstream.write(formatSseEvent(parsed, await onEvent(parsed)));
         }
       }
     }
@@ -42,7 +44,7 @@ export async function pipeSseStream(
     buffer += decoder.decode();
     const parsed = parseSseBlock(buffer);
     if (parsed) {
-      downstream.write(formatSseEvent(parsed, onEvent(parsed)));
+      downstream.write(formatSseEvent(parsed, await onEvent(parsed)));
     }
   }
 }

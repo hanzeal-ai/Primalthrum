@@ -9,7 +9,13 @@ import { type AsyncDatabaseAdapter } from './db/asyncAdapter';
 import { AsyncSqliteDatabase } from './db/asyncSqlite';
 import { createSqliteDatabase, initializeDatabase } from './db/databaseFactory';
 import { generateAgentProject } from './generators/agentProjectGenerator';
-import { AgentRepository, type CreateAgentInput } from './services/agentRepository';
+import {
+  AgentRepository,
+  type AgentRecord,
+  type CreateAgentInput,
+} from './services/agentRepository';
+import { AsyncAgentRepository } from './services/asyncAgentRepository';
+import { type AgentStore } from './services/agentStore';
 import { registerAppCleanup } from './services/appLifecycle';
 import { AgentVersionRepository } from './services/agentVersionRepository';
 import { sendApiError } from './services/apiErrors';
@@ -34,7 +40,10 @@ import {
 import {
   DocumentRepository,
   type CreateDocumentInput,
+  type DocumentRecord,
 } from './services/documentRepository';
+import { AsyncDocumentRepository } from './services/asyncDocumentRepository';
+import { type DocumentStore } from './services/documentStore';
 import { AgentEmbeddingClient } from './services/agentEmbeddingClient';
 import { AgentSpeechClient } from './services/agentSpeechClient';
 import { chunkDocumentText } from './services/documentChunker';
@@ -72,6 +81,8 @@ import {
   type CreateRunInput,
   type RunRecord,
 } from './services/runRepository';
+import { AsyncRunRepository } from './services/asyncRunRepository';
+import { type RunStore } from './services/runStore';
 import { SessionRepository } from './services/sessionRepository';
 import { AsyncSessionRepository } from './services/asyncSessionRepository';
 import { type SessionStore } from './services/sessionStore';
@@ -80,6 +91,8 @@ import {
   StreamEventRepository,
   type CreateStreamEventInput,
 } from './services/streamEventRepository';
+import { AsyncStreamEventRepository } from './services/asyncStreamEventRepository';
+import { type StreamEventStore } from './services/streamEventStore';
 import { ToolAuditRepository } from './services/toolAuditRepository';
 import {
   capabilityKeysForConfig,
@@ -173,6 +186,7 @@ export interface AppOptions {
   dbPath?: string;
   database?: DatabaseAdapter;
   identityDatabase?: AsyncDatabaseAdapter;
+  runtimeDatabase?: AsyncDatabaseAdapter;
   documentMalwareScanner?: DocumentMalwareScanner;
   documentStorage?: DocumentFileStorage;
   documentStorageDir?: string;
@@ -285,6 +299,7 @@ export function createApp(options: AppOptions = {}): Koa {
     ? new AsyncSqliteDatabase(databasePath)
     : undefined;
   const identityDatabase = options.identityDatabase ?? ownedIdentityDatabase;
+  const runtimeDatabase = options.runtimeDatabase ?? identityDatabase;
   if (ownedIdentityDatabase) {
     registerAppCleanup(app, () => ownedIdentityDatabase.close());
   }
@@ -293,14 +308,20 @@ export function createApp(options: AppOptions = {}): Koa {
     options.botChallengeVerifier,
     options.trustedProxyHops ?? 0,
   );
-  const agentRepository = new AgentRepository(
-    db,
-    options.generatedAgentsDir ?? DEFAULT_GENERATED_AGENTS_DIR,
-  );
+  const generatedAgentsDir = options.generatedAgentsDir ?? DEFAULT_GENERATED_AGENTS_DIR;
+  const agentRepository: AgentStore = runtimeDatabase
+    ? new AsyncAgentRepository(runtimeDatabase, generatedAgentsDir)
+    : new AgentRepository(db, generatedAgentsDir);
   const agentVersionRepository = new AgentVersionRepository(db);
-  const runRepository = new RunRepository(db);
-  const streamEventRepository = new StreamEventRepository(db);
-  const documentRepository = new DocumentRepository(db);
+  const runRepository: RunStore = runtimeDatabase
+    ? new AsyncRunRepository(runtimeDatabase)
+    : new RunRepository(db);
+  const streamEventRepository: StreamEventStore = runtimeDatabase
+    ? new AsyncStreamEventRepository(runtimeDatabase)
+    : new StreamEventRepository(db);
+  const documentRepository: DocumentStore = runtimeDatabase
+    ? new AsyncDocumentRepository(runtimeDatabase)
+    : new DocumentRepository(db);
   const documentIndexRepository = new DocumentIndexRepository(db);
   const documentUploadSecurity = new DocumentUploadSecurityService(
     options.documentMalwareScanner ?? createDocumentMalwareScanner(),
@@ -425,9 +446,9 @@ export function createApp(options: AppOptions = {}): Koa {
     'document.index': async (payload) => {
       const agentId = Number(payload.agentId);
       const documentId = Number(payload.documentId);
-      const agent = agentRepository.findById(agentId);
+      const agent = await agentRepository.findById(agentId);
       if (!agent) throw new Error('agent not found');
-      const existing = documentRepository.findByAgentDocument(agentId, documentId);
+      const existing = await documentRepository.findByAgentDocument(agentId, documentId);
       if (!existing) throw new Error('document not found');
       let embeddingOperation: MeteredOperation | null = null;
       let embeddingCompleted = false;
@@ -492,7 +513,7 @@ export function createApp(options: AppOptions = {}): Koa {
           });
           ragStorageCompleted = true;
         }
-        const document = documentRepository.markIndexed(agentId, documentId);
+        const document = await documentRepository.markIndexed(agentId, documentId);
         if (!document) throw new Error('document not found');
         return {
           document,
@@ -507,7 +528,7 @@ export function createApp(options: AppOptions = {}): Koa {
         if (ragStorageOperation && !ragStorageCompleted) {
           releaseMeteredOperation(ragStorageOperation);
         }
-        documentRepository.markStatus(agentId, documentId, 'failed');
+        await documentRepository.markStatus(agentId, documentId, 'failed');
         throw error;
       }
     },
@@ -605,10 +626,10 @@ export function createApp(options: AppOptions = {}): Koa {
       quantity: upload.sizeBytes,
       resourceType: 'document.storage',
     });
-    let document: ReturnType<DocumentRepository['create']> | null = null;
+    let document: DocumentRecord | null = null;
     let storageRef = '';
     try {
-      document = documentRepository.create(agentId, upload);
+      document = await documentRepository.create(agentId, upload);
       const stored = await documentStorage.save({
         workspaceId: document.workspaceId,
         agentId: document.agentId,
@@ -617,7 +638,7 @@ export function createApp(options: AppOptions = {}): Koa {
         content: upload.content,
       });
       storageRef = stored.storageRef;
-      const result = documentRepository.attachStorageRef(agentId, document.id, storageRef)
+      const result = await documentRepository.attachStorageRef(agentId, document.id, storageRef)
         ?? document;
       meteredOperationService.complete(operation, { documentId: document.id });
       return result;
@@ -636,7 +657,7 @@ export function createApp(options: AppOptions = {}): Koa {
           });
         }
       }
-      if (document) documentRepository.deleteByAgentDocument(agentId, document.id);
+      if (document) await documentRepository.deleteByAgentDocument(agentId, document.id);
       releaseMeteredOperation(operation);
       throw error;
     }
@@ -680,13 +701,13 @@ export function createApp(options: AppOptions = {}): Koa {
     });
   }
 
-  function scopedAgent(
+  async function scopedAgent(
     ctx: Koa.Context,
     id: number,
     permission: WorkspacePermission,
   ) {
     if (!authorize(ctx, permission)) return null;
-    const agent = agentRepository.findByIdInWorkspace(id, currentWorkspaceId(ctx));
+    const agent = await agentRepository.findByIdInWorkspace(id, currentWorkspaceId(ctx));
     if (!agent) {
       sendApiError(ctx, logger, {
         status: 404,
@@ -1352,15 +1373,15 @@ export function createApp(options: AppOptions = {}): Koa {
     }
   });
 
-  router.get('/api/agents', (ctx) => {
+  router.get('/api/agents', async (ctx) => {
     if (!authorize(ctx, 'agents.read')) return;
-    ctx.body = agentRepository.list(currentWorkspaceId(ctx));
+    ctx.body = await agentRepository.list(currentWorkspaceId(ctx));
   });
 
-  router.post('/api/agents', (ctx) => {
+  router.post('/api/agents', async (ctx) => {
     if (!authorize(ctx, 'agents.write')) return;
     try {
-      const created = agentRepository.create(
+      const created = await agentRepository.create(
         ctx.request.body as CreateAgentInput,
         currentWorkspaceId(ctx),
       );
@@ -1374,8 +1395,8 @@ export function createApp(options: AppOptions = {}): Koa {
     }
   });
 
-  router.get('/api/agents/slug/:slug', (ctx) => {
-    const agent = agentRepository.findBySlug(ctx.params.slug);
+  router.get('/api/agents/slug/:slug', async (ctx) => {
+    const agent = await agentRepository.findBySlug(ctx.params.slug);
     if (!authorize(ctx, 'agents.read')) return;
     if (!agent || agent.workspaceId !== currentWorkspaceId(ctx)) {
       ctx.status = 404;
@@ -1385,18 +1406,18 @@ export function createApp(options: AppOptions = {}): Koa {
     ctx.body = agent;
   });
 
-  router.get('/api/agents/:id', (ctx) => {
-    const agent = scopedAgent(ctx, Number(ctx.params.id), 'agents.read');
+  router.get('/api/agents/:id', async (ctx) => {
+    const agent = await scopedAgent(ctx, Number(ctx.params.id), 'agents.read');
     if (!agent) return;
     ctx.body = agent;
   });
 
   router.post('/api/agents/:id/generate', async (ctx) => {
-    const agent = scopedAgent(ctx, Number(ctx.params.id), 'agents.write');
+    const agent = await scopedAgent(ctx, Number(ctx.params.id), 'agents.write');
     if (!agent) return;
 
     const generated = await generateAgentProject(agent);
-    const generatedAgent = agentRepository.markGenerated(agent.id);
+    const generatedAgent = await agentRepository.markGenerated(agent.id);
     const preview = agentVersionRepository.createPreview(
       generatedAgent,
       ctx.state.authSession.user.id,
@@ -1409,14 +1430,14 @@ export function createApp(options: AppOptions = {}): Koa {
     ctx.body = generated;
   });
 
-  router.get('/api/agents/:id/versions', (ctx) => {
-    const agent = scopedAgent(ctx, Number(ctx.params.id), 'agents.read');
+  router.get('/api/agents/:id/versions', async (ctx) => {
+    const agent = await scopedAgent(ctx, Number(ctx.params.id), 'agents.read');
     if (!agent) return;
     ctx.body = agentVersionRepository.listVersions(agent.id, agent.workspaceId);
   });
 
-  router.post('/api/agents/:id/versions', (ctx) => {
-    const agent = scopedAgent(ctx, Number(ctx.params.id), 'agents.write');
+  router.post('/api/agents/:id/versions', async (ctx) => {
+    const agent = await scopedAgent(ctx, Number(ctx.params.id), 'agents.write');
     if (!agent) return;
     try {
       ctx.status = 201;
@@ -1433,8 +1454,8 @@ export function createApp(options: AppOptions = {}): Koa {
     }
   });
 
-  router.post('/api/agents/:id/versions/:versionId/publish', (ctx) => {
-    const agent = scopedAgent(ctx, Number(ctx.params.id), 'agents.publish');
+  router.post('/api/agents/:id/versions/:versionId/publish', async (ctx) => {
+    const agent = await scopedAgent(ctx, Number(ctx.params.id), 'agents.publish');
     if (!agent) return;
     try {
       ctx.body = agentVersionRepository.publish(
@@ -1451,8 +1472,8 @@ export function createApp(options: AppOptions = {}): Koa {
     }
   });
 
-  router.post('/api/agents/:id/versions/:versionId/rollback', (ctx) => {
-    const agent = scopedAgent(ctx, Number(ctx.params.id), 'agents.publish');
+  router.post('/api/agents/:id/versions/:versionId/rollback', async (ctx) => {
+    const agent = await scopedAgent(ctx, Number(ctx.params.id), 'agents.publish');
     if (!agent) return;
     try {
       ctx.body = agentVersionRepository.publish(
@@ -1470,19 +1491,19 @@ export function createApp(options: AppOptions = {}): Koa {
     }
   });
 
-  router.get('/api/agents/:id/deployments', (ctx) => {
-    const agent = scopedAgent(ctx, Number(ctx.params.id), 'agents.read');
+  router.get('/api/agents/:id/deployments', async (ctx) => {
+    const agent = await scopedAgent(ctx, Number(ctx.params.id), 'agents.read');
     if (!agent) return;
     ctx.body = agentVersionRepository.listDeployments(agent.id, agent.workspaceId);
   });
 
-  router.put('/api/agents/:id/audience', (ctx) => {
+  router.put('/api/agents/:id/audience', async (ctx) => {
     const agentId = Number(ctx.params.id);
-    const agent = scopedAgent(ctx, agentId, 'agents.publish');
+    const agent = await scopedAgent(ctx, agentId, 'agents.publish');
     if (!agent) return;
     try {
       const body = ctx.request.body as { audience?: unknown };
-      const updated = agentRepository.updateAudience(
+      const updated = await agentRepository.updateAudience(
         agentId,
         body.audience,
         currentWorkspaceId(ctx),
@@ -1498,7 +1519,7 @@ export function createApp(options: AppOptions = {}): Koa {
           ctx.state.authSession.user.id,
         );
       }
-      ctx.body = agentRepository.findByIdInWorkspace(agent.id, agent.workspaceId);
+      ctx.body = await agentRepository.findByIdInWorkspace(agent.id, agent.workspaceId);
     } catch (error) {
       sendApiError(ctx, logger, {
         status: 400,
@@ -1510,7 +1531,7 @@ export function createApp(options: AppOptions = {}): Koa {
 
   router.post('/api/agents/:id/documents', async (ctx) => {
     const agentId = Number(ctx.params.id);
-    if (!scopedAgent(ctx, agentId, 'agents.write')) return;
+    if (!await scopedAgent(ctx, agentId, 'agents.write')) return;
 
     try {
       const input = ctx.request.body as CreateDocumentInput;
@@ -1531,7 +1552,7 @@ export function createApp(options: AppOptions = {}): Koa {
 
   router.post('/api/agents/:id/documents/upload', async (ctx) => {
     const agentId = Number(ctx.params.id);
-    if (!scopedAgent(ctx, agentId, 'agents.write')) return;
+    if (!await scopedAgent(ctx, agentId, 'agents.write')) return;
 
     try {
       const upload = parseDocumentUpload(ctx.request.body as Record<string, unknown>);
@@ -1543,20 +1564,20 @@ export function createApp(options: AppOptions = {}): Koa {
     }
   });
 
-  router.get('/api/agents/:id/documents', (ctx) => {
+  router.get('/api/agents/:id/documents', async (ctx) => {
     const agentId = Number(ctx.params.id);
-    if (!scopedAgent(ctx, agentId, 'agents.read')) return;
+    if (!await scopedAgent(ctx, agentId, 'agents.read')) return;
 
-    ctx.body = documentRepository.listByAgent(agentId);
+    ctx.body = await documentRepository.listByAgent(agentId);
   });
 
-  router.post('/api/agents/:id/documents/:documentId/index', (ctx) => {
+  router.post('/api/agents/:id/documents/:documentId/index', async (ctx) => {
     const agentId = Number(ctx.params.id);
-    const agent = scopedAgent(ctx, agentId, 'agents.write');
+    const agent = await scopedAgent(ctx, agentId, 'agents.write');
     if (!agent) return;
 
     const documentId = Number(ctx.params.documentId);
-    if (!documentRepository.findByAgentDocument(agentId, documentId)) {
+    if (!await documentRepository.findByAgentDocument(agentId, documentId)) {
       sendApiError(ctx, logger, {
         status: 404,
         code: 'DOCUMENT_NOT_FOUND',
@@ -1570,7 +1591,7 @@ export function createApp(options: AppOptions = {}): Koa {
       workspaceId: agent.workspaceId,
       payload: { agentId, documentId },
     });
-    const indexing = documentRepository.markStatus(agentId, documentId, 'indexing');
+    const indexing = await documentRepository.markStatus(agentId, documentId, 'indexing');
     jobDispatcher.kick();
     ctx.status = 202;
     ctx.body = {
@@ -1581,10 +1602,10 @@ export function createApp(options: AppOptions = {}): Koa {
 
   router.delete('/api/agents/:id/documents/:documentId', async (ctx) => {
     const agentId = Number(ctx.params.id);
-    if (!scopedAgent(ctx, agentId, 'agents.write')) return;
+    if (!await scopedAgent(ctx, agentId, 'agents.write')) return;
 
     const documentId = Number(ctx.params.documentId);
-    const document = documentRepository.findByAgentDocument(agentId, documentId);
+    const document = await documentRepository.findByAgentDocument(agentId, documentId);
     if (!document) {
       sendApiError(ctx, logger, {
         status: 404,
@@ -1598,7 +1619,7 @@ export function createApp(options: AppOptions = {}): Koa {
     if (document.storageRef) {
       await documentStorage.delete(document.storageRef);
     }
-    documentRepository.deleteByAgentDocument(agentId, documentId);
+    await documentRepository.deleteByAgentDocument(agentId, documentId);
 
     ctx.body = {
       documentId,
@@ -1607,15 +1628,15 @@ export function createApp(options: AppOptions = {}): Koa {
     };
   });
 
-  router.get('/api/agents/:id/conversations', (ctx) => {
+  router.get('/api/agents/:id/conversations', async (ctx) => {
     const agentId = Number(ctx.params.id);
-    if (!scopedAgent(ctx, agentId, 'agents.read')) return;
+    if (!await scopedAgent(ctx, agentId, 'agents.read')) return;
     ctx.body = conversationRepository.listByAgent(agentId);
   });
 
-  router.post('/api/agents/:id/conversations', (ctx) => {
+  router.post('/api/agents/:id/conversations', async (ctx) => {
     const agentId = Number(ctx.params.id);
-    if (!scopedAgent(ctx, agentId, 'agents.run')) return;
+    if (!await scopedAgent(ctx, agentId, 'agents.run')) return;
     const body = ctx.request.body as { title?: unknown };
     const title = typeof body.title === 'string' ? body.title : '新对话';
     ctx.status = 201;
@@ -1787,11 +1808,11 @@ export function createApp(options: AppOptions = {}): Koa {
     }
   });
 
-  router.post('/api/runs', (ctx) => {
+  router.post('/api/runs', async (ctx) => {
     if (!authorize(ctx, 'agents.run')) return;
     try {
       const body = ctx.request.body as CreateRunInput;
-      const agent = agentRepository.findByIdInWorkspace(
+      const agent = await agentRepository.findByIdInWorkspace(
         Number(body.agentId),
         currentWorkspaceId(ctx),
       );
@@ -1835,7 +1856,7 @@ export function createApp(options: AppOptions = {}): Koa {
       );
       capabilitySettingsRepository.assertEnabled(capabilitySnapshot);
 
-      const created = runRepository.create({
+      const created = await runRepository.create({
         ...body,
         agentVersionId: version?.id,
         capabilitySnapshot,
@@ -1860,9 +1881,9 @@ export function createApp(options: AppOptions = {}): Koa {
     }
   });
 
-  router.get('/api/runs/:id', (ctx) => {
+  router.get('/api/runs/:id', async (ctx) => {
     if (!authorize(ctx, 'agents.read')) return;
-    const run = runRepository.findByIdInWorkspace(
+    const run = await runRepository.findByIdInWorkspace(
       Number(ctx.params.id),
       currentWorkspaceId(ctx),
     );
@@ -1895,10 +1916,10 @@ export function createApp(options: AppOptions = {}): Koa {
     ctx.body = job;
   });
 
-  router.post('/api/runs/:id/events', (ctx) => {
+  router.post('/api/runs/:id/events', async (ctx) => {
     const runId = Number(ctx.params.id);
     if (!authorize(ctx, 'agents.run')) return;
-    if (!runRepository.findByIdInWorkspace(runId, currentWorkspaceId(ctx))) {
+    if (!await runRepository.findByIdInWorkspace(runId, currentWorkspaceId(ctx))) {
       sendApiError(ctx, logger, {
         status: 404,
         code: 'RUN_NOT_FOUND',
@@ -1909,7 +1930,7 @@ export function createApp(options: AppOptions = {}): Koa {
 
     try {
       const body = ctx.request.body as Omit<CreateStreamEventInput, 'runId'>;
-      const created = streamEventRepository.create({
+      const created = await streamEventRepository.create({
         runId,
         eventType: body.eventType,
         node: body.node,
@@ -1927,10 +1948,10 @@ export function createApp(options: AppOptions = {}): Koa {
     }
   });
 
-  router.get('/api/runs/:id/events', (ctx) => {
+  router.get('/api/runs/:id/events', async (ctx) => {
     const runId = Number(ctx.params.id);
     if (!authorize(ctx, 'agents.read')) return;
-    if (!runRepository.findByIdInWorkspace(runId, currentWorkspaceId(ctx))) {
+    if (!await runRepository.findByIdInWorkspace(runId, currentWorkspaceId(ctx))) {
       sendApiError(ctx, logger, {
         status: 404,
         code: 'RUN_NOT_FOUND',
@@ -1939,10 +1960,10 @@ export function createApp(options: AppOptions = {}): Koa {
       return;
     }
 
-    ctx.body = streamEventRepository.listByRunId(runId);
+    ctx.body = await streamEventRepository.listByRunId(runId);
   });
 
-  router.get('/api/audit/tool-calls', (ctx) => {
+  router.get('/api/audit/tool-calls', async (ctx) => {
     if (!authorize(ctx, 'audit.read')) return;
     const runId = parseOptionalPositiveInteger(ctx.query.runId);
     if (runId === null) {
@@ -1954,7 +1975,7 @@ export function createApp(options: AppOptions = {}): Koa {
       return;
     }
 
-    if (runId && !runRepository.findByIdInWorkspace(runId, currentWorkspaceId(ctx))) {
+    if (runId && !await runRepository.findByIdInWorkspace(runId, currentWorkspaceId(ctx))) {
       sendApiError(ctx, logger, {
         status: 404,
         code: 'RUN_NOT_FOUND',
@@ -1965,15 +1986,16 @@ export function createApp(options: AppOptions = {}): Koa {
     ctx.body = toolAuditRepository.list(currentWorkspaceId(ctx), runId);
   });
 
-  function replayRunStream(
+  async function replayRunStream(
     ctx: Koa.Context,
     run: RunRecord,
     afterEventId: number,
-  ): void {
+  ): Promise<void> {
+    const events = await streamEventRepository.listByRunIdAfter(run.id, afterEventId);
     ctx.respond = false;
     const headers = runStreamHeaders(run);
     ctx.res.writeHead(200, headers);
-    for (const event of streamEventRepository.listByRunIdAfter(run.id, afterEventId)) {
+    for (const event of events) {
       ctx.res.write(formatSseEvent({
         eventType: event.eventType,
         node: event.node,
@@ -1989,7 +2011,7 @@ export function createApp(options: AppOptions = {}): Koa {
   ): Promise<void> {
     if (!publicAgentId && !authorize(ctx, 'agents.run')) return;
     const publicAgent = publicAgentId
-      ? agentRepository.findById(publicAgentId)
+      ? await agentRepository.findById(publicAgentId)
       : null;
     const workspaceId = publicAgent?.workspaceId ?? currentWorkspaceId(ctx);
     const body = ctx.request.body as Record<string, unknown>;
@@ -2011,7 +2033,7 @@ export function createApp(options: AppOptions = {}): Koa {
         });
         return;
       }
-      const existing = runRepository.findByIdempotencyKey(
+      const existing = await runRepository.findByIdempotencyKey(
         workspaceId,
         runIdentity.idempotencyKey,
       );
@@ -2032,7 +2054,7 @@ export function createApp(options: AppOptions = {}): Koa {
           });
           return;
         }
-        replayRunStream(ctx, existing, lastEventId(ctx));
+        await replayRunStream(ctx, existing, lastEventId(ctx));
         return;
       }
     }
@@ -2058,7 +2080,7 @@ export function createApp(options: AppOptions = {}): Koa {
     let sawAgentError = false;
 
     try {
-      const streamRequest = resolveStreamRequest(
+      const streamRequest = await resolveStreamRequest(
         body,
         agentRepository,
         runRepository,
@@ -2086,7 +2108,7 @@ export function createApp(options: AppOptions = {}): Koa {
           }
           throw error;
         }
-        runRepository.updateStatus(streamRequest.runId, 'running');
+        await runRepository.updateStatus(streamRequest.runId, 'running');
         const agentId = Number(body.agentId);
         const requestedConversationId = parseOptionalPositiveInteger(body.conversationId);
         if (requestedConversationId === null) {
@@ -2106,14 +2128,14 @@ export function createApp(options: AppOptions = {}): Koa {
           );
         }
         conversationId = conversation.id;
-        runRepository.attachConversation(streamRequest.runId, conversationId);
+        await runRepository.attachConversation(streamRequest.runId, conversationId);
         conversationRepository.addMessage({
           conversationId,
           role: 'user',
           content: String(body.input ?? ''),
         });
 
-        const agent = agentRepository.findByIdInWorkspace(agentId, workspaceId);
+        const agent = await agentRepository.findByIdInWorkspace(agentId, workspaceId);
         if (agent && !['none', 'null'].includes(streamRequest.payload.rag_provider)) {
           const vectorOptions = {
             embeddingProvider: streamRequest.payload.embedding.provider,
@@ -2194,7 +2216,7 @@ export function createApp(options: AppOptions = {}): Koa {
           message: `Agent service returned HTTP ${upstream.status}`,
         };
         if (currentRunId) {
-          const created = streamEventRepository.create({
+          const created = await streamEventRepository.create({
             runId: currentRunId,
             eventType: 'agent.error',
             node: 'run',
@@ -2205,7 +2227,7 @@ export function createApp(options: AppOptions = {}): Koa {
             node: created.node,
             payload: created.payload,
           }, created.id));
-          runRepository.updateStatus(currentRunId, 'failed', new Date().toISOString());
+          await runRepository.updateStatus(currentRunId, 'failed', new Date().toISOString());
           finished = true;
         } else {
           ctx.res.write(sse('agent.error', payload));
@@ -2222,8 +2244,8 @@ export function createApp(options: AppOptions = {}): Koa {
       }
 
       await pipeSseStream(upstream, ctx.res, streamRequest.runId
-        ? (event) => {
-            const created = streamEventRepository.create({
+        ? async (event) => {
+            const created = await streamEventRepository.create({
               runId: streamRequest.runId as number,
               eventType: event.eventType,
               node: event.node,
@@ -2265,7 +2287,7 @@ export function createApp(options: AppOptions = {}): Koa {
           }
         : undefined);
       if (currentRunId) {
-        runRepository.updateStatus(
+        await runRepository.updateStatus(
           currentRunId,
           sawAgentError ? 'failed' : 'completed',
           new Date().toISOString(),
@@ -2283,7 +2305,7 @@ export function createApp(options: AppOptions = {}): Koa {
           : error instanceof Error ? error.message : 'Stream proxy failed';
         const payload = { node: 'run', status: 'error', message };
         if (currentRunId) {
-          const created = streamEventRepository.create({
+          const created = await streamEventRepository.create({
             runId: currentRunId,
             eventType: 'agent.error',
             node: 'run',
@@ -2304,7 +2326,7 @@ export function createApp(options: AppOptions = {}): Koa {
       if (currentRunId && !finished) {
         const status = abortController.signal.aborted ? 'cancelled' : 'failed';
         if (status === 'cancelled') {
-          streamEventRepository.create({
+          await streamEventRepository.create({
             runId: currentRunId,
             eventType: 'agent.run.cancelled',
             node: 'run',
@@ -2315,7 +2337,7 @@ export function createApp(options: AppOptions = {}): Koa {
             },
           });
         }
-        runRepository.updateStatus(currentRunId, status, new Date().toISOString());
+        await runRepository.updateStatus(currentRunId, status, new Date().toISOString());
       }
       if (currentRunId && usageReserved) {
         try {
@@ -2336,9 +2358,9 @@ export function createApp(options: AppOptions = {}): Koa {
   router.post('/api/stream', async (ctx) => handleStream(ctx));
   router.post('/api/stream/create-agent', async (ctx) => handleStream(ctx));
 
-  router.get('/api/runs/:id/stream', (ctx) => {
+  router.get('/api/runs/:id/stream', async (ctx) => {
     if (!authorize(ctx, 'agents.read')) return;
-    const run = runRepository.findByIdInWorkspace(
+    const run = await runRepository.findByIdInWorkspace(
       Number(ctx.params.id),
       currentWorkspaceId(ctx),
     );
@@ -2350,11 +2372,11 @@ export function createApp(options: AppOptions = {}): Koa {
       });
       return;
     }
-    replayRunStream(ctx, run, lastEventId(ctx));
+    await replayRunStream(ctx, run, lastEventId(ctx));
   });
 
-  router.get('/api/public/agents/:slug', (ctx) => {
-    const agent = agentRepository.findBySlug(ctx.params.slug);
+  router.get('/api/public/agents/:slug', async (ctx) => {
+    const agent = await agentRepository.findBySlug(ctx.params.slug);
     if (!isPublicAgent(agent)) {
       ctx.status = 404;
       ctx.body = { error: 'agent not found' };
@@ -2370,7 +2392,7 @@ export function createApp(options: AppOptions = {}): Koa {
   });
 
   router.post('/api/public/agents/:slug/stream', async (ctx) => {
-    const agent = agentRepository.findBySlug(ctx.params.slug);
+    const agent = await agentRepository.findBySlug(ctx.params.slug);
     if (!isPublicAgent(agent)) {
       ctx.status = 404;
       ctx.body = { error: 'agent not found' };
@@ -2409,7 +2431,7 @@ function teamEntitlementErrorCode(
     : null;
 }
 
-function isPublicAgent(agent: ReturnType<AgentRepository['findBySlug']>): agent is NonNullable<typeof agent> {
+function isPublicAgent(agent: AgentRecord | null): agent is AgentRecord {
   return Boolean(
     agent
     && agent.status === 'generated'
