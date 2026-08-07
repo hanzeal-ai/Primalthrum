@@ -2,8 +2,11 @@ import { randomUUID } from 'node:crypto';
 
 import { PostgresDatabase } from '../db/postgres';
 import { runPostgresMigrations } from '../db/postgresMigrations';
+import { type AgentConfig } from '../services/agentRepository';
 import { AsyncProviderConfigRepository } from '../services/asyncProviderConfigRepository';
 import { AsyncSecretVault } from '../services/asyncSecretVault';
+import { RuntimeProviderResolver } from '../services/runtimeProviderResolver';
+import { RuntimeSpeechResolver } from '../services/runtimeSpeechResolver';
 
 async function main(): Promise<void> {
   const connectionString = process.env.DATABASE_URL;
@@ -32,6 +35,32 @@ async function main(): Promise<void> {
       config: { provider: 'openai', model: 'gpt-commercial' },
       secret: "postgres-secret-'parameter",
     }, workspaceId);
+    const speechProvider = await providers.create({
+      name: `Speech ${marker}`,
+      type: 'stt',
+      config: { provider: 'openai-compatible', model: 'transcribe-commercial' },
+      secret: 'postgres-speech-secret',
+    }, workspaceId);
+    const runtimeConfig: AgentConfig = {
+      memoryProvider: 'null',
+      cacheProvider: 'memory',
+      ragProvider: 'none',
+      enabledTools: [],
+      enabledSkills: [],
+      modelConfig: {
+        default: {
+          provider: 'openai',
+          providerConfigId: provider.id,
+          model: 'gpt-commercial',
+        },
+        embedding: { provider: 'mock', model: 'mock-embedding' },
+      },
+      audience: 'workspace',
+    };
+    const runtime = await new RuntimeProviderResolver(providers, secrets)
+      .resolve(runtimeConfig, workspaceId);
+    const speech = await new RuntimeSpeechResolver(providers, secrets)
+      .resolve('stt', workspaceId, speechProvider.id);
     const before = Number((await database.query<{ count: number | string }>({
       text: 'SELECT COUNT(*) AS count FROM secrets WHERE workspace_id = $1;',
       values: [workspaceId],
@@ -57,10 +86,14 @@ async function main(): Promise<void> {
       values: [provider.secretRef],
     });
     if (
-      before !== 1
+      before !== 2
       || after !== before
       || await secrets.read(provider.secretRef, workspaceId) !== "postgres-secret-'parameter"
       || ciphertext[0]?.ciphertext === "postgres-secret-'parameter"
+      || runtime.llm.api_key !== "postgres-secret-'parameter"
+      || runtime.llm.model !== 'gpt-commercial'
+      || speech.api_key !== 'postgres-speech-secret'
+      || speech.model !== 'transcribe-commercial'
     ) {
       throw new Error('PostgreSQL Provider secret transaction is inconsistent');
     }

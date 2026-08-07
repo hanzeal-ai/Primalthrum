@@ -1049,7 +1049,7 @@ test('provider config APIs store secrets as redacted references', async () => {
     },
     audience: 'workspace',
   };
-  assert.deepEqual(resolver.resolve(runtimeConfig, 1), {
+  assert.deepEqual(await resolver.resolve(runtimeConfig, 1), {
     llm: {
       provider: 'openai',
       model: 'gpt-5',

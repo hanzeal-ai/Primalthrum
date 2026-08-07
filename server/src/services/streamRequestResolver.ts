@@ -68,7 +68,7 @@ export async function resolveStreamRequest(
     }
     const config = version?.config ?? agent.config;
     const providers = typeof workspaceId === 'number' && runtimeProviderResolver
-      ? runtimeProviderResolver.resolve(config, workspaceId)
+      ? await runtimeProviderResolver.resolve(config, workspaceId)
       : mockRuntimeProviders();
     const capabilitySnapshot = typeof workspaceId === 'number' && capabilitySettings
       ? capabilitySettings.snapshot(workspaceId, capabilityKeysForConfig(config, providers))

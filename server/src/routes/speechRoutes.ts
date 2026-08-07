@@ -51,7 +51,7 @@ export function registerSpeechRoutes(
         audioBase64: body.audioBase64,
       });
       const workspaceId = currentWorkspaceId(ctx);
-      const provider = resolver.resolve('stt', workspaceId, providerConfigId);
+      const provider = await resolver.resolve('stt', workspaceId, providerConfigId);
       capabilities.assertEnabled(
         capabilities.snapshot(workspaceId, [`stt:${provider.provider}`]),
       );
@@ -82,7 +82,7 @@ export function registerSpeechRoutes(
       const body = ctx.request.body as Record<string, unknown>;
       const providerConfigId = optionalPositiveInteger(body.providerConfigId);
       const workspaceId = currentWorkspaceId(ctx);
-      const provider = resolver.resolve('tts', workspaceId, providerConfigId);
+      const provider = await resolver.resolve('tts', workspaceId, providerConfigId);
       capabilities.assertEnabled(
         capabilities.snapshot(workspaceId, [`tts:${provider.provider}`]),
       );

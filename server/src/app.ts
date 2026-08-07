@@ -75,6 +75,8 @@ import {
   type CreateProviderConfigInput,
   type UpdateProviderConfigInput,
 } from './services/providerConfigRepository';
+import { AsyncProviderConfigRepository } from './services/asyncProviderConfigRepository';
+import { type ProviderConfigStore } from './services/providerConfigStore';
 import { listProviders, listSkills, listTools } from './services/discoveryCatalog';
 import {
   RunRepository,
@@ -110,7 +112,9 @@ import { AsyncWorkspaceRepository } from './services/asyncWorkspaceRepository';
 import { type WorkspaceStore } from './services/workspaceStore';
 import { WorkspaceOwnershipRepository } from './services/workspaceOwnershipRepository';
 import { WorkspaceLegalHoldRepository } from './services/workspaceLegalHoldRepository';
+import { AsyncSecretVault } from './services/asyncSecretVault';
 import { LocalSecretVault } from './services/localSecretVault';
+import { type SecretStore } from './services/secretStore';
 import { RuntimeProviderResolver } from './services/runtimeProviderResolver';
 import { RuntimeSpeechResolver } from './services/runtimeSpeechResolver';
 import { BillingError, BillingRepository } from './services/billingRepository';
@@ -358,16 +362,22 @@ export function createApp(options: AppOptions = {}): Koa {
   const localSecretVault = new LocalSecretVault(db);
   const mfaService = new MfaService(new MfaRepository(db, localSecretVault));
   const apiKeyRepository = new ApiKeyRepository(db);
-  const providerConfigRepository = new ProviderConfigRepository(db);
+  const asyncProviderSecretVault = runtimeDatabase
+    ? new AsyncSecretVault(runtimeDatabase)
+    : null;
+  const providerSecretVault: SecretStore = asyncProviderSecretVault ?? localSecretVault;
+  const providerConfigRepository: ProviderConfigStore = runtimeDatabase && asyncProviderSecretVault
+    ? new AsyncProviderConfigRepository(runtimeDatabase, asyncProviderSecretVault)
+    : new ProviderConfigRepository(db);
   const runtimeProviderResolver = new RuntimeProviderResolver(
     providerConfigRepository,
-    new LocalSecretVault(db),
+    providerSecretVault,
   );
   const embeddingClient = new AgentEmbeddingClient(agentBaseUrl);
   const speechClient = new AgentSpeechClient(agentBaseUrl);
   const speechResolver = new RuntimeSpeechResolver(
     providerConfigRepository,
-    new LocalSecretVault(db),
+    providerSecretVault,
   );
   const capabilitySettingsRepository = new CapabilitySettingsRepository(db);
   const billingRepository = new BillingRepository(db);
@@ -461,7 +471,7 @@ export function createApp(options: AppOptions = {}): Koa {
         const chunks = chunkDocumentText(existing.id, content);
         const ragEnabled = !['none', 'null'].includes(agent.config.ragProvider);
         const resolvedEmbedding = ragEnabled
-          ? runtimeProviderResolver.resolve(agent.config, agent.workspaceId).embedding
+          ? (await runtimeProviderResolver.resolve(agent.config, agent.workspaceId)).embedding
           : null;
         const estimatedEmbeddingTokens = Math.max(
           1,
@@ -1661,15 +1671,15 @@ export function createApp(options: AppOptions = {}): Koa {
     ctx.body = listProviders();
   });
 
-  router.get('/api/provider-configs', (ctx) => {
+  router.get('/api/provider-configs', async (ctx) => {
     if (!authorize(ctx, 'providers.manage')) return;
-    ctx.body = providerConfigRepository.list(currentWorkspaceId(ctx));
+    ctx.body = await providerConfigRepository.list(currentWorkspaceId(ctx));
   });
 
-  router.post('/api/provider-configs', (ctx) => {
+  router.post('/api/provider-configs', async (ctx) => {
     if (!authorize(ctx, 'providers.manage')) return;
     try {
-      const created = providerConfigRepository.create(
+      const created = await providerConfigRepository.create(
         ctx.request.body as CreateProviderConfigInput,
         currentWorkspaceId(ctx),
       );
@@ -1684,9 +1694,9 @@ export function createApp(options: AppOptions = {}): Koa {
     }
   });
 
-  router.get('/api/provider-configs/:id', (ctx) => {
+  router.get('/api/provider-configs/:id', async (ctx) => {
     if (!authorize(ctx, 'providers.manage')) return;
-    const config = providerConfigRepository.findById(
+    const config = await providerConfigRepository.findById(
       Number(ctx.params.id),
       currentWorkspaceId(ctx),
     );
@@ -1702,10 +1712,10 @@ export function createApp(options: AppOptions = {}): Koa {
     ctx.body = config;
   });
 
-  router.put('/api/provider-configs/:id', (ctx) => {
+  router.put('/api/provider-configs/:id', async (ctx) => {
     if (!authorize(ctx, 'providers.manage')) return;
     try {
-      const updated = providerConfigRepository.update(
+      const updated = await providerConfigRepository.update(
         Number(ctx.params.id),
         ctx.request.body as UpdateProviderConfigInput,
         currentWorkspaceId(ctx),
@@ -1849,7 +1859,7 @@ export function createApp(options: AppOptions = {}): Koa {
       }
 
       const config = version?.config ?? agent.config;
-      const providers = runtimeProviderResolver.resolve(config, agent.workspaceId);
+      const providers = await runtimeProviderResolver.resolve(config, agent.workspaceId);
       const capabilitySnapshot = capabilitySettingsRepository.snapshot(
         agent.workspaceId,
         capabilityKeysForConfig(config, providers),

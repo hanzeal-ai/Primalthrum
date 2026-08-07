@@ -1,25 +1,25 @@
-import { LocalSecretVault } from './localSecretVault';
 import { normalizeProviderBaseUrl } from './providerEndpointPolicy';
 import {
-  ProviderConfigRepository,
   type ProviderConfigRecord,
 } from './providerConfigRepository';
+import { type ProviderConfigStore } from './providerConfigStore';
 import { type RuntimeModelEndpoint } from './runtimeProviderResolver';
+import { type SecretStore } from './secretStore';
 
 export type SpeechProviderType = 'stt' | 'tts';
 
 export class RuntimeSpeechResolver {
   constructor(
-    private readonly providers: ProviderConfigRepository,
-    private readonly secrets: LocalSecretVault,
+    private readonly providers: ProviderConfigStore,
+    private readonly secrets: SecretStore,
   ) {}
 
-  resolve(
+  async resolve(
     type: SpeechProviderType,
     workspaceId: number,
     providerConfigId?: number,
-  ): RuntimeModelEndpoint {
-    const provider = this.select(type, workspaceId, providerConfigId);
+  ): Promise<RuntimeModelEndpoint> {
+    const provider = await this.select(type, workspaceId, providerConfigId);
     const providerName = text(provider.config.provider);
     const model = text(provider.config.model);
     if (!providerName || !model) {
@@ -30,24 +30,25 @@ export class RuntimeSpeechResolver {
     const endpoint: RuntimeModelEndpoint = {
       provider: providerName,
       model,
-      api_key: this.secrets.read(provider.secretRef, workspaceId),
+      api_key: await this.secrets.read(provider.secretRef, workspaceId),
     };
     const baseUrl = text(provider.config.baseUrl);
     if (baseUrl) endpoint.base_url = normalizeProviderBaseUrl(baseUrl);
     return endpoint;
   }
 
-  private select(
+  private async select(
     type: SpeechProviderType,
     workspaceId: number,
     providerConfigId?: number,
-  ): ProviderConfigRecord {
+  ): Promise<ProviderConfigRecord> {
     if (providerConfigId) {
-      const provider = this.providers.findById(providerConfigId, workspaceId);
+      const provider = await this.providers.findById(providerConfigId, workspaceId);
       if (!provider || provider.type !== type) throw new Error(`${type} provider config not found`);
       return provider;
     }
-    const matches = this.providers.list(workspaceId).filter((provider) => provider.type === type);
+    const matches = (await this.providers.list(workspaceId))
+      .filter((provider) => provider.type === type);
     if (matches.length !== 1) {
       throw new Error(
         matches.length

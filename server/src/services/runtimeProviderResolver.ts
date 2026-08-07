@@ -1,10 +1,10 @@
 import { type AgentConfig } from './agentRepository';
-import { LocalSecretVault } from './localSecretVault';
 import {
-  ProviderConfigRepository,
   type ProviderConfigRecord,
 } from './providerConfigRepository';
+import { type ProviderConfigStore } from './providerConfigStore';
 import { normalizeProviderBaseUrl } from './providerEndpointPolicy';
+import { type SecretStore } from './secretStore';
 
 export interface RuntimeModelEndpoint {
   provider: string;
@@ -23,27 +23,23 @@ export interface RuntimeProviderSelection {
 type ModelSlot = 'default' | 'embedding';
 
 export class RuntimeProviderResolver {
-  private readonly secrets: LocalSecretVault;
-
   constructor(
-    private readonly providers: ProviderConfigRepository,
-    secrets: LocalSecretVault,
-  ) {
-    this.secrets = secrets;
-  }
+    private readonly providers: ProviderConfigStore,
+    private readonly secrets: SecretStore,
+  ) {}
 
-  resolve(config: AgentConfig, workspaceId: number): RuntimeProviderSelection {
+  async resolve(config: AgentConfig, workspaceId: number): Promise<RuntimeProviderSelection> {
     return {
-      llm: this.resolveSlot(config.modelConfig.default, 'default', workspaceId),
-      embedding: this.resolveSlot(config.modelConfig.embedding, 'embedding', workspaceId),
+      llm: await this.resolveSlot(config.modelConfig.default, 'default', workspaceId),
+      embedding: await this.resolveSlot(config.modelConfig.embedding, 'embedding', workspaceId),
     };
   }
 
-  private resolveSlot(
+  private async resolveSlot(
     input: unknown,
     slot: ModelSlot,
     workspaceId: number,
-  ): RuntimeModelEndpoint {
+  ): Promise<RuntimeModelEndpoint> {
     const selection = asRecord(input);
     const providerName = text(selection.provider) || 'mock';
     const defaultModel = slot === 'default' ? 'mock-chat' : 'mock-embedding';
@@ -51,7 +47,7 @@ export class RuntimeProviderResolver {
       return { provider: 'mock', model: text(selection.model) || defaultModel };
     }
 
-    const provider = this.findProvider(selection, providerName, slot, workspaceId);
+    const provider = await this.findProvider(selection, providerName, slot, workspaceId);
     const configuredProvider = text(provider.config.provider);
     if (!configuredProvider) throw new Error('provider config provider is required');
     const model = text(selection.model) || text(provider.config.model);
@@ -61,7 +57,7 @@ export class RuntimeProviderResolver {
     const endpoint: RuntimeModelEndpoint = {
       provider: configuredProvider,
       model,
-      api_key: this.secrets.read(provider.secretRef, workspaceId),
+      api_key: await this.secrets.read(provider.secretRef, workspaceId),
     };
     const baseUrl = text(provider.config.baseUrl);
     if (baseUrl) endpoint.base_url = normalizeProviderBaseUrl(baseUrl);
@@ -72,12 +68,12 @@ export class RuntimeProviderResolver {
     return endpoint;
   }
 
-  private findProvider(
+  private async findProvider(
     selection: Record<string, unknown>,
     providerName: string,
     slot: ModelSlot,
     workspaceId: number,
-  ): ProviderConfigRecord {
+  ): Promise<ProviderConfigRecord> {
     const providerConfigId = optionalInteger(
       selection.providerConfigId,
       'providerConfigId',
@@ -85,14 +81,14 @@ export class RuntimeProviderResolver {
       Number.MAX_SAFE_INTEGER,
     );
     if (providerConfigId) {
-      const provider = this.providers.findById(providerConfigId, workspaceId);
+      const provider = await this.providers.findById(providerConfigId, workspaceId);
       if (!provider || !supportsSlot(provider.type, slot)) {
         throw new Error('provider config not found');
       }
       return provider;
     }
 
-    const matches = this.providers.list(workspaceId).filter((provider) => (
+    const matches = (await this.providers.list(workspaceId)).filter((provider) => (
       supportsSlot(provider.type, slot)
       && text(provider.config.provider) === providerName
     ));
