@@ -23,6 +23,10 @@ Migrations `001` through `009` currently provide core platform metadata,
 identity and sessions, encrypted secret references, tool audit, jobs, document
 indexing, conversations, and Workspace membership. The remaining SQLite
 migration domains are still required before runtime cutover.
+Migrations `010` through `014` add Agent version/deployment backfills, Run
+idempotency, Workspace capability settings, document upload metadata, and vector
+index metadata. Billing, payment, usage, privacy, security, operator, and legal
+hold domains remain required before runtime cutover.
 
 ## SQLite Assumption Audit
 

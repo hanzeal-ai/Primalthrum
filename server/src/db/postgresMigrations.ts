@@ -8,6 +8,7 @@ import {
   DEFAULT_WORKSPACE_SLUG,
 } from './workspaceDefaults';
 import { POSTGRES_IDENTITY_MIGRATIONS } from './postgres-migrations/identity';
+import { POSTGRES_AGENT_LIFECYCLE_MIGRATIONS } from './postgres-migrations/agentLifecycle';
 import { POSTGRES_KNOWLEDGE_MIGRATIONS } from './postgres-migrations/knowledge';
 import { POSTGRES_OPERATIONS_MIGRATIONS } from './postgres-migrations/operations';
 import { POSTGRES_WORKSPACE_MIGRATIONS } from './postgres-migrations/workspaces';
@@ -128,6 +129,7 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigration[] = [
   ...POSTGRES_OPERATIONS_MIGRATIONS,
   ...POSTGRES_KNOWLEDGE_MIGRATIONS,
   ...POSTGRES_WORKSPACE_MIGRATIONS,
+  ...POSTGRES_AGENT_LIFECYCLE_MIGRATIONS,
 ];
 
 function validateMigrations(migrations: readonly PostgresMigration[]): void {

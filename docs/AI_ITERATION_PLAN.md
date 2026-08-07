@@ -2130,7 +2130,10 @@ complete. Follow the same dependency and verification protocol used above.
   parity through migrations `002`-`009`, including identity, sessions, secrets,
   operations, knowledge, conversations, and Workspace membership backfills.
   Concurrent and repeated migration runs are verified against the digest-pinned
-  PostgreSQL container; the remaining 23 migration domains are still open.
+  PostgreSQL container. The seventh P22 slice extends parity through migrations
+  `010`-`014`, verifies legacy Agent version/deployment backfills, Run idempotency,
+  capability settings, and document/vector metadata; the remaining 18 migration
+  domains are still open.
 
 ### P23-01 Full Commercial End-To-End Suite
 
