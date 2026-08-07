@@ -19,9 +19,10 @@ until repository migration and PostgreSQL-native migrations are complete.
 `server/src/db/postgresMigrations.ts` owns a separate PostgreSQL-native migration
 chain. It applies immutable ordered IDs in one transaction behind a PostgreSQL
 advisory lock, so concurrent server instances cannot race migration application.
-Migration `001_platform_metadata` currently provides the seven core platform
-tables and default Workspace. The remaining SQLite migration domains are still
-required before runtime cutover.
+Migrations `001` through `009` currently provide core platform metadata,
+identity and sessions, encrypted secret references, tool audit, jobs, document
+indexing, conversations, and Workspace membership. The remaining SQLite
+migration domains are still required before runtime cutover.
 
 ## SQLite Assumption Audit
 

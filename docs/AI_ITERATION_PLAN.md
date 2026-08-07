@@ -2126,9 +2126,11 @@ complete. Follow the same dependency and verification protocol used above.
   and a real PostgreSQL container smoke. PostgreSQL-native migrations and
   parameterized repository conversion remain open. The fifth P22 slice adds a
   PostgreSQL-native migration runner with an advisory transaction lock and the
-  `001_platform_metadata` core schema. Concurrent and repeated migration runs are
-  verified against the digest-pinned PostgreSQL container; the remaining 31
-  migration domains are still open.
+  `001_platform_metadata` core schema. The sixth P22 slice extends native schema
+  parity through migrations `002`-`009`, including identity, sessions, secrets,
+  operations, knowledge, conversations, and Workspace membership backfills.
+  Concurrent and repeated migration runs are verified against the digest-pinned
+  PostgreSQL container; the remaining 23 migration domains are still open.
 
 ### P23-01 Full Commercial End-To-End Suite
 

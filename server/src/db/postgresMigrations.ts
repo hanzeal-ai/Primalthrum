@@ -7,6 +7,10 @@ import {
   DEFAULT_WORKSPACE_NAME,
   DEFAULT_WORKSPACE_SLUG,
 } from './workspaceDefaults';
+import { POSTGRES_IDENTITY_MIGRATIONS } from './postgres-migrations/identity';
+import { POSTGRES_KNOWLEDGE_MIGRATIONS } from './postgres-migrations/knowledge';
+import { POSTGRES_OPERATIONS_MIGRATIONS } from './postgres-migrations/operations';
+import { POSTGRES_WORKSPACE_MIGRATIONS } from './postgres-migrations/workspaces';
 
 export interface PostgresMigration {
   id: string;
@@ -120,6 +124,10 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigration[] = [
     id: '001_platform_metadata',
     up: applyPlatformMetadata,
   },
+  ...POSTGRES_IDENTITY_MIGRATIONS,
+  ...POSTGRES_OPERATIONS_MIGRATIONS,
+  ...POSTGRES_KNOWLEDGE_MIGRATIONS,
+  ...POSTGRES_WORKSPACE_MIGRATIONS,
 ];
 
 function validateMigrations(migrations: readonly PostgresMigration[]): void {
