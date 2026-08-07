@@ -4,7 +4,7 @@ import type Koa from 'koa';
 import { sendApiError } from '../services/apiErrors';
 import { type StructuredLogger } from '../services/logger';
 import { verifyPassword } from '../services/passwordHash';
-import { UserRepository } from '../services/userRepository';
+import { type UserStore } from '../services/userStore';
 import {
   WorkspaceOwnershipRepository,
   WorkspaceOwnershipTransferError,
@@ -17,20 +17,20 @@ interface WorkspaceOwnershipRouteDependencies {
   logger: StructuredLogger;
   ownership: WorkspaceOwnershipRepository;
   requireCurrentWorkspace: (ctx: Koa.Context, workspaceId: number) => boolean;
-  users: UserRepository;
+  users: UserStore;
 }
 
 export function registerWorkspaceOwnershipRoutes(
   router: Router,
   dependencies: WorkspaceOwnershipRouteDependencies,
 ): void {
-  router.put('/api/workspaces/:id/ownership', (ctx) => {
+  router.put('/api/workspaces/:id/ownership', async (ctx) => {
     const workspaceId = Number(ctx.params.id);
     if (!dependencies.requireCurrentWorkspace(ctx, workspaceId)) return;
     if (!dependencies.authorize(ctx, 'workspace.manage')) return;
     const body = ctx.request.body as Record<string, unknown>;
     const userId = dependencies.currentUserId(ctx);
-    if (!reauthenticate(ctx, dependencies, userId, body.password)) return;
+    if (!await reauthenticate(ctx, dependencies, userId, body.password)) return;
     try {
       ctx.body = dependencies.ownership.transfer({
         workspaceId,
@@ -44,13 +44,13 @@ export function registerWorkspaceOwnershipRoutes(
   });
 }
 
-function reauthenticate(
+async function reauthenticate(
   ctx: Koa.Context,
   dependencies: WorkspaceOwnershipRouteDependencies,
   userId: number,
   passwordValue: unknown,
-): boolean {
-  const user = dependencies.users.findById(userId);
+): Promise<boolean> {
+  const user = await dependencies.users.findById(userId);
   const password = typeof passwordValue === 'string' ? passwordValue : '';
   if (user && verifyPassword(password, user.passwordHash)) return true;
   sendApiError(ctx, dependencies.logger, {

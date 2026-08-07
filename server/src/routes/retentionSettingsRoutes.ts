@@ -7,7 +7,7 @@ import { type StructuredLogger } from '../services/logger';
 import { verifyPassword } from '../services/passwordHash';
 import { RetentionPolicyRepository } from '../services/retentionPolicyRepository';
 import { RetentionService } from '../services/retentionService';
-import { UserRepository } from '../services/userRepository';
+import { type UserStore } from '../services/userStore';
 import {
   hasWorkspacePermission,
   type WorkspacePermission,
@@ -22,7 +22,7 @@ interface RetentionSettingsRouteDependencies {
   policies: RetentionPolicyRepository;
   retention: RetentionService;
   schedule: (workspaceId: number) => void;
-  users: UserRepository;
+  users: UserStore;
 }
 
 export function registerRetentionSettingsRoutes(
@@ -46,12 +46,12 @@ export function registerRetentionSettingsRoutes(
     ctx.body = retentionState(ctx, dependencies);
   });
 
-  router.put('/api/settings/retention', (ctx) => {
+  router.put('/api/settings/retention', async (ctx) => {
     if (!authorize(ctx, 'retention.manage')) return;
     const workspaceId = currentWorkspaceId(ctx);
     if (!assertRetentionEntitled(ctx, logger, billing, workspaceId)) return;
     const body = ctx.request.body as Record<string, unknown>;
-    if (!reauthenticate(ctx, logger, users, currentUserId(ctx), body.password)) return;
+    if (!await reauthenticate(ctx, logger, users, currentUserId(ctx), body.password)) return;
     try {
       policies.update({
         workspaceId,
@@ -76,7 +76,7 @@ export function registerRetentionSettingsRoutes(
     const workspaceId = currentWorkspaceId(ctx);
     if (!assertRetentionEntitled(ctx, logger, billing, workspaceId)) return;
     const body = ctx.request.body as Record<string, unknown>;
-    if (!reauthenticate(ctx, logger, users, currentUserId(ctx), body.password)) return;
+    if (!await reauthenticate(ctx, logger, users, currentUserId(ctx), body.password)) return;
     try {
       ctx.body = await retention.enforce(workspaceId, currentUserId(ctx));
     } catch (error) {
@@ -131,14 +131,14 @@ function assertRetentionEntitled(
   }
 }
 
-function reauthenticate(
+async function reauthenticate(
   ctx: Koa.Context,
   logger: StructuredLogger,
-  users: UserRepository,
+  users: UserStore,
   userId: number,
   passwordValue: unknown,
-): boolean {
-  const user = users.findById(userId);
+): Promise<boolean> {
+  const user = await users.findById(userId);
   const password = typeof passwordValue === 'string' ? passwordValue : '';
   if (user && verifyPassword(password, user.passwordHash)) return true;
   sendApiError(ctx, logger, {

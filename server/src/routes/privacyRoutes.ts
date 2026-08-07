@@ -16,7 +16,8 @@ import {
   type AnalyticsEventName,
   type ConsentSource,
 } from '../services/privacyAnalyticsRepository';
-import { normalizeEmail, UserRepository } from '../services/userRepository';
+import { normalizeEmail, type UserRecord } from '../services/userRepository';
+import { type UserStore } from '../services/userStore';
 
 const OPAQUE_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const PROPERTY_KEYS = new Set(['source', 'planKey', 'authenticated']);
@@ -30,7 +31,7 @@ export function registerPrivacyRoutes(
     deletion: AccountDeletionService;
     exports: AccountDataExportService;
     logger: StructuredLogger;
-    users: UserRepository;
+    users: UserStore;
   },
 ): void {
   router.get('/api/public/privacy/config', (ctx) => {
@@ -106,7 +107,7 @@ export function registerPrivacyRoutes(
   router.post('/api/settings/privacy/export', async (ctx) => {
     const body = ctx.request.body as Record<string, unknown>;
     const userId = options.currentUserId(ctx);
-    if (!reauthenticate(ctx, options.logger, options.users, userId, body.password)) return;
+    if (!await reauthenticate(ctx, options.logger, options.users, userId, body.password)) return;
     try {
       const scope = body.scope === 'workspace' ? 'workspace' : 'account';
       const archive = await (scope === 'workspace'
@@ -127,11 +128,11 @@ export function registerPrivacyRoutes(
     }
   });
 
-  router.post('/api/settings/privacy/deletion', (ctx) => {
+  router.post('/api/settings/privacy/deletion', async (ctx) => {
     const body = ctx.request.body as Record<string, unknown>;
     const userId = options.currentUserId(ctx);
-    const user = options.users.findById(userId);
-    if (!reauthenticate(ctx, options.logger, options.users, userId, body.password)) return;
+    const user = await reauthenticate(ctx, options.logger, options.users, userId, body.password);
+    if (!user) return;
     try {
       if (!user || normalizeEmail(body.confirmEmail) !== user.email) {
         throw new Error('account email confirmation does not match');
@@ -156,10 +157,10 @@ export function registerPrivacyRoutes(
     }
   });
 
-  router.delete('/api/settings/privacy/deletion', (ctx) => {
+  router.delete('/api/settings/privacy/deletion', async (ctx) => {
     const body = ctx.request.body as Record<string, unknown>;
     const userId = options.currentUserId(ctx);
-    if (!reauthenticate(ctx, options.logger, options.users, userId, body.password)) return;
+    if (!await reauthenticate(ctx, options.logger, options.users, userId, body.password)) return;
     try {
       ctx.body = options.deletion.cancel(userId);
     } catch (error) {
@@ -172,22 +173,22 @@ export function registerPrivacyRoutes(
   });
 }
 
-function reauthenticate(
+async function reauthenticate(
   ctx: Koa.Context,
   logger: StructuredLogger,
-  users: UserRepository,
+  users: UserStore,
   userId: number,
   passwordValue: unknown,
-): boolean {
-  const user = users.findById(userId);
+): Promise<UserRecord | null> {
+  const user = await users.findById(userId);
   const password = typeof passwordValue === 'string' ? passwordValue : '';
-  if (user && verifyPassword(password, user.passwordHash)) return true;
+  if (user && verifyPassword(password, user.passwordHash)) return user;
   sendApiError(ctx, logger, {
     status: 401,
     code: 'REAUTHENTICATION_REQUIRED',
     message: 'current password is required for privacy changes',
   });
-  return false;
+  return null;
 }
 
 function opaqueId(value: unknown, field: string): string {

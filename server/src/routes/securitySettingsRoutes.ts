@@ -5,8 +5,8 @@ import { ApiKeyRepository } from '../services/apiKeyRepository';
 import { sendApiError } from '../services/apiErrors';
 import { type StructuredLogger } from '../services/logger';
 import { verifyPassword } from '../services/passwordHash';
-import { SessionRepository } from '../services/sessionRepository';
-import { UserRepository } from '../services/userRepository';
+import { type SessionStore } from '../services/sessionStore';
+import { type UserStore } from '../services/userStore';
 import { type WorkspacePermission } from '../services/workspaceAuthorization';
 
 interface SecuritySettingsRouteDependencies {
@@ -15,8 +15,8 @@ interface SecuritySettingsRouteDependencies {
   currentUserId: (ctx: Koa.Context) => number;
   currentWorkspaceId: (ctx: Koa.Context) => number;
   logger: StructuredLogger;
-  sessions: SessionRepository;
-  users: UserRepository;
+  sessions: SessionStore;
+  users: UserStore;
 }
 
 export function registerSecuritySettingsRoutes(
@@ -38,10 +38,10 @@ export function registerSecuritySettingsRoutes(
     ctx.body = apiKeys.list(currentWorkspaceId(ctx));
   });
 
-  router.post('/api/settings/api-keys', (ctx) => {
+  router.post('/api/settings/api-keys', async (ctx) => {
     if (!authorize(ctx, 'api_keys.manage')) return;
     const body = ctx.request.body as Record<string, unknown>;
-    const user = users.findById(currentUserId(ctx));
+    const user = await users.findById(currentUserId(ctx));
     const password = typeof body.password === 'string' ? body.password : '';
     if (!user || !verifyPassword(password, user.passwordHash)) {
       sendApiError(ctx, logger, {
@@ -83,17 +83,17 @@ export function registerSecuritySettingsRoutes(
     }
   });
 
-  router.get('/api/settings/sessions', (ctx) => {
+  router.get('/api/settings/sessions', async (ctx) => {
     const token = ctx.state.sessionToken;
     if (!token) return sessionTokenRequired(ctx, logger);
-    ctx.body = sessions.listForUser(currentUserId(ctx), token);
+    ctx.body = await sessions.listForUser(currentUserId(ctx), token);
   });
 
-  router.delete('/api/settings/sessions/:id', (ctx) => {
+  router.delete('/api/settings/sessions/:id', async (ctx) => {
     const token = ctx.state.sessionToken;
     if (!token) return sessionTokenRequired(ctx, logger);
     try {
-      sessions.revokeForUser(currentUserId(ctx), Number(ctx.params.id), token);
+      await sessions.revokeForUser(currentUserId(ctx), Number(ctx.params.id), token);
       ctx.status = 204;
     } catch (error) {
       sendApiError(ctx, logger, {
@@ -104,10 +104,10 @@ export function registerSecuritySettingsRoutes(
     }
   });
 
-  router.post('/api/settings/sessions/revoke-others', (ctx) => {
+  router.post('/api/settings/sessions/revoke-others', async (ctx) => {
     const token = ctx.state.sessionToken;
     if (!token) return sessionTokenRequired(ctx, logger);
-    ctx.body = { revoked: sessions.revokeOthers(currentUserId(ctx), token) };
+    ctx.body = { revoked: await sessions.revokeOthers(currentUserId(ctx), token) };
   });
 }
 

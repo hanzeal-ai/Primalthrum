@@ -2,9 +2,9 @@ import Koa from 'koa';
 
 import { ApiKeyRepository, type ApiKeyScope } from './apiKeyRepository';
 import {
-  SessionRepository,
   type AuthenticatedSession,
 } from './sessionRepository';
+import { type SessionStore } from './sessionStore';
 
 export const SESSION_COOKIE_NAME = 'primalthrum_session';
 
@@ -15,7 +15,7 @@ export interface AuthContextState {
 }
 
 export function createAuthMiddleware(
-  sessions: SessionRepository,
+  sessions: SessionStore,
   apiKeys?: ApiKeyRepository,
 ): Koa.Middleware<Koa.DefaultState & AuthContextState> {
   return async (ctx, next) => {
@@ -31,7 +31,7 @@ export function createAuthMiddleware(
       return;
     }
 
-    const session = sessions.findByToken(token);
+    const session = await sessions.findByToken(token);
     if (!session && apiKeys) {
       const apiKey = apiKeys.resolve(token);
       if (apiKey) {
