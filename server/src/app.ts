@@ -50,6 +50,8 @@ import { AgentEmbeddingClient } from './services/agentEmbeddingClient';
 import { AgentSpeechClient } from './services/agentSpeechClient';
 import { chunkDocumentText } from './services/documentChunker';
 import { DocumentIndexRepository } from './services/documentIndexRepository';
+import { AsyncDocumentIndexRepository } from './services/asyncDocumentIndexRepository';
+import { type DocumentIndexStore } from './services/documentIndexStore';
 import {
   parseDocumentUpload,
   type ParsedDocumentUpload,
@@ -330,7 +332,9 @@ export function createApp(options: AppOptions = {}): Koa {
   const documentRepository: DocumentStore = runtimeDatabase
     ? new AsyncDocumentRepository(runtimeDatabase)
     : new DocumentRepository(db);
-  const documentIndexRepository = new DocumentIndexRepository(db);
+  const documentIndexRepository: DocumentIndexStore = runtimeDatabase
+    ? new AsyncDocumentIndexRepository(runtimeDatabase)
+    : new DocumentIndexRepository(db);
   const documentUploadSecurity = new DocumentUploadSecurityService(
     options.documentMalwareScanner ?? createDocumentMalwareScanner(),
     new DocumentUploadSecurityRepository(db),
@@ -512,7 +516,7 @@ export function createApp(options: AppOptions = {}): Koa {
             resourceType: 'document.rag-storage',
           });
         }
-        const entries = documentIndexRepository.reindex(existing, chunks, {
+        const entries = await documentIndexRepository.reindex(existing, chunks, {
           embeddings: embeddingBatch?.embeddings ?? [],
           embeddingProvider: embeddingBatch?.provider ?? '',
           embeddingModel: embeddingBatch?.model ?? '',
@@ -1629,7 +1633,7 @@ export function createApp(options: AppOptions = {}): Koa {
       return;
     }
 
-    const removedIndexEntries = documentIndexRepository.deleteByDocument(document.id);
+    const removedIndexEntries = await documentIndexRepository.deleteByDocument(document.id);
     if (document.storageRef) {
       await documentStorage.delete(document.storageRef);
     }
@@ -2156,7 +2160,7 @@ export function createApp(options: AppOptions = {}): Koa {
             embeddingModel: streamRequest.payload.embedding.model,
             vectorStore: streamRequest.payload.rag_provider,
           };
-          const hasVectors = documentIndexRepository.hasCompatibleVectors(
+          const hasVectors = await documentIndexRepository.hasCompatibleVectors(
             agentId,
             vectorOptions,
           );
@@ -2178,7 +2182,7 @@ export function createApp(options: AppOptions = {}): Koa {
             });
           }
           const matches = queryEmbedding
-            ? documentIndexRepository.searchByAgent(
+            ? await documentIndexRepository.searchByAgent(
                 agentId,
                 String(body.input ?? ''),
                 3,

@@ -48,5 +48,7 @@ test -n "$PORT"
   DATABASE_URL="postgresql://postgres:${PASSWORD}@127.0.0.1:${PORT}/${DATABASE}" \
     pnpm exec ts-node src/commands/postgresAgentVersionRepositorySmoke.ts
   DATABASE_URL="postgresql://postgres:${PASSWORD}@127.0.0.1:${PORT}/${DATABASE}" \
+    pnpm exec ts-node src/commands/postgresDocumentIndexRepositorySmoke.ts
+  DATABASE_URL="postgresql://postgres:${PASSWORD}@127.0.0.1:${PORT}/${DATABASE}" \
     pnpm exec ts-node src/commands/postgresProviderConfigRepositorySmoke.ts
 )
