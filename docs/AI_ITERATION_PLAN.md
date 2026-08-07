@@ -2137,7 +2137,11 @@ complete. Follow the same dependency and verification protocol used above.
   for plans, entitlements, Credits, payments, usage rating, cost controls, and the
   export Outbox. Real PostgreSQL tests verify catalog seeds, atomic ledger
   aggregation and underflow rollback, immutable evidence, historical Outbox
-  backfill, and trigger-based enqueue; 14 migration domains remain open.
+  backfill, and trigger-based enqueue. The ninth P22 slice extends parity through
+  `019`-`025` for account lifecycle, privacy, transactional email, abuse
+  protection, API Key evidence, retention, and MFA. Real PostgreSQL mutation
+  attempts prove each security event family is database-immutable; seven
+  migration domains remain open.
 
 ### P23-01 Full Commercial End-To-End Suite
 

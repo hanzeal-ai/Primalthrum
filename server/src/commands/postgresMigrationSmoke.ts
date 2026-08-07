@@ -5,6 +5,10 @@ import {
   seedRatedUsageBeforeOutbox,
   verifyCommercialMigrations,
 } from './postgresMigrationBillingSmoke';
+import {
+  POSTGRES_SECURITY_TABLES,
+  verifySecurityMigrations,
+} from './postgresMigrationSecuritySmoke';
 
 function migrationsThrough(id: string) {
   const index = POSTGRES_MIGRATIONS.findIndex((migration) => migration.id === id);
@@ -237,6 +241,7 @@ async function main(): Promise<void> {
       throw new Error('document vector metadata defaults were not migrated');
     }
     await verifyCommercialMigrations(database, userId, preOutboxRatedUsageId);
+    await verifySecurityMigrations(database, userId);
 
     const expectedTables = [
       'agent_configs',
@@ -260,6 +265,7 @@ async function main(): Promise<void> {
       'workspace_capability_settings',
       'workspaces',
       ...POSTGRES_COMMERCIAL_TABLES,
+      ...POSTGRES_SECURITY_TABLES,
     ];
     for (const table of expectedTables) {
       if ((await database.columns(table)).length === 0) {

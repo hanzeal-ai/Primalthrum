@@ -9,10 +9,21 @@ import {
 } from './workspaceDefaults';
 import { POSTGRES_IDENTITY_MIGRATIONS } from './postgres-migrations/identity';
 import { POSTGRES_AGENT_LIFECYCLE_MIGRATIONS } from './postgres-migrations/agentLifecycle';
+import {
+  POSTGRES_ACCOUNT_IDENTITY_MIGRATIONS,
+  POSTGRES_EMAIL_MIGRATIONS,
+} from './postgres-migrations/accounts';
 import { POSTGRES_BILLING_MIGRATIONS } from './postgres-migrations/billing';
 import { POSTGRES_KNOWLEDGE_MIGRATIONS } from './postgres-migrations/knowledge';
 import { POSTGRES_OPERATIONS_MIGRATIONS } from './postgres-migrations/operations';
 import { POSTGRES_PAYMENT_MIGRATIONS } from './postgres-migrations/payments';
+import { POSTGRES_PRIVACY_MIGRATIONS } from './postgres-migrations/privacy';
+import { POSTGRES_RETENTION_MIGRATIONS } from './postgres-migrations/retention';
+import {
+  POSTGRES_ABUSE_MIGRATIONS,
+  POSTGRES_API_KEY_MIGRATIONS,
+  POSTGRES_MFA_MIGRATIONS,
+} from './postgres-migrations/security';
 import { POSTGRES_USAGE_MIGRATIONS } from './postgres-migrations/usage';
 import { POSTGRES_WORKSPACE_MIGRATIONS } from './postgres-migrations/workspaces';
 
@@ -136,6 +147,13 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigration[] = [
   ...POSTGRES_BILLING_MIGRATIONS,
   ...POSTGRES_PAYMENT_MIGRATIONS,
   ...POSTGRES_USAGE_MIGRATIONS,
+  ...POSTGRES_ACCOUNT_IDENTITY_MIGRATIONS,
+  ...POSTGRES_PRIVACY_MIGRATIONS,
+  ...POSTGRES_EMAIL_MIGRATIONS,
+  ...POSTGRES_ABUSE_MIGRATIONS,
+  ...POSTGRES_API_KEY_MIGRATIONS,
+  ...POSTGRES_RETENTION_MIGRATIONS,
+  ...POSTGRES_MFA_MIGRATIONS,
 ];
 
 function validateMigrations(migrations: readonly PostgresMigration[]): void {

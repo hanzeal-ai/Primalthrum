@@ -33,6 +33,10 @@ Credits ledger, subscriptions, payment lifecycle, immutable rated usage, cost
 controls, and durable meter-export Outbox. PostgreSQL trigger functions enforce
 credit-account aggregation, nonnegative balances, immutable evidence, historical
 Outbox backfill, and automatic enqueue for new rated usage.
+Migrations `019` through `025` add account verification and recovery, privacy
+consent, transactional email delivery, abuse protection, Workspace API keys,
+retention controls, and MFA. Existing account/session timestamps are backfilled,
+and all security evidence tables reject updates and deletes at the database layer.
 
 ## SQLite Assumption Audit
 
