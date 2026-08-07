@@ -25,8 +25,14 @@ indexing, conversations, and Workspace membership. The remaining SQLite
 migration domains are still required before runtime cutover.
 Migrations `010` through `014` add Agent version/deployment backfills, Run
 idempotency, Workspace capability settings, document upload metadata, and vector
-index metadata. Billing, payment, usage, privacy, security, operator, and legal
-hold domains remain required before runtime cutover.
+index metadata. Account lifecycle, privacy, email, abuse protection, API-key
+security, retention, operator, and legal-hold domains remain required before
+runtime cutover.
+Migrations `015` through `018` add the commercial plan and entitlement catalog,
+Credits ledger, subscriptions, payment lifecycle, immutable rated usage, cost
+controls, and durable meter-export Outbox. PostgreSQL trigger functions enforce
+credit-account aggregation, nonnegative balances, immutable evidence, historical
+Outbox backfill, and automatic enqueue for new rated usage.
 
 ## SQLite Assumption Audit
 

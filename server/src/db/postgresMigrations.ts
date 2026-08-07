@@ -9,8 +9,11 @@ import {
 } from './workspaceDefaults';
 import { POSTGRES_IDENTITY_MIGRATIONS } from './postgres-migrations/identity';
 import { POSTGRES_AGENT_LIFECYCLE_MIGRATIONS } from './postgres-migrations/agentLifecycle';
+import { POSTGRES_BILLING_MIGRATIONS } from './postgres-migrations/billing';
 import { POSTGRES_KNOWLEDGE_MIGRATIONS } from './postgres-migrations/knowledge';
 import { POSTGRES_OPERATIONS_MIGRATIONS } from './postgres-migrations/operations';
+import { POSTGRES_PAYMENT_MIGRATIONS } from './postgres-migrations/payments';
+import { POSTGRES_USAGE_MIGRATIONS } from './postgres-migrations/usage';
 import { POSTGRES_WORKSPACE_MIGRATIONS } from './postgres-migrations/workspaces';
 
 export interface PostgresMigration {
@@ -130,6 +133,9 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigration[] = [
   ...POSTGRES_KNOWLEDGE_MIGRATIONS,
   ...POSTGRES_WORKSPACE_MIGRATIONS,
   ...POSTGRES_AGENT_LIFECYCLE_MIGRATIONS,
+  ...POSTGRES_BILLING_MIGRATIONS,
+  ...POSTGRES_PAYMENT_MIGRATIONS,
+  ...POSTGRES_USAGE_MIGRATIONS,
 ];
 
 function validateMigrations(migrations: readonly PostgresMigration[]): void {

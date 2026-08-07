@@ -1,5 +1,10 @@
 import { PostgresDatabase } from '../db/postgres';
 import { POSTGRES_MIGRATIONS, runPostgresMigrations } from '../db/postgresMigrations';
+import {
+  POSTGRES_COMMERCIAL_TABLES,
+  seedRatedUsageBeforeOutbox,
+  verifyCommercialMigrations,
+} from './postgresMigrationBillingSmoke';
 
 function migrationsThrough(id: string) {
   const index = POSTGRES_MIGRATIONS.findIndex((migration) => migration.id === id);
@@ -83,6 +88,12 @@ async function main(): Promise<void> {
       values: [1, legacyAgentId, documentId, 'migration-chunk', 'migration content'],
     });
 
+    const preOutboxMigrations = migrationsThrough('017_usage_rating_cost_controls');
+    await Promise.all([
+      runPostgresMigrations(database, preOutboxMigrations),
+      runPostgresMigrations(database, preOutboxMigrations),
+    ]);
+    const preOutboxRatedUsageId = await seedRatedUsageBeforeOutbox(database);
     await Promise.all([
       runPostgresMigrations(database),
       runPostgresMigrations(database),
@@ -225,6 +236,7 @@ async function main(): Promise<void> {
     if (vectorMetadata[0]?.embedding_json !== '[]' || vectorMetadata[0]?.vector_store !== '') {
       throw new Error('document vector metadata defaults were not migrated');
     }
+    await verifyCommercialMigrations(database, userId, preOutboxRatedUsageId);
 
     const expectedTables = [
       'agent_configs',
@@ -247,6 +259,7 @@ async function main(): Promise<void> {
       'workspace_memberships',
       'workspace_capability_settings',
       'workspaces',
+      ...POSTGRES_COMMERCIAL_TABLES,
     ];
     for (const table of expectedTables) {
       if ((await database.columns(table)).length === 0) {

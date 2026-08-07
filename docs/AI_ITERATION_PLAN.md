@@ -2133,7 +2133,11 @@ complete. Follow the same dependency and verification protocol used above.
   PostgreSQL container. The seventh P22 slice extends parity through migrations
   `010`-`014`, verifies legacy Agent version/deployment backfills, Run idempotency,
   capability settings, and document/vector metadata; the remaining 18 migration
-  domains are still open.
+  domains are still open. The eighth P22 slice extends parity through `015`-`018`
+  for plans, entitlements, Credits, payments, usage rating, cost controls, and the
+  export Outbox. Real PostgreSQL tests verify catalog seeds, atomic ledger
+  aggregation and underflow rollback, immutable evidence, historical Outbox
+  backfill, and trigger-based enqueue; 14 migration domains remain open.
 
 ### P23-01 Full Commercial End-To-End Suite
 
