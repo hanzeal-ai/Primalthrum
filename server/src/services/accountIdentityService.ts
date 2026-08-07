@@ -2,14 +2,14 @@ import { BillingRepository } from './billingRepository';
 import { AccountEmailOutboxRepository } from './accountEmailOutboxRepository';
 import { AccountOnboardingRepository } from './accountOnboardingRepository';
 import { AccountTokenRepository } from './accountTokenRepository';
-import { UserRepository } from './userRepository';
+import { type UserStore } from './userStore';
 
 const VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
 const RESET_TTL_MS = 30 * 60 * 1000;
 
 export class AccountIdentityService {
   constructor(
-    private readonly users: UserRepository,
+    private readonly users: UserStore,
     private readonly tokens: AccountTokenRepository,
     private readonly emails: AccountEmailOutboxRepository,
     private readonly onboarding: AccountOnboardingRepository,
@@ -28,19 +28,19 @@ export class AccountIdentityService {
     return this.issueVerification(input.userId, input.email);
   }
 
-  resendVerification(userId: number): string | null {
-    const user = this.users.findById(userId);
+  async resendVerification(userId: number): Promise<string | null> {
+    const user = await this.users.findById(userId);
     if (!user || user.emailVerifiedAt) return null;
     return this.issueVerification(user.id, user.email);
   }
 
-  verifyEmail(token: string) {
+  async verifyEmail(token: string) {
     const consumed = this.tokens.consume(token, 'verify_email');
     if (!consumed) throw new Error('email verification token is invalid or expired');
     const onboarding = this.onboarding.findForUser(consumed.userId);
     if (!onboarding) throw new Error('account onboarding state is missing');
     const verifiedAt = this.now().toISOString();
-    this.users.markEmailVerified(consumed.userId, verifiedAt);
+    await this.users.markEmailVerified(consumed.userId, verifiedAt);
     const trial = onboarding.selectedPlanKey === 'pro'
       ? this.billing.activateTrial(onboarding.workspaceId, consumed.userId, 'pro')
       : null;
@@ -50,8 +50,8 @@ export class AccountIdentityService {
     return { onboarding, trial, entitlementSnapshot, creditAccount };
   }
 
-  requestPasswordReset(email: string): string | null {
-    const user = this.users.findByEmail(email);
+  async requestPasswordReset(email: string): Promise<string | null> {
+    const user = await this.users.findByEmail(email);
     if (!user || !user.emailVerifiedAt) return null;
     this.emails.supersedePending(user.id, 'reset_password');
     const token = this.tokens.create({ userId: user.id, purpose: 'reset_password', ttlMs: RESET_TTL_MS });

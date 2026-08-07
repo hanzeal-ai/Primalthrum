@@ -753,8 +753,8 @@ export function createApp(options: AppOptions = {}): Koa {
     mfa: mfaService,
     sessions: sessionRepository,
     users: userRepository,
-    completeChallenge: (verified) => {
-      const user = userRepository.findById(verified.userId);
+    completeChallenge: async (verified) => {
+      const user = await userRepository.findById(verified.userId);
       if (!user) throw new Error('MFA user could not be loaded');
       if (verified.purpose === 'invitation') {
         const workspaceId = Number(verified.context.workspaceId);
@@ -765,17 +765,17 @@ export function createApp(options: AppOptions = {}): Koa {
         billingRepository.assertEntitled(
           workspaceId,
           'seats',
-          workspaceRepository.listMembers(workspaceId).length,
+          (await workspaceRepository.listMembers(workspaceId)).length,
           1,
         );
-        workspaceRepository.acceptInvitationById(
+        await workspaceRepository.acceptInvitationById(
           workspaceId,
           invitationId,
           user.id,
           user.email,
         );
         accountEmailOutbox.supersedeInvitation(invitationId);
-        const invitedPrincipal = workspaceRepository.principalForUser(user.id, workspaceId);
+        const invitedPrincipal = await workspaceRepository.principalForUser(user.id, workspaceId);
         if (!invitedPrincipal) throw new Error('workspace membership could not be loaded');
         return {
           user: invitedPrincipal,
@@ -783,7 +783,7 @@ export function createApp(options: AppOptions = {}): Koa {
           status: 201,
         };
       }
-      const principal = workspaceRepository.principalForUser(user.id);
+      const principal = await workspaceRepository.principalForUser(user.id);
       if (!principal) throw new Error('workspace membership is required');
       return { user: principal, emailVerified: Boolean(user.emailVerifiedAt) };
     },
@@ -883,15 +883,15 @@ export function createApp(options: AppOptions = {}): Koa {
     ctx.body = metrics.toPrometheusText(accountEmailOutbox.summary());
   });
 
-  router.get('/api/setup/status', (ctx) => {
+  router.get('/api/setup/status', async (ctx) => {
     ctx.body = {
-      needsSetup: !userRepository.hasAdmin(),
+      needsSetup: !await userRepository.hasAdmin(),
     };
   });
 
-  router.post('/api/setup/admin', (ctx) => {
+  router.post('/api/setup/admin', async (ctx) => {
     try {
-      if (userRepository.hasAdmin()) {
+      if (await userRepository.hasAdmin()) {
         ctx.status = 409;
         ctx.body = { error: 'admin user already exists' };
         return;
@@ -900,10 +900,10 @@ export function createApp(options: AppOptions = {}): Koa {
       const body = ctx.request.body as { email?: unknown; password?: unknown };
       const email = normalizeEmail(body.email);
       const password = normalizePassword(body.password);
-      const createdUser = userRepository.createAdmin(email, hashPassword(password));
-      const user = workspaceRepository.principalForUser(createdUser.id);
+      const createdUser = await userRepository.createAdmin(email, hashPassword(password));
+      const user = await workspaceRepository.principalForUser(createdUser.id);
       if (!user) throw new Error('admin workspace membership could not be loaded');
-      const session = sessionRepository.create(user);
+      const session = await sessionRepository.create(user);
 
       ctx.set('Set-Cookie', sessionCookie(session.token, session.expiresAt));
       ctx.status = 201;
@@ -916,12 +916,12 @@ export function createApp(options: AppOptions = {}): Koa {
     }
   });
 
-  router.post('/api/auth/login', (ctx) => {
+  router.post('/api/auth/login', async (ctx) => {
     try {
       const body = ctx.request.body as { email?: unknown; password?: unknown };
       const email = normalizeEmail(body.email);
       const password = normalizePassword(body.password);
-      const user = userRepository.findByEmail(email);
+      const user = await userRepository.findByEmail(email);
       const passwordMatches = verifyPasswordOrDummy(password, user?.passwordHash ?? null);
 
       if (!user || !passwordMatches) {
@@ -930,7 +930,7 @@ export function createApp(options: AppOptions = {}): Koa {
         return;
       }
 
-      const publicUser = workspaceRepository.principalForUser(user.id);
+      const publicUser = await workspaceRepository.principalForUser(user.id);
       if (!publicUser) {
         ctx.status = 403;
         ctx.body = { error: 'workspace membership is required' };
@@ -941,7 +941,7 @@ export function createApp(options: AppOptions = {}): Koa {
         ctx.body = mfaService.createChallenge(user.id, 'login');
         return;
       }
-      const session = sessionRepository.create(publicUser);
+      const session = await sessionRepository.create(publicUser);
       ctx.set('Set-Cookie', sessionCookie(session.token, session.expiresAt));
       ctx.body = { user: publicUser, session, emailVerified: Boolean(user.emailVerifiedAt) };
     } catch (error) {
@@ -952,7 +952,7 @@ export function createApp(options: AppOptions = {}): Koa {
     }
   });
 
-  router.post('/api/auth/register', (ctx) => {
+  router.post('/api/auth/register', async (ctx) => {
     try {
       const body = ctx.request.body as {
         email?: unknown;
@@ -970,7 +970,7 @@ export function createApp(options: AppOptions = {}): Koa {
       if (!['free', 'pro'].includes(planKey)) {
         throw new Error('registration plan must be free or pro');
       }
-      if (userRepository.findByEmail(email)) {
+      if (await userRepository.findByEmail(email)) {
         sendApiError(ctx, logger, {
           status: 409,
           code: 'ACCOUNT_ALREADY_EXISTS',
@@ -979,11 +979,11 @@ export function createApp(options: AppOptions = {}): Koa {
         return;
       }
 
-      const createdUser = userRepository.createUser(email, hashPassword(password));
-      const workspace = workspaceRepository.create(createdUser.id, workspaceName);
-      const user = workspaceRepository.principalForUser(createdUser.id, workspace.id);
+      const createdUser = await userRepository.createUser(email, hashPassword(password));
+      const workspace = await workspaceRepository.create(createdUser.id, workspaceName);
+      const user = await workspaceRepository.principalForUser(createdUser.id, workspace.id);
       if (!user) throw new Error('workspace owner membership could not be loaded');
-      const session = sessionRepository.create(user);
+      const session = await sessionRepository.create(user);
       const emailPreviewUrl = accountIdentityService.beginRegistration({
         userId: user.id,
         workspaceId: workspace.id,
@@ -1004,7 +1004,7 @@ export function createApp(options: AppOptions = {}): Koa {
         creditAccount: billingRepository.creditAccount(workspace.id),
       };
     } catch (error) {
-      if (error instanceof Error && error.message.includes('UNIQUE constraint failed: users.email')) {
+      if (isDuplicateEmailError(error)) {
         sendApiError(ctx, logger, {
           status: 409,
           code: 'ACCOUNT_ALREADY_EXISTS',
@@ -1020,10 +1020,10 @@ export function createApp(options: AppOptions = {}): Koa {
     }
   });
 
-  router.post('/api/auth/verify-email', (ctx) => {
+  router.post('/api/auth/verify-email', async (ctx) => {
     try {
       const token = String((ctx.request.body as { token?: unknown }).token ?? '');
-      ctx.body = { verified: true, ...accountIdentityService.verifyEmail(token) };
+      ctx.body = { verified: true, ...await accountIdentityService.verifyEmail(token) };
     } catch (error) {
       sendApiError(ctx, logger, {
         status: 400,
@@ -1033,15 +1033,15 @@ export function createApp(options: AppOptions = {}): Koa {
     }
   });
 
-  router.post('/api/auth/verification/resend', (ctx) => {
+  router.post('/api/auth/verification/resend', async (ctx) => {
     const token = extractSessionToken(ctx);
-    const session = token ? sessionRepository.findByToken(token) : null;
+    const session = token ? await sessionRepository.findByToken(token) : null;
     if (!session) {
       sendApiError(ctx, logger, { status: 401, code: 'AUTHENTICATION_REQUIRED',
         message: 'authentication required' });
       return;
     }
-    const emailPreviewUrl = accountIdentityService.resendVerification(session.user.id);
+    const emailPreviewUrl = await accountIdentityService.resendVerification(session.user.id);
     ctx.status = 202;
     ctx.body = {
       accepted: true,
@@ -1049,10 +1049,10 @@ export function createApp(options: AppOptions = {}): Koa {
     };
   });
 
-  router.post('/api/auth/password/forgot', (ctx) => {
+  router.post('/api/auth/password/forgot', async (ctx) => {
     try {
       const email = normalizeEmail((ctx.request.body as { email?: unknown }).email);
-      const emailPreviewUrl = accountIdentityService.requestPasswordReset(email);
+      const emailPreviewUrl = await accountIdentityService.requestPasswordReset(email);
       ctx.status = 202;
       ctx.body = {
         accepted: true,
@@ -1064,13 +1064,13 @@ export function createApp(options: AppOptions = {}): Koa {
     }
   });
 
-  router.post('/api/auth/password/reset', (ctx) => {
+  router.post('/api/auth/password/reset', async (ctx) => {
     try {
       const body = ctx.request.body as { token?: unknown; password?: unknown };
       const password = normalizePassword(body.password);
       const userId = accountIdentityService.consumePasswordReset(String(body.token ?? ''));
-      userRepository.updatePassword(userId, hashPassword(password));
-      sessionRepository.revokeAllForUser(userId);
+      await userRepository.updatePassword(userId, hashPassword(password));
+      await sessionRepository.revokeAllForUser(userId);
       ctx.body = { reset: true };
     } catch (error) {
       sendApiError(ctx, logger, { status: 400, code: 'PASSWORD_RESET_INVALID',
@@ -1078,19 +1078,19 @@ export function createApp(options: AppOptions = {}): Koa {
     }
   });
 
-  router.post('/api/auth/logout', (ctx) => {
+  router.post('/api/auth/logout', async (ctx) => {
     const token = extractSessionToken(ctx);
     if (token) {
-      sessionRepository.revokeToken(token);
+      await sessionRepository.revokeToken(token);
     }
 
     ctx.set('Set-Cookie', clearSessionCookie());
     ctx.status = 204;
   });
 
-  router.get('/api/auth/session', (ctx) => {
+  router.get('/api/auth/session', async (ctx) => {
     const token = extractSessionToken(ctx);
-    const session = token ? sessionRepository.findByToken(token) : null;
+    const session = token ? await sessionRepository.findByToken(token) : null;
     if (!session) {
       ctx.status = 401;
       ctx.body = { error: 'authentication required' };
@@ -1100,7 +1100,7 @@ export function createApp(options: AppOptions = {}): Koa {
     ctx.body = session;
   });
 
-  router.post('/api/auth/workspace', (ctx) => {
+  router.post('/api/auth/workspace', async (ctx) => {
     const body = ctx.request.body as { workspaceId?: unknown };
     const workspaceId = Number(body.workspaceId);
     const authSession = ctx.state.authSession;
@@ -1114,8 +1114,8 @@ export function createApp(options: AppOptions = {}): Koa {
       return;
     }
     try {
-      sessionRepository.switchWorkspace(token, authSession.user.id, workspaceId);
-      const selected = sessionRepository.findByToken(token);
+      await sessionRepository.switchWorkspace(token, authSession.user.id, workspaceId);
+      const selected = await sessionRepository.findByToken(token);
       if (!selected) throw new Error('workspace session could not be loaded');
       ctx.body = selected;
     } catch (error) {
@@ -1127,23 +1127,23 @@ export function createApp(options: AppOptions = {}): Koa {
     }
   });
 
-  router.get('/api/workspaces', (ctx) => {
+  router.get('/api/workspaces', async (ctx) => {
     if (!authorize(ctx, 'workspace.read')) return;
-    ctx.body = workspaceRepository.listForUser(ctx.state.authSession.user.id);
+    ctx.body = await workspaceRepository.listForUser(ctx.state.authSession.user.id);
   });
 
-  router.post('/api/workspaces', (ctx) => {
+  router.post('/api/workspaces', async (ctx) => {
     const authSession = ctx.state.authSession;
     const token = ctx.state.sessionToken;
     if (!authSession || !token) return;
     try {
       const body = ctx.request.body as { name?: unknown };
-      const workspace = workspaceRepository.create(authSession.user.id, body.name);
-      sessionRepository.switchWorkspace(token, authSession.user.id, workspace.id);
+      const workspace = await workspaceRepository.create(authSession.user.id, body.name);
+      await sessionRepository.switchWorkspace(token, authSession.user.id, workspace.id);
       ctx.status = 201;
       ctx.body = {
         workspace,
-        session: sessionRepository.findByToken(token),
+        session: await sessionRepository.findByToken(token),
       };
     } catch (error) {
       sendApiError(ctx, logger, {
@@ -1154,13 +1154,13 @@ export function createApp(options: AppOptions = {}): Koa {
     }
   });
 
-  router.get('/api/workspaces/:id/members', (ctx) => {
+  router.get('/api/workspaces/:id/members', async (ctx) => {
     const workspaceId = Number(ctx.params.id);
     if (!requireCurrentWorkspace(ctx, workspaceId) || !authorize(ctx, 'workspace.read')) return;
-    ctx.body = workspaceRepository.listMembers(workspaceId);
+    ctx.body = await workspaceRepository.listMembers(workspaceId);
   });
 
-  router.patch('/api/workspaces/:id/members/:userId', (ctx) => {
+  router.patch('/api/workspaces/:id/members/:userId', async (ctx) => {
     const workspaceId = Number(ctx.params.id);
     if (!requireCurrentWorkspace(ctx, workspaceId) || !authorize(ctx, 'members.manage')) return;
     try {
@@ -1169,7 +1169,7 @@ export function createApp(options: AppOptions = {}): Koa {
         throw new Error('you cannot change your own workspace role');
       }
       const body = ctx.request.body as { role?: unknown };
-      ctx.body = workspaceRepository.updateMemberRole(
+      ctx.body = await workspaceRepository.updateMemberRole(
         workspaceId,
         userId,
         body.role,
@@ -1183,7 +1183,7 @@ export function createApp(options: AppOptions = {}): Koa {
     }
   });
 
-  router.delete('/api/workspaces/:id/members/:userId', (ctx) => {
+  router.delete('/api/workspaces/:id/members/:userId', async (ctx) => {
     const workspaceId = Number(ctx.params.id);
     if (!requireCurrentWorkspace(ctx, workspaceId) || !authorize(ctx, 'members.manage')) return;
     try {
@@ -1191,7 +1191,7 @@ export function createApp(options: AppOptions = {}): Koa {
       if (userId === ctx.state.authSession.user.id) {
         throw new Error('you cannot remove yourself from the current workspace');
       }
-      workspaceRepository.removeMember(workspaceId, userId);
+      await workspaceRepository.removeMember(workspaceId, userId);
       ctx.status = 204;
     } catch (error) {
       sendApiError(ctx, logger, {
@@ -1202,33 +1202,34 @@ export function createApp(options: AppOptions = {}): Koa {
     }
   });
 
-  router.get('/api/workspaces/:id/invitations', (ctx) => {
+  router.get('/api/workspaces/:id/invitations', async (ctx) => {
     const workspaceId = Number(ctx.params.id);
     if (!requireCurrentWorkspace(ctx, workspaceId) || !authorize(ctx, 'members.manage')) return;
-    ctx.body = workspaceRepository.listInvitations(workspaceId);
+    ctx.body = await workspaceRepository.listInvitations(workspaceId);
   });
 
-  router.post('/api/workspaces/:id/invitations', (ctx) => {
+  router.post('/api/workspaces/:id/invitations', async (ctx) => {
     const workspaceId = Number(ctx.params.id);
     if (!requireCurrentWorkspace(ctx, workspaceId) || !authorize(ctx, 'members.manage')) return;
     try {
       const body = ctx.request.body as { email?: unknown; role?: unknown };
-      const email = workspaceRepository.validateInvitationTarget(workspaceId, body.email);
+      const email = await workspaceRepository.validateInvitationTarget(workspaceId, body.email);
+      const memberCount = (await workspaceRepository.listMembers(workspaceId)).length;
+      const pendingInvitationCount = await workspaceRepository.pendingInvitationCount(workspaceId, email);
       billingRepository.assertEntitled(
         workspaceId,
         'seats',
-        workspaceRepository.listMembers(workspaceId).length
-          + workspaceRepository.pendingInvitationCount(workspaceId, email),
+        memberCount + pendingInvitationCount,
         1,
       );
       ctx.status = 201;
-      const invitation = workspaceRepository.createInvitation({
+      const invitation = await workspaceRepository.createInvitation({
         workspaceId,
         email,
         role: body.role,
         invitedByUserId: ctx.state.authSession.user.id,
       });
-      const workspace = workspaceRepository.findById(workspaceId);
+      const workspace = await workspaceRepository.findById(workspaceId);
       if (!workspace) throw new Error('workspace not found');
       const acceptUrl = `${publicAppUrl}/accept-invitation?token=${encodeURIComponent(invitation.token)}`;
       try {
@@ -1245,7 +1246,7 @@ export function createApp(options: AppOptions = {}): Koa {
           },
         });
       } catch (error) {
-        workspaceRepository.revokeInvitation(workspaceId, invitation.id);
+        await workspaceRepository.revokeInvitation(workspaceId, invitation.id);
         throw error;
       }
       ctx.body = {
@@ -1262,12 +1263,12 @@ export function createApp(options: AppOptions = {}): Koa {
     }
   });
 
-  router.delete('/api/workspaces/:id/invitations/:invitationId', (ctx) => {
+  router.delete('/api/workspaces/:id/invitations/:invitationId', async (ctx) => {
     const workspaceId = Number(ctx.params.id);
     if (!requireCurrentWorkspace(ctx, workspaceId) || !authorize(ctx, 'members.manage')) return;
     try {
       const invitationId = Number(ctx.params.invitationId);
-      workspaceRepository.revokeInvitation(workspaceId, invitationId);
+      await workspaceRepository.revokeInvitation(workspaceId, invitationId);
       accountEmailOutbox.supersedeInvitation(invitationId);
       ctx.status = 204;
     } catch (error) {
@@ -1279,14 +1280,14 @@ export function createApp(options: AppOptions = {}): Koa {
     }
   });
 
-  router.post('/api/invitations/accept', (ctx) => {
+  router.post('/api/invitations/accept', async (ctx) => {
     try {
       const body = ctx.request.body as { token?: unknown; password?: unknown };
       const token = typeof body.token === 'string' ? body.token : '';
-      const invitation = workspaceRepository.activeInvitationByToken(token);
+      const invitation = await workspaceRepository.activeInvitationByToken(token);
       if (!invitation) throw new Error('invitation is invalid or expired');
       const password = normalizePassword(body.password);
-      let user = userRepository.findByEmail(invitation.email);
+      let user = await userRepository.findByEmail(invitation.email);
       if (user && !verifyPassword(password, user.passwordHash)) {
         ctx.status = 401;
         ctx.body = { error: 'invalid email or password' };
@@ -1295,7 +1296,7 @@ export function createApp(options: AppOptions = {}): Koa {
       billingRepository.assertEntitled(
         invitation.workspaceId,
         'seats',
-        workspaceRepository.listMembers(invitation.workspaceId).length,
+        (await workspaceRepository.listMembers(invitation.workspaceId)).length,
         1,
       );
       if (user && mfaService.isEnabled(user.id)) {
@@ -1306,12 +1307,12 @@ export function createApp(options: AppOptions = {}): Koa {
         });
         return;
       }
-      user ??= userRepository.createUser(invitation.email, hashPassword(password), true);
-      workspaceRepository.acceptInvitation(token, user.id, user.email);
+      user ??= await userRepository.createUser(invitation.email, hashPassword(password), true);
+      await workspaceRepository.acceptInvitation(token, user.id, user.email);
       accountEmailOutbox.supersedeInvitation(invitation.id);
-      const principal = workspaceRepository.principalForUser(user.id, invitation.workspaceId);
+      const principal = await workspaceRepository.principalForUser(user.id, invitation.workspaceId);
       if (!principal) throw new Error('workspace membership could not be loaded');
-      const session = sessionRepository.create(principal);
+      const session = await sessionRepository.create(principal);
       ctx.set('Set-Cookie', sessionCookie(session.token, session.expiresAt));
       ctx.status = 201;
       ctx.body = { user: principal, session, emailVerified: true };
@@ -2361,6 +2362,15 @@ export function createApp(options: AppOptions = {}): Koa {
   app.use(router.allowedMethods());
 
   return app;
+}
+
+function isDuplicateEmailError(error: unknown): boolean {
+  if (!(error instanceof Error)) return false;
+  const databaseError = error as Error & { code?: string; constraint?: string };
+  return (
+    databaseError.code === '23505'
+    && databaseError.constraint === 'users_email_key'
+  ) || /UNIQUE constraint failed: users\.email/i.test(error.message);
 }
 
 function teamEntitlementErrorCode(
