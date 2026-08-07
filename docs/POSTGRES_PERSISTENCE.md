@@ -16,6 +16,13 @@ rollback, schema introspection, and explicit pool shutdown. Existing repositorie
 do not use it yet, so PostgreSQL must not be selected as the application database
 until repository migration and PostgreSQL-native migrations are complete.
 
+`server/src/db/postgresMigrations.ts` owns a separate PostgreSQL-native migration
+chain. It applies immutable ordered IDs in one transaction behind a PostgreSQL
+advisory lock, so concurrent server instances cannot race migration application.
+Migration `001_platform_metadata` currently provides the seven core platform
+tables and default Workspace. The remaining SQLite migration domains are still
+required before runtime cutover.
+
 ## SQLite Assumption Audit
 
 - `server/src/db/sqlite.ts` executes SQL by shelling out to the `sqlite3` CLI and returns JSON rows through `.mode json`.
@@ -69,5 +76,7 @@ scripts/postgres-smoke.sh
 ```
 
 The script starts an isolated, digest-pinned PostgreSQL 17.10 container and verifies pooled
-connectivity, positional parameter binding, commit, rollback, and health queries.
+connectivity, positional parameter binding, commit, rollback, health queries,
+concurrent migration locking, migration idempotency, core tables, and identity
+sequence behavior.
 Set `POSTGRES_SMOKE_IMAGE` only when validating another PostgreSQL image explicitly.

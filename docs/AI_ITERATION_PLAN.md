@@ -2124,7 +2124,11 @@ complete. Follow the same dependency and verification protocol used above.
   in tests. The fourth P22 slice adds an asynchronous parameterized database
   contract, a pooled `pg` adapter with transaction-scoped clients and rollback,
   and a real PostgreSQL container smoke. PostgreSQL-native migrations and
-  parameterized repository conversion remain open.
+  parameterized repository conversion remain open. The fifth P22 slice adds a
+  PostgreSQL-native migration runner with an advisory transaction lock and the
+  `001_platform_metadata` core schema. Concurrent and repeated migration runs are
+  verified against the digest-pinned PostgreSQL container; the remaining 31
+  migration domains are still open.
 
 ### P23-01 Full Commercial End-To-End Suite
 

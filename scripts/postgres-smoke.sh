@@ -37,4 +37,6 @@ test -n "$PORT"
   cd "$ROOT_DIR/server"
   DATABASE_URL="postgresql://postgres:${PASSWORD}@127.0.0.1:${PORT}/${DATABASE}" \
     pnpm exec ts-node src/commands/postgresSmoke.ts
+  DATABASE_URL="postgresql://postgres:${PASSWORD}@127.0.0.1:${PORT}/${DATABASE}" \
+    pnpm exec ts-node src/commands/postgresMigrationSmoke.ts
 )
