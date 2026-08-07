@@ -1,6 +1,7 @@
 import 'dotenv/config';
 
 import { createApp } from './src/app';
+import { closeApp } from './src/services/appLifecycle';
 import { StripePaymentAdapter } from './src/services/stripePaymentAdapter';
 import { HttpUsageMeterExporter } from './src/services/usageMeterExporter';
 import { createAccountEmailIntegration } from './src/services/accountEmailConfiguration';
@@ -55,7 +56,33 @@ const app = createApp({
   operatorBootstrapToken: process.env.OPERATOR_BOOTSTRAP_TOKEN,
 });
 
-app.listen(port, () => {
+const server = app.listen(port, () => {
   console.log(`Primalthrum Node server listening on http://127.0.0.1:${port}`);
   console.log(`Agent upstream: ${agentBaseUrl}`);
 });
+
+let shuttingDown = false;
+function shutdown(signal: NodeJS.Signals): void {
+  if (shuttingDown) return;
+  shuttingDown = true;
+  console.log(`Received ${signal}; shutting down Primalthrum Node server`);
+  const forceExit = setTimeout(() => {
+    console.error('Primalthrum Node server shutdown timed out');
+    process.exit(1);
+  }, 10_000);
+  forceExit.unref();
+  server.close(async (error) => {
+    try {
+      await closeApp(app);
+      if (error) throw error;
+    } catch (closeError) {
+      console.error(closeError);
+      process.exitCode = 1;
+    } finally {
+      clearTimeout(forceExit);
+    }
+  });
+}
+
+process.once('SIGINT', () => shutdown('SIGINT'));
+process.once('SIGTERM', () => shutdown('SIGTERM'));

@@ -5,9 +5,12 @@ import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 
 import { type DatabaseAdapter } from './db/adapter';
+import { type AsyncDatabaseAdapter } from './db/asyncAdapter';
+import { AsyncSqliteDatabase } from './db/asyncSqlite';
 import { createSqliteDatabase, initializeDatabase } from './db/databaseFactory';
 import { generateAgentProject } from './generators/agentProjectGenerator';
 import { AgentRepository, type CreateAgentInput } from './services/agentRepository';
+import { registerAppCleanup } from './services/appLifecycle';
 import { AgentVersionRepository } from './services/agentVersionRepository';
 import { sendApiError } from './services/apiErrors';
 import {
@@ -70,6 +73,8 @@ import {
   type RunRecord,
 } from './services/runRepository';
 import { SessionRepository } from './services/sessionRepository';
+import { AsyncSessionRepository } from './services/asyncSessionRepository';
+import { type SessionStore } from './services/sessionStore';
 import { formatSseEvent, pipeSseStream } from './services/sseRecorder';
 import {
   StreamEventRepository,
@@ -85,7 +90,11 @@ import {
   normalizeEmail,
   UserRepository,
 } from './services/userRepository';
+import { AsyncUserRepository } from './services/asyncUserRepository';
+import { type UserStore } from './services/userStore';
 import { WorkspaceRepository } from './services/workspaceRepository';
+import { AsyncWorkspaceRepository } from './services/asyncWorkspaceRepository';
+import { type WorkspaceStore } from './services/workspaceStore';
 import { WorkspaceOwnershipRepository } from './services/workspaceOwnershipRepository';
 import { WorkspaceLegalHoldRepository } from './services/workspaceLegalHoldRepository';
 import { LocalSecretVault } from './services/localSecretVault';
@@ -163,6 +172,7 @@ export interface AppOptions {
   agentBaseUrl?: string;
   dbPath?: string;
   database?: DatabaseAdapter;
+  identityDatabase?: AsyncDatabaseAdapter;
   documentMalwareScanner?: DocumentMalwareScanner;
   documentStorage?: DocumentFileStorage;
   documentStorageDir?: string;
@@ -267,9 +277,17 @@ export function createApp(options: AppOptions = {}): Koa {
   const agentBaseUrl = options.agentBaseUrl ?? DEFAULT_AGENT_BASE_URL;
   const logger = options.logger ?? new JsonConsoleLogger();
   const metrics = options.metrics ?? new MetricsRegistry();
+  const databasePath = options.dbPath ?? DEFAULT_DB_PATH;
   const db = options.database
     ? initializeDatabase(options.database)
-    : createSqliteDatabase(options.dbPath ?? DEFAULT_DB_PATH);
+    : createSqliteDatabase(databasePath);
+  const ownedIdentityDatabase = !options.database && !options.identityDatabase
+    ? new AsyncSqliteDatabase(databasePath)
+    : undefined;
+  const identityDatabase = options.identityDatabase ?? ownedIdentityDatabase;
+  if (ownedIdentityDatabase) {
+    registerAppCleanup(app, () => ownedIdentityDatabase.close());
+  }
   const abuseProtection = options.abuseProtection ?? new AbuseProtectionService(
     new AbuseProtectionRepository(db, options.abuseHashSecret ?? DEFAULT_ABUSE_HASH_SECRET),
     options.botChallengeVerifier,
@@ -292,10 +310,19 @@ export function createApp(options: AppOptions = {}): Koa {
   const documentStorage = options.documentStorage ?? new LocalDocumentStorage(
     options.documentStorageDir ?? DEFAULT_DOCUMENT_STORAGE_DIR,
   );
-  const userRepository = new UserRepository(db);
-  const workspaceRepository = new WorkspaceRepository(db);
-  const workspaceOwnershipRepository = new WorkspaceOwnershipRepository(db, workspaceRepository);
-  const sessionRepository = new SessionRepository(db);
+  const syncUserRepository = new UserRepository(db);
+  const syncWorkspaceRepository = new WorkspaceRepository(db);
+  const syncSessionRepository = new SessionRepository(db);
+  const userRepository: UserStore = identityDatabase
+    ? new AsyncUserRepository(identityDatabase)
+    : syncUserRepository;
+  const workspaceRepository: WorkspaceStore = identityDatabase
+    ? new AsyncWorkspaceRepository(identityDatabase)
+    : syncWorkspaceRepository;
+  const sessionRepository: SessionStore = identityDatabase
+    ? new AsyncSessionRepository(identityDatabase)
+    : syncSessionRepository;
+  const workspaceOwnershipRepository = new WorkspaceOwnershipRepository(db, syncWorkspaceRepository);
   const operatorIdentity = new OperatorIdentityRepository(db);
   const operatorAudit = new OperatorAuditRepository(db);
   const operatorBillingReads = new OperatorBillingReadRepository(db);
