@@ -1,5 +1,6 @@
 import { initializeSchema } from '../db/schema';
-import { SqliteDatabase, sqlValue } from '../db/sqlite';
+import { type DatabaseAdapter } from '../db/adapter';
+import { sqlValue } from '../db/sql';
 
 export interface OperatorAgentSummary {
   id: number;
@@ -61,7 +62,7 @@ interface JobRow {
 }
 
 export class OperatorRuntimeReadRepository {
-  constructor(private readonly db: SqliteDatabase) {
+  constructor(private readonly db: DatabaseAdapter) {
     initializeSchema(db);
   }
 

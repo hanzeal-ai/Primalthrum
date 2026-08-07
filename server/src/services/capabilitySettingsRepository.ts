@@ -1,4 +1,5 @@
-import { SqliteDatabase, sqlValue } from '../db/sqlite';
+import { type DatabaseAdapter } from '../db/adapter';
+import { sqlValue } from '../db/sql';
 
 export interface CapabilitySettingRecord {
   workspaceId: number;
@@ -23,7 +24,7 @@ export interface CapabilityRunSnapshot {
 }
 
 export class CapabilitySettingsRepository {
-  constructor(private readonly db: SqliteDatabase) {}
+  constructor(private readonly db: DatabaseAdapter) {}
 
   list(workspaceId: number): CapabilitySettingRecord[] {
     return this.db.query<CapabilitySettingRow>(`

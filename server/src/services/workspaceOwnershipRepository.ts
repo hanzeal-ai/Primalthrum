@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 
-import { SqliteDatabase, sqlValue } from '../db/sqlite';
+import { type DatabaseAdapter } from '../db/adapter';
+import { sqlValue } from '../db/sql';
 import { normalizeEmail } from './userRepository';
 import {
   type WorkspaceMembershipRecord,
@@ -42,7 +43,7 @@ interface OwnershipEventRow {
 
 export class WorkspaceOwnershipRepository {
   constructor(
-    private readonly db: SqliteDatabase,
+    private readonly db: DatabaseAdapter,
     private readonly workspaces = new WorkspaceRepository(db),
   ) {}
 

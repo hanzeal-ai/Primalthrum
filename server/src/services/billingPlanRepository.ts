@@ -1,4 +1,5 @@
-import { SqliteDatabase, sqlValue } from '../db/sqlite';
+import { type DatabaseAdapter } from '../db/adapter';
+import { sqlValue } from '../db/sql';
 import { type BillingPlanRecord, type EntitlementRecord } from './billingTypes';
 import { parseBillingJson } from './billingValidation';
 
@@ -23,7 +24,7 @@ interface PlanEntitlementRow {
 }
 
 export class BillingPlanRepository {
-  constructor(private readonly db: SqliteDatabase) {}
+  constructor(private readonly db: DatabaseAdapter) {}
 
   list(): BillingPlanRecord[] {
     return this.db.query<PlanRow>(`

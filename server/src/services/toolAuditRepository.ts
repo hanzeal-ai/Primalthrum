@@ -1,5 +1,6 @@
 import { initializeSchema } from '../db/schema';
-import { SqliteDatabase, sqlValue } from '../db/sqlite';
+import { type DatabaseAdapter } from '../db/adapter';
+import { sqlValue } from '../db/sql';
 import { type StreamEventRecord } from './streamEventRepository';
 
 const TOOL_EVENT_PREFIX = 'agent.tool.';
@@ -35,7 +36,7 @@ interface RunWorkspaceRow {
 }
 
 export class ToolAuditRepository {
-  constructor(private readonly db: SqliteDatabase) {
+  constructor(private readonly db: DatabaseAdapter) {
     initializeSchema(db);
   }
 

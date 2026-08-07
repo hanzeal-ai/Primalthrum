@@ -1,5 +1,5 @@
 import { initializeSchema } from '../db/schema';
-import { SqliteDatabase } from '../db/sqlite';
+import { type DatabaseAdapter } from '../db/adapter';
 import { BillingPlanRepository } from './billingPlanRepository';
 import { CreditLedgerRepository } from './creditLedgerRepository';
 import { EntitlementRepository } from './entitlementRepository';
@@ -23,7 +23,7 @@ export class BillingRepository {
   private readonly trials: TrialRepository;
 
   constructor(
-    db: SqliteDatabase,
+    db: DatabaseAdapter,
     now: () => Date = () => new Date(),
   ) {
     initializeSchema(db);

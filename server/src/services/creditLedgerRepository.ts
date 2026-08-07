@@ -1,4 +1,5 @@
-import { SqliteDatabase, sqlValue } from '../db/sqlite';
+import { type DatabaseAdapter } from '../db/adapter';
+import { sqlValue } from '../db/sql';
 import { ensureBillingWorkspaceBaseline } from './billingWorkspaceBaseline';
 import {
   BillingError,
@@ -59,7 +60,7 @@ interface LedgerEntryRow {
 
 export class CreditLedgerRepository {
   constructor(
-    private readonly db: SqliteDatabase,
+    private readonly db: DatabaseAdapter,
     private readonly now: () => Date,
   ) {}
 

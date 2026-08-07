@@ -1,6 +1,7 @@
 import { type DocumentFileStorage } from './fileStorage';
 import { AccountPrivacyRepository, type AccountPrivacyScope } from './accountPrivacyRepository';
-import { SqliteDatabase, sqlValue } from '../db/sqlite';
+import { type DatabaseAdapter } from '../db/adapter';
+import { sqlValue } from '../db/sql';
 
 export interface AccountDataExport {
   format: 'primalthrum-account-data';
@@ -13,7 +14,7 @@ export interface AccountDataExport {
 
 export class AccountDataExportService {
   constructor(
-    private readonly db: SqliteDatabase,
+    private readonly db: DatabaseAdapter,
     private readonly storage: DocumentFileStorage,
     private readonly privacy: AccountPrivacyRepository,
     private readonly now: () => Date = () => new Date(),
@@ -216,7 +217,7 @@ export class AccountDataExportService {
   }
 }
 
-function rows(db: SqliteDatabase, query: string): Array<Record<string, unknown>> {
+function rows(db: DatabaseAdapter, query: string): Array<Record<string, unknown>> {
   return db.query<Record<string, unknown>>(query).map((row) => sanitizeRow(row));
 }
 

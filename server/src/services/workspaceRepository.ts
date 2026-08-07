@@ -1,7 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 
 import { initializeSchema } from '../db/schema';
-import { SqliteDatabase, sqlValue } from '../db/sqlite';
+import { type DatabaseAdapter } from '../db/adapter';
+import { sqlValue } from '../db/sql';
 import { normalizeEmail, type PublicUserRecord } from './userRepository';
 
 export const WORKSPACE_ROLES = [
@@ -81,7 +82,7 @@ interface InvitationRow {
 const INVITATION_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 
 export class WorkspaceRepository {
-  constructor(private readonly db: SqliteDatabase) {
+  constructor(private readonly db: DatabaseAdapter) {
     initializeSchema(db);
   }
 

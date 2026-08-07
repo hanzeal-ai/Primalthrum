@@ -1,4 +1,5 @@
-import { SqliteDatabase, sqlValue } from '../db/sqlite';
+import { type DatabaseAdapter } from '../db/adapter';
+import { sqlValue } from '../db/sql';
 import { ensureBillingWorkspaceBaseline } from './billingWorkspaceBaseline';
 import {
   BillingError,
@@ -35,7 +36,7 @@ const ACTIVE_SUBSCRIPTION_STATES = new Set([
 
 export class EntitlementRepository {
   constructor(
-    private readonly db: SqliteDatabase,
+    private readonly db: DatabaseAdapter,
     private readonly now: () => Date,
   ) {}
 

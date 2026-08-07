@@ -1,5 +1,6 @@
 import { initializeSchema } from '../db/schema';
-import { SqliteDatabase, sqlValue } from '../db/sqlite';
+import { type DatabaseAdapter } from '../db/adapter';
+import { sqlValue } from '../db/sql';
 import { LocalSecretVault } from './localSecretVault';
 import { normalizeProviderBaseUrl } from './providerEndpointPolicy';
 
@@ -38,7 +39,7 @@ interface ProviderConfigRow {
 export class ProviderConfigRepository {
   private readonly secrets: LocalSecretVault;
 
-  constructor(private readonly db: SqliteDatabase) {
+  constructor(private readonly db: DatabaseAdapter) {
     initializeSchema(db);
     this.secrets = new LocalSecretVault(db);
   }

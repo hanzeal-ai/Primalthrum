@@ -1,5 +1,5 @@
 import { type DatabaseAdapter } from './adapter';
-import { sqlValue } from './sqlite';
+import { sqlValue } from './sql';
 import {
   DEFAULT_WORKSPACE_ID,
   DEFAULT_WORKSPACE_NAME,
@@ -2246,7 +2246,7 @@ function ensureColumn(
   columnName: string,
   definition: string,
 ): void {
-  const columns = db.query<{ name: string }>(`PRAGMA table_info(${tableName});`);
+  const columns = db.columns(tableName);
   if (columns.some((column) => column.name === columnName)) {
     return;
   }

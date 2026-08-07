@@ -1,5 +1,6 @@
 import { initializeSchema } from '../db/schema';
-import { SqliteDatabase, sqlValue } from '../db/sqlite';
+import { type DatabaseAdapter } from '../db/adapter';
+import { sqlValue } from '../db/sql';
 import { DEFAULT_WORKSPACE_ID } from '../db/workspaceDefaults';
 
 export type JobStatus = 'queued' | 'running' | 'retrying' | 'succeeded' | 'failed';
@@ -47,7 +48,7 @@ interface JobRow {
 }
 
 export class JobRepository {
-  constructor(private readonly db: SqliteDatabase) {
+  constructor(private readonly db: DatabaseAdapter) {
     initializeSchema(db);
   }
 

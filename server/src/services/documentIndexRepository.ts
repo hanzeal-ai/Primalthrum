@@ -1,5 +1,6 @@
 import { initializeSchema } from '../db/schema';
-import { SqliteDatabase, sqlValue } from '../db/sqlite';
+import { type DatabaseAdapter } from '../db/adapter';
+import { sqlValue } from '../db/sql';
 import { type DocumentRecord } from './documentRepository';
 import { type DocumentChunk } from './documentChunker';
 
@@ -53,7 +54,7 @@ interface RagSearchRow extends DocumentIndexEntryRow {
 }
 
 export class DocumentIndexRepository {
-  constructor(private readonly db: SqliteDatabase) {
+  constructor(private readonly db: DatabaseAdapter) {
     initializeSchema(db);
   }
 

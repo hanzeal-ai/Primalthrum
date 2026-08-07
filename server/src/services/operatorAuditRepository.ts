@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
 import { initializeSchema } from '../db/schema';
-import { SqliteDatabase, sqlValue } from '../db/sqlite';
+import { type DatabaseAdapter } from '../db/adapter';
+import { sqlValue } from '../db/sql';
 
 export interface OperatorAuditRecord {
   id: number;
@@ -26,7 +27,7 @@ interface AuditRow {
 }
 
 export class OperatorAuditRepository {
-  constructor(private readonly db: SqliteDatabase) {
+  constructor(private readonly db: DatabaseAdapter) {
     initializeSchema(db);
   }
 

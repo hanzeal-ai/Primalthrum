@@ -1,6 +1,7 @@
 import { createHash, randomUUID } from 'node:crypto';
 
-import { SqliteDatabase, sqlValue } from '../db/sqlite';
+import { type DatabaseAdapter } from '../db/adapter';
+import { sqlValue } from '../db/sql';
 import {
   AccountPrivacyRepository,
   type AccountDeletionBlocker,
@@ -19,7 +20,7 @@ export class AccountDeletionBlockedError extends Error {
 
 export class AccountDeletionService {
   constructor(
-    private readonly db: SqliteDatabase,
+    private readonly db: DatabaseAdapter,
     private readonly privacy: AccountPrivacyRepository,
     private readonly storage: DocumentFileStorage,
     private readonly now: () => Date = () => new Date(),

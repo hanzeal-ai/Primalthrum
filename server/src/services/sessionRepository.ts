@@ -1,7 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 
 import { initializeSchema } from '../db/schema';
-import { SqliteDatabase, sqlValue } from '../db/sqlite';
+import { type DatabaseAdapter } from '../db/adapter';
+import { sqlValue } from '../db/sql';
 import { type PublicUserRecord } from './userRepository';
 
 const SESSION_TTL_MS = 1000 * 60 * 60 * 24 * 7;
@@ -47,7 +48,7 @@ interface SessionSecurityRow {
 }
 
 export class SessionRepository {
-  constructor(private readonly db: SqliteDatabase) {
+  constructor(private readonly db: DatabaseAdapter) {
     initializeSchema(db);
   }
 

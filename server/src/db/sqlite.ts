@@ -2,13 +2,22 @@ import { mkdirSync } from 'node:fs';
 import { dirname } from 'node:path';
 import { spawnSync } from 'node:child_process';
 
-import { type DatabaseAdapter } from './adapter';
+import { type DatabaseAdapter, type DatabaseColumn } from './adapter';
 
-export type SqlValue = string | number | boolean | null;
+export { sqlValue, type SqlValue } from './sql';
 
 export class SqliteDatabase implements DatabaseAdapter {
+  readonly dialect = 'sqlite' as const;
+
   constructor(private readonly dbPath: string) {
     mkdirSync(dirname(dbPath), { recursive: true });
+  }
+
+  columns(tableName: string): DatabaseColumn[] {
+    if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(tableName)) {
+      throw new Error('database table name is invalid');
+    }
+    return this.query<DatabaseColumn>(`PRAGMA table_info(${tableName});`);
   }
 
   run(sql: string): void {
@@ -35,20 +44,4 @@ export class SqliteDatabase implements DatabaseAdapter {
 
     return result.stdout;
   }
-}
-
-export function sqlValue(value: SqlValue): string {
-  if (value === null) {
-    return 'NULL';
-  }
-
-  if (typeof value === 'number') {
-    return String(value);
-  }
-
-  if (typeof value === 'boolean') {
-    return value ? '1' : '0';
-  }
-
-  return `'${value.replace(/'/g, "''")}'`;
 }

@@ -1,4 +1,5 @@
-import { SqliteDatabase, sqlValue } from '../db/sqlite';
+import { type DatabaseAdapter } from '../db/adapter';
+import { sqlValue } from '../db/sql';
 import type { CapabilityRunSnapshot } from './capabilitySettingsRepository';
 
 export interface RunRecord {
@@ -41,7 +42,7 @@ interface RunRow {
 }
 
 export class RunRepository {
-  constructor(private readonly db: SqliteDatabase) {}
+  constructor(private readonly db: DatabaseAdapter) {}
 
   create(input: CreateRunInput): RunRecord {
     const normalized = normalizeRunInput(input);

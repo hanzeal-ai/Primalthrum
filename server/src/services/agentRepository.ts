@@ -1,7 +1,8 @@
 import { join } from 'node:path';
 
 import { initializeSchema } from '../db/schema';
-import { SqliteDatabase, sqlValue } from '../db/sqlite';
+import { type DatabaseAdapter } from '../db/adapter';
+import { sqlValue } from '../db/sql';
 import { DEFAULT_WORKSPACE_ID } from '../db/workspaceDefaults';
 
 export interface AgentConfig {
@@ -50,7 +51,7 @@ interface AgentRow {
 
 export class AgentRepository {
   constructor(
-    private readonly db: SqliteDatabase,
+    private readonly db: DatabaseAdapter,
     private readonly generatedAgentsDir: string,
   ) {
     initializeSchema(db);

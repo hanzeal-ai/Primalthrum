@@ -1,5 +1,6 @@
 import { initializeSchema } from '../db/schema';
-import { SqliteDatabase, sqlValue } from '../db/sqlite';
+import { type DatabaseAdapter } from '../db/adapter';
+import { sqlValue } from '../db/sql';
 import { type SupportGrantPermission } from './operatorAuthorization';
 
 export interface OperatorOverview {
@@ -45,7 +46,7 @@ interface WorkspaceSummaryRow {
 
 export class OperatorReadRepository {
   constructor(
-    private readonly db: SqliteDatabase,
+    private readonly db: DatabaseAdapter,
     private readonly now: () => Date = () => new Date(),
   ) {
     initializeSchema(db);

@@ -2112,7 +2112,12 @@ complete. Follow the same dependency and verification protocol used above.
   versioning guidance, backup/restore ordering, and a repeatable real-provider
   smoke. PostgreSQL, Redis, durable workers, managed-secret integration,
   OpenTelemetry, deployment, scaling, local-to-S3 migration automation, and
-  production restore evidence remain open.
+  production restore evidence remain open. The second P22 slice removes all
+  concrete SQLite imports from service repositories, moves SQL literal handling
+  into a shared database module, adds adapter-owned dialect metadata and safe
+  schema introspection, and enforces the boundary with tests. The database API
+  and SQL remain synchronous/SQLite-specific; asynchronous parameterized
+  repositories and a real PostgreSQL adapter are the next required slice.
 
 ### P23-01 Full Commercial End-To-End Suite
 

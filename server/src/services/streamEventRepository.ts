@@ -1,4 +1,5 @@
-import { SqliteDatabase, sqlValue } from '../db/sqlite';
+import { type DatabaseAdapter } from '../db/adapter';
+import { sqlValue } from '../db/sql';
 
 export interface StreamEventRecord {
   id: number;
@@ -33,7 +34,7 @@ interface NormalizedStreamEventInput {
 }
 
 export class StreamEventRepository {
-  constructor(private readonly db: SqliteDatabase) {}
+  constructor(private readonly db: DatabaseAdapter) {}
 
   create(input: CreateStreamEventInput): StreamEventRecord {
     const normalized = normalizeEventInput(input);

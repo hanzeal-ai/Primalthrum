@@ -1,5 +1,6 @@
 import { initializeSchema } from '../db/schema';
-import { SqliteDatabase, sqlValue } from '../db/sqlite';
+import { type DatabaseAdapter } from '../db/adapter';
+import { sqlValue } from '../db/sql';
 import { ensureBillingWorkspaceBaseline } from './billingWorkspaceBaseline';
 import type {
   BillingInvoiceRecord,
@@ -80,7 +81,7 @@ interface InvoiceRow {
 
 export class PaymentLifecycleRepository {
   constructor(
-    private readonly db: SqliteDatabase,
+    private readonly db: DatabaseAdapter,
     private readonly now: () => Date = () => new Date(),
   ) {
     initializeSchema(db);

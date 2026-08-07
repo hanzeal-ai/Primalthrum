@@ -1,7 +1,8 @@
 import { randomUUID } from 'node:crypto';
 
 import { initializeSchema } from '../db/schema';
-import { SqliteDatabase, sqlValue } from '../db/sqlite';
+import { type DatabaseAdapter } from '../db/adapter';
+import { sqlValue } from '../db/sql';
 
 export const INCIDENT_SEVERITIES = ['sev1', 'sev2', 'sev3', 'sev4'] as const;
 export const INCIDENT_STATUSES = ['investigating', 'identified', 'monitoring', 'resolved'] as const;
@@ -85,7 +86,7 @@ interface IncidentEventRow {
 
 export class OperatorIncidentRepository {
   constructor(
-    private readonly db: SqliteDatabase,
+    private readonly db: DatabaseAdapter,
     private readonly now: () => Date = () => new Date(),
   ) {
     initializeSchema(db);

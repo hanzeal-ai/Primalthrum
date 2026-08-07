@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import { initializeSchema } from '../db/schema';
-import { SqliteDatabase, sqlValue } from '../db/sqlite';
+import { type DatabaseAdapter } from '../db/adapter';
+import { sqlValue } from '../db/sql';
 
 export const PRIVACY_POLICY_VERSION = '2026-07-31';
 
@@ -58,7 +59,7 @@ interface AnalyticsRow {
 }
 
 export class PrivacyAnalyticsRepository {
-  constructor(private readonly db: SqliteDatabase) {
+  constructor(private readonly db: DatabaseAdapter) {
     initializeSchema(db);
   }
 

@@ -1,5 +1,5 @@
 import { initializeSchema } from '../db/schema';
-import { SqliteDatabase } from '../db/sqlite';
+import { type DatabaseAdapter } from '../db/adapter';
 
 export interface OperatorAbuseEventSummary {
   id: number;
@@ -22,7 +22,7 @@ interface AbuseEventRow {
 }
 
 export class OperatorSecurityReadRepository {
-  constructor(private readonly db: SqliteDatabase) {
+  constructor(private readonly db: DatabaseAdapter) {
     initializeSchema(db);
   }
 

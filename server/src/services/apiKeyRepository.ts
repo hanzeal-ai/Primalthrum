@@ -1,7 +1,8 @@
 import { createHash, randomBytes } from 'node:crypto';
 
 import { initializeSchema } from '../db/schema';
-import { SqliteDatabase, sqlValue } from '../db/sqlite';
+import { type DatabaseAdapter } from '../db/adapter';
+import { sqlValue } from '../db/sql';
 import { type PublicUserRecord } from './userRepository';
 
 export const API_KEY_SCOPES = [
@@ -67,7 +68,7 @@ const MAX_ACTIVE_KEYS = 20;
 const MAX_EXPIRY_DAYS = 365;
 
 export class ApiKeyRepository {
-  constructor(private readonly db: SqliteDatabase) {
+  constructor(private readonly db: DatabaseAdapter) {
     initializeSchema(db);
   }
 

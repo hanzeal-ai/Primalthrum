@@ -1,7 +1,8 @@
 import { createHash, randomUUID } from 'node:crypto';
 
 import { initializeSchema } from '../db/schema';
-import { SqliteDatabase, sqlValue } from '../db/sqlite';
+import { type DatabaseAdapter } from '../db/adapter';
+import { sqlValue } from '../db/sql';
 import { type ParsedDocumentUpload } from './documentUpload';
 
 export type DocumentUploadSecurityStatus = 'clean' | 'rejected' | 'error';
@@ -39,7 +40,7 @@ interface SecurityEventRow {
 }
 
 export class DocumentUploadSecurityRepository {
-  constructor(private readonly db: SqliteDatabase) {
+  constructor(private readonly db: DatabaseAdapter) {
     initializeSchema(db);
   }
 

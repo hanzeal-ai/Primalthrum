@@ -1,6 +1,7 @@
-import { SqliteDatabase, sqlValue } from '../db/sqlite';
+import { type DatabaseAdapter } from '../db/adapter';
+import { sqlValue } from '../db/sql';
 
-export function ensureBillingWorkspaceBaseline(db: SqliteDatabase, workspaceId: number): void {
+export function ensureBillingWorkspaceBaseline(db: DatabaseAdapter, workspaceId: number): void {
   const freeGrantKey = `plan-period:free:${workspaceId}:initial`;
   db.run(`
     BEGIN IMMEDIATE;

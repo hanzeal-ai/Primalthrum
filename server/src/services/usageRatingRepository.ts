@@ -1,5 +1,6 @@
 import { initializeSchema } from '../db/schema';
-import { SqliteDatabase, sqlValue } from '../db/sqlite';
+import { type DatabaseAdapter } from '../db/adapter';
+import { sqlValue } from '../db/sql';
 import {
   type CostControlRecord,
   type CostAlertRecord,
@@ -52,7 +53,7 @@ interface ControlRow {
 
 export class UsageRatingRepository {
   constructor(
-    private readonly db: SqliteDatabase,
+    private readonly db: DatabaseAdapter,
     private readonly now: () => Date = () => new Date(),
     private readonly onUsageRated?: () => void,
   ) {

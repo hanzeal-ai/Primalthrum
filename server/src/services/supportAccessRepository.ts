@@ -1,5 +1,6 @@
 import { initializeSchema } from '../db/schema';
-import { SqliteDatabase, sqlValue } from '../db/sqlite';
+import { type DatabaseAdapter } from '../db/adapter';
+import { sqlValue } from '../db/sql';
 import {
   normalizeSupportGrantPermissions,
   type SupportGrantPermission,
@@ -37,7 +38,7 @@ interface SupportGrantRow {
 
 export class SupportAccessRepository {
   constructor(
-    private readonly db: SqliteDatabase,
+    private readonly db: DatabaseAdapter,
     private readonly now: () => Date = () => new Date(),
   ) {
     initializeSchema(db);
