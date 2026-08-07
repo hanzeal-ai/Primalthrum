@@ -37,6 +37,11 @@ Migrations `019` through `025` add account verification and recovery, privacy
 consent, transactional email delivery, abuse protection, Workspace API keys,
 retention controls, and MFA. Existing account/session timestamps are backfilled,
 and all security evidence tables reject updates and deletes at the database layer.
+Migrations `026` through `032` complete schema parity for Workspace invitation
+email, the Operator control plane and change control, upload security, account
+privacy rights, ownership transfer, and legal holds. PostgreSQL-native schema
+coverage is now `32/32`; runtime cutover remains blocked only by asynchronous,
+parameterized repository migration and production data-transfer evidence.
 
 ## SQLite Assumption Audit
 
@@ -93,5 +98,7 @@ scripts/postgres-smoke.sh
 The script starts an isolated, digest-pinned PostgreSQL 17.10 container and verifies pooled
 connectivity, positional parameter binding, commit, rollback, health queries,
 concurrent migration locking, migration idempotency, core tables, and identity
-sequence behavior.
+sequence behavior. It also executes all 32 migrations and exercises billing
+invariants, immutable security evidence, Operator revision guards, invitation
+targets, and two-operator legal-hold release.
 Set `POSTGRES_SMOKE_IMAGE` only when validating another PostgreSQL image explicitly.

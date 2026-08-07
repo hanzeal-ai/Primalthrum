@@ -9,6 +9,10 @@ import {
   POSTGRES_SECURITY_TABLES,
   verifySecurityMigrations,
 } from './postgresMigrationSecuritySmoke';
+import {
+  POSTGRES_COMPLIANCE_TABLES,
+  verifyComplianceMigrations,
+} from './postgresMigrationComplianceSmoke';
 
 function migrationsThrough(id: string) {
   const index = POSTGRES_MIGRATIONS.findIndex((migration) => migration.id === id);
@@ -242,6 +246,7 @@ async function main(): Promise<void> {
     }
     await verifyCommercialMigrations(database, userId, preOutboxRatedUsageId);
     await verifySecurityMigrations(database, userId);
+    await verifyComplianceMigrations(database, userId, legacyAgentId);
 
     const expectedTables = [
       'agent_configs',
@@ -266,6 +271,7 @@ async function main(): Promise<void> {
       'workspaces',
       ...POSTGRES_COMMERCIAL_TABLES,
       ...POSTGRES_SECURITY_TABLES,
+      ...POSTGRES_COMPLIANCE_TABLES,
     ];
     for (const table of expectedTables) {
       if ((await database.columns(table)).length === 0) {

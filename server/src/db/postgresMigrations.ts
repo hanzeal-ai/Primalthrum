@@ -14,8 +14,11 @@ import {
   POSTGRES_EMAIL_MIGRATIONS,
 } from './postgres-migrations/accounts';
 import { POSTGRES_BILLING_MIGRATIONS } from './postgres-migrations/billing';
+import { POSTGRES_COMPLIANCE_MIGRATIONS } from './postgres-migrations/compliance';
 import { POSTGRES_KNOWLEDGE_MIGRATIONS } from './postgres-migrations/knowledge';
+import { POSTGRES_INVITATION_MIGRATIONS } from './postgres-migrations/invitations';
 import { POSTGRES_OPERATIONS_MIGRATIONS } from './postgres-migrations/operations';
+import { POSTGRES_OPERATOR_MIGRATIONS } from './postgres-migrations/operator';
 import { POSTGRES_PAYMENT_MIGRATIONS } from './postgres-migrations/payments';
 import { POSTGRES_PRIVACY_MIGRATIONS } from './postgres-migrations/privacy';
 import { POSTGRES_RETENTION_MIGRATIONS } from './postgres-migrations/retention';
@@ -154,6 +157,9 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigration[] = [
   ...POSTGRES_API_KEY_MIGRATIONS,
   ...POSTGRES_RETENTION_MIGRATIONS,
   ...POSTGRES_MFA_MIGRATIONS,
+  ...POSTGRES_INVITATION_MIGRATIONS,
+  ...POSTGRES_OPERATOR_MIGRATIONS,
+  ...POSTGRES_COMPLIANCE_MIGRATIONS,
 ];
 
 function validateMigrations(migrations: readonly PostgresMigration[]): void {
