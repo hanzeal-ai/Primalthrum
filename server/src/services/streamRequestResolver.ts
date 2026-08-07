@@ -1,5 +1,5 @@
 import type { AgentStore } from './agentStore';
-import type { AgentVersionRepository } from './agentVersionRepository';
+import type { AgentVersionStore } from './agentVersionStore';
 import {
   CapabilityDisabledError,
   type CapabilitySettingsRepository,
@@ -43,7 +43,7 @@ export async function resolveStreamRequest(
   agentRepository: AgentStore,
   runRepository: RunStore,
   workspaceId?: number,
-  agentVersionRepository?: AgentVersionRepository,
+  agentVersionRepository?: AgentVersionStore,
   runtimeProviderResolver?: RuntimeProviderResolver,
   capabilitySettings?: CapabilitySettingsRepository,
   runIdentity?: StreamRunIdentity,
@@ -61,7 +61,11 @@ export async function resolveStreamRequest(
 
     const requestedVersionId = optionalPositiveInteger(candidate.versionId, 'versionId');
     const version = typeof workspaceId === 'number' && agentVersionRepository
-      ? agentVersionRepository.resolveForRun(agent.id, workspaceId, requestedVersionId ?? undefined)
+      ? await agentVersionRepository.resolveForRun(
+          agent.id,
+          workspaceId,
+          requestedVersionId ?? undefined,
+        )
       : null;
     if (requestedVersionId && !version) {
       throw new StreamRequestError(404, 'agent version not found');

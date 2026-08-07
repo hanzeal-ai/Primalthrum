@@ -18,6 +18,8 @@ import { AsyncAgentRepository } from './services/asyncAgentRepository';
 import { type AgentStore } from './services/agentStore';
 import { registerAppCleanup } from './services/appLifecycle';
 import { AgentVersionRepository } from './services/agentVersionRepository';
+import { AsyncAgentVersionRepository } from './services/asyncAgentVersionRepository';
+import { type AgentVersionStore } from './services/agentVersionStore';
 import { sendApiError } from './services/apiErrors';
 import {
   capabilityKey,
@@ -316,7 +318,9 @@ export function createApp(options: AppOptions = {}): Koa {
   const agentRepository: AgentStore = runtimeDatabase
     ? new AsyncAgentRepository(runtimeDatabase, generatedAgentsDir)
     : new AgentRepository(db, generatedAgentsDir);
-  const agentVersionRepository = new AgentVersionRepository(db);
+  const agentVersionRepository: AgentVersionStore = runtimeDatabase
+    ? new AsyncAgentVersionRepository(runtimeDatabase)
+    : new AgentVersionRepository(db);
   const runRepository: RunStore = runtimeDatabase
     ? new AsyncRunRepository(runtimeDatabase)
     : new RunRepository(db);
@@ -1428,11 +1432,11 @@ export function createApp(options: AppOptions = {}): Koa {
 
     const generated = await generateAgentProject(agent);
     const generatedAgent = await agentRepository.markGenerated(agent.id);
-    const preview = agentVersionRepository.createPreview(
+    const preview = await agentVersionRepository.createPreview(
       generatedAgent,
       ctx.state.authSession.user.id,
     );
-    agentVersionRepository.publish(
+    await agentVersionRepository.publish(
       generatedAgent,
       preview.version.id,
       ctx.state.authSession.user.id,
@@ -1443,7 +1447,7 @@ export function createApp(options: AppOptions = {}): Koa {
   router.get('/api/agents/:id/versions', async (ctx) => {
     const agent = await scopedAgent(ctx, Number(ctx.params.id), 'agents.read');
     if (!agent) return;
-    ctx.body = agentVersionRepository.listVersions(agent.id, agent.workspaceId);
+    ctx.body = await agentVersionRepository.listVersions(agent.id, agent.workspaceId);
   });
 
   router.post('/api/agents/:id/versions', async (ctx) => {
@@ -1451,7 +1455,7 @@ export function createApp(options: AppOptions = {}): Koa {
     if (!agent) return;
     try {
       ctx.status = 201;
-      ctx.body = agentVersionRepository.createPreview(
+      ctx.body = await agentVersionRepository.createPreview(
         agent,
         ctx.state.authSession.user.id,
       );
@@ -1468,7 +1472,7 @@ export function createApp(options: AppOptions = {}): Koa {
     const agent = await scopedAgent(ctx, Number(ctx.params.id), 'agents.publish');
     if (!agent) return;
     try {
-      ctx.body = agentVersionRepository.publish(
+      ctx.body = await agentVersionRepository.publish(
         agent,
         Number(ctx.params.versionId),
         ctx.state.authSession.user.id,
@@ -1486,7 +1490,7 @@ export function createApp(options: AppOptions = {}): Koa {
     const agent = await scopedAgent(ctx, Number(ctx.params.id), 'agents.publish');
     if (!agent) return;
     try {
-      ctx.body = agentVersionRepository.publish(
+      ctx.body = await agentVersionRepository.publish(
         agent,
         Number(ctx.params.versionId),
         ctx.state.authSession.user.id,
@@ -1504,7 +1508,7 @@ export function createApp(options: AppOptions = {}): Koa {
   router.get('/api/agents/:id/deployments', async (ctx) => {
     const agent = await scopedAgent(ctx, Number(ctx.params.id), 'agents.read');
     if (!agent) return;
-    ctx.body = agentVersionRepository.listDeployments(agent.id, agent.workspaceId);
+    ctx.body = await agentVersionRepository.listDeployments(agent.id, agent.workspaceId);
   });
 
   router.put('/api/agents/:id/audience', async (ctx) => {
@@ -1519,11 +1523,11 @@ export function createApp(options: AppOptions = {}): Koa {
         currentWorkspaceId(ctx),
       );
       if (updated.status === 'generated') {
-        const preview = agentVersionRepository.createPreview(
+        const preview = await agentVersionRepository.createPreview(
           updated,
           ctx.state.authSession.user.id,
         );
-        agentVersionRepository.publish(
+        await agentVersionRepository.publish(
           updated,
           preview.version.id,
           ctx.state.authSession.user.id,
@@ -1844,7 +1848,7 @@ export function createApp(options: AppOptions = {}): Koa {
         });
         return;
       }
-      const version = agentVersionRepository.resolveForRun(
+      const version = await agentVersionRepository.resolveForRun(
         agent.id,
         agent.workspaceId,
         requestedVersionId,
