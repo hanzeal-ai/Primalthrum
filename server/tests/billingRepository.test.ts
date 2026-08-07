@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
 
 import { SqliteDatabase } from '../src/db/sqlite';
+import { createSqliteDatabase } from '../src/db/databaseFactory';
 import { BillingError, BillingRepository } from '../src/services/billingRepository';
 
 const FIXED_NOW = new Date('2026-08-01T00:00:00.000Z');
@@ -17,7 +18,7 @@ let currentNow = FIXED_NOW;
 beforeEach(() => {
   rootDir = mkdtempSync(join(tmpdir(), 'primalthrum-billing-'));
   currentNow = FIXED_NOW;
-  db = new SqliteDatabase(join(rootDir, 'platform.sqlite'));
+  db = createSqliteDatabase(join(rootDir, 'platform.sqlite'));
   billing = new BillingRepository(db, () => currentNow);
   db.run(`
     INSERT INTO users (id, workspace_id, email, password_hash, role)

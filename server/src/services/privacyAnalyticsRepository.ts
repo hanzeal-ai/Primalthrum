@@ -1,6 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
 
-import { initializeSchema } from '../db/schema';
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
 
@@ -60,7 +59,6 @@ interface AnalyticsRow {
 
 export class PrivacyAnalyticsRepository {
   constructor(private readonly db: DatabaseAdapter) {
-    initializeSchema(db);
   }
 
   recordConsent(input: {

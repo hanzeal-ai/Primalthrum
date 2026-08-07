@@ -7,6 +7,7 @@ import { after, before, test } from 'node:test';
 
 import { createApp } from '../src/app';
 import { SqliteDatabase } from '../src/db/sqlite';
+import { createSqliteDatabase } from '../src/db/databaseFactory';
 
 let rootDir = '';
 let dbPath = '';
@@ -97,7 +98,7 @@ test('workspace API keys are scoped, hashed, audited, tenant-bound, and revocabl
   const stillScoped = await fetch(`${baseUrl}/api/agents`, { headers: jsonHeaders(created.token) });
   assert.deepEqual((await body<Array<{ name: string }>>(stillScoped)).map((item) => item.name), ['Default Agent']);
 
-  const db = new SqliteDatabase(dbPath);
+  const db = createSqliteDatabase(dbPath);
   const stored = db.query<{ token_hash: string }>(`
     SELECT token_hash FROM workspace_api_keys WHERE id = ${created.id};
   `);

@@ -1,4 +1,3 @@
-import { initializeSchema } from '../db/schema';
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
 import { type SupportGrantPermission } from './operatorAuthorization';
@@ -49,7 +48,6 @@ export class OperatorReadRepository {
     private readonly db: DatabaseAdapter,
     private readonly now: () => Date = () => new Date(),
   ) {
-    initializeSchema(db);
   }
 
   overview(): OperatorOverview {

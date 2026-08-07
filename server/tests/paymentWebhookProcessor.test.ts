@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
 
 import { SqliteDatabase } from '../src/db/sqlite';
+import { createSqliteDatabase } from '../src/db/databaseFactory';
 import { BillingRepository } from '../src/services/billingRepository';
 import { PaymentLifecycleRepository } from '../src/services/paymentLifecycleRepository';
 import type { PaymentWebhookEvent } from '../src/services/paymentTypes';
@@ -18,7 +19,7 @@ let processor: PaymentWebhookProcessor;
 
 beforeEach(() => {
   rootDir = mkdtempSync(join(tmpdir(), 'primalthrum-payment-webhooks-'));
-  db = new SqliteDatabase(join(rootDir, 'platform.sqlite'));
+  db = createSqliteDatabase(join(rootDir, 'platform.sqlite'));
   billing = new BillingRepository(db, () => new Date('2026-08-01T00:00:00.000Z'));
   payments = new PaymentLifecycleRepository(db);
   processor = new PaymentWebhookProcessor(payments, billing);

@@ -1,4 +1,3 @@
-import { initializeSchema } from '../db/schema';
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
 
@@ -139,7 +138,6 @@ export class OperatorBillingReadRepository {
     private readonly db: DatabaseAdapter,
     private readonly now: () => Date = () => new Date(),
   ) {
-    initializeSchema(db);
   }
 
   listSubscriptions(workspaceId: number | undefined, limit = 100): OperatorSubscriptionSummary[] {

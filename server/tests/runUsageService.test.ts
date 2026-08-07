@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
 
 import { SqliteDatabase } from '../src/db/sqlite';
+import { createSqliteDatabase } from '../src/db/databaseFactory';
 import { BillingRepository } from '../src/services/billingRepository';
 import { RunUsageService } from '../src/services/runUsageService';
 import { UsageRatingRepository } from '../src/services/usageRatingRepository';
@@ -20,7 +21,7 @@ let usage: RunUsageService;
 
 beforeEach(() => {
   rootDir = mkdtempSync(join(tmpdir(), 'primalthrum-run-usage-'));
-  db = new SqliteDatabase(join(rootDir, 'platform.sqlite'));
+  db = createSqliteDatabase(join(rootDir, 'platform.sqlite'));
   billing = new BillingRepository(db, () => NOW);
   ratings = new UsageRatingRepository(db, () => NOW);
   usage = new RunUsageService(ratings, billing, () => NOW);

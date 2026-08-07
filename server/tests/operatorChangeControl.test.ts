@@ -7,6 +7,7 @@ import { after, before, test } from 'node:test';
 
 import { createApp } from '../src/app';
 import { SqliteDatabase } from '../src/db/sqlite';
+import { createSqliteDatabase } from '../src/db/databaseFactory';
 import { OperatorFeatureFlagRepository } from '../src/services/operatorFeatureFlagRepository';
 
 const BOOTSTRAP_TOKEN = 'operator-change-bootstrap-token-for-test-0001';
@@ -31,7 +32,7 @@ const tokens = new Map<OperatorRole, string>();
 before(async () => {
   rootDir = mkdtempSync(join(tmpdir(), 'primalthrum-operator-change-'));
   const dbPath = join(rootDir, 'platform.sqlite');
-  database = new SqliteDatabase(dbPath);
+  database = createSqliteDatabase(dbPath);
   server = createApp({
     dbPath,
     documentStorageDir: join(rootDir, 'documents'),

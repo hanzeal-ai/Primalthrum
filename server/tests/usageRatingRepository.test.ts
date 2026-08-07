@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
 
 import { SqliteDatabase } from '../src/db/sqlite';
+import { createSqliteDatabase } from '../src/db/databaseFactory';
 import { UsageRatingRepository } from '../src/services/usageRatingRepository';
 import { UsageRatingError } from '../src/services/usageRatingTypes';
 
@@ -16,7 +17,7 @@ let ratings: UsageRatingRepository;
 
 beforeEach(() => {
   rootDir = mkdtempSync(join(tmpdir(), 'primalthrum-usage-rating-'));
-  db = new SqliteDatabase(join(rootDir, 'platform.sqlite'));
+  db = createSqliteDatabase(join(rootDir, 'platform.sqlite'));
   ratings = new UsageRatingRepository(db, () => NOW);
 });
 

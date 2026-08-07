@@ -1,4 +1,3 @@
-import { initializeSchema } from '../db/schema';
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
 
@@ -29,7 +28,6 @@ interface CustomerUserRow {
 
 export class OperatorCustomerReadRepository {
   constructor(private readonly db: DatabaseAdapter) {
-    initializeSchema(db);
   }
 
   listUsers(workspaceId: number | undefined, limit = 100): OperatorCustomerUserSummary[] {

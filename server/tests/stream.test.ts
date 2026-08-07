@@ -7,6 +7,7 @@ import { createServer, type Server } from 'node:http';
 
 import { createApp } from '../src/app';
 import { SqliteDatabase, sqlValue } from '../src/db/sqlite';
+import { createSqliteDatabase } from '../src/db/databaseFactory';
 import { bootstrapAdminSession } from './authTestHelpers';
 
 let agentServer: Server;
@@ -376,7 +377,7 @@ test('POST /api/stream can run by agentId and persist proxied events', async () 
   assert.equal(events[4]?.payload.message, 'Saved assistant response');
   assert.equal(events[5]?.payload.status, 'done');
 
-  const usageDb = new SqliteDatabase(join(rootDir, 'platform.sqlite'));
+  const usageDb = createSqliteDatabase(join(rootDir, 'platform.sqlite'));
   const rated = usageDb.query<{ meter: string; credits_charged: number }>(`
     SELECT meter, credits_charged FROM rated_usage_events
     WHERE resource_type = 'run' AND resource_id = ${sqlValue(String(runId))}
@@ -537,7 +538,7 @@ test('POST /api/stream can run by agentId and persist proxied events', async () 
   assert.equal(conflict.error.code, 'RUN_IDEMPOTENCY_CONFLICT');
   assert.equal(upstreamPayloads.length, 1);
 
-  const db = new SqliteDatabase(join(rootDir, 'platform.sqlite'));
+  const db = createSqliteDatabase(join(rootDir, 'platform.sqlite'));
   db.run(`UPDATE agents SET status = 'generated' WHERE id = ${sqlValue(agent.id)};`);
   const publishResponse = await fetch(`${appBaseUrl}/api/agents/${agent.id}/audience`, {
     method: 'PUT',

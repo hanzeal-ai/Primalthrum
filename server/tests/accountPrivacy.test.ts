@@ -7,6 +7,7 @@ import { after, before, test } from 'node:test';
 
 import { createApp } from '../src/app';
 import { SqliteDatabase, sqlValue } from '../src/db/sqlite';
+import { createSqliteDatabase } from '../src/db/databaseFactory';
 import { AccountDeletionService } from '../src/services/accountDeletionService';
 import { AccountPrivacyRepository } from '../src/services/accountPrivacyRepository';
 import { AccountPrivacyScheduler } from '../src/services/accountPrivacyScheduler';
@@ -118,7 +119,7 @@ test('account and owner workspace exports require reauthentication and exclude c
 });
 
 test('account deletion reports shared ownership and paid subscription blockers', async () => {
-  const db = new SqliteDatabase(dbPath);
+  const db = createSqliteDatabase(dbPath);
   const member = new UserRepository(db).createUser('privacy-member@example.com', hashPassword(password), true);
   db.run(`
     INSERT INTO workspace_memberships (workspace_id, user_id, role, status)
@@ -198,7 +199,7 @@ test('scheduled deletion can be cancelled and due execution anonymizes account d
   assert.equal(request.scheduledFor, '2026-08-06T08:01:00.000Z');
 
   now = new Date('2026-08-06T08:02:00.000Z');
-  const db = new SqliteDatabase(dbPath);
+  const db = createSqliteDatabase(dbPath);
   const privacy = new AccountPrivacyRepository(db, () => now);
   const jobs = new JobRepository(db);
   let kicks = 0;

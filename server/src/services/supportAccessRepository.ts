@@ -1,4 +1,3 @@
-import { initializeSchema } from '../db/schema';
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
 import {
@@ -41,7 +40,6 @@ export class SupportAccessRepository {
     private readonly db: DatabaseAdapter,
     private readonly now: () => Date = () => new Date(),
   ) {
-    initializeSchema(db);
   }
 
   create(input: {

@@ -1,6 +1,5 @@
 import { createHmac, randomUUID } from 'node:crypto';
 
-import { initializeSchema } from '../db/schema';
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
 
@@ -22,7 +21,6 @@ export class AbuseProtectionRepository {
     private readonly now: () => Date = () => new Date(),
   ) {
     if (Buffer.byteLength(hashSecret) < 32) throw new Error('abuse hash secret must be at least 32 bytes');
-    initializeSchema(db);
   }
 
   consume(input: {

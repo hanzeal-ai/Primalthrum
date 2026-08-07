@@ -1,4 +1,3 @@
-import { initializeSchema } from '../db/schema';
 import { type DatabaseAdapter } from '../db/adapter';
 
 export interface OperatorAbuseEventSummary {
@@ -23,7 +22,6 @@ interface AbuseEventRow {
 
 export class OperatorSecurityReadRepository {
   constructor(private readonly db: DatabaseAdapter) {
-    initializeSchema(db);
   }
 
   listAbuseEvents(limit = 100): OperatorAbuseEventSummary[] {

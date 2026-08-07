@@ -1,6 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
 
-import { initializeSchema } from '../db/schema';
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
 import { type PublicUserRecord } from './userRepository';
@@ -69,7 +68,6 @@ const MAX_EXPIRY_DAYS = 365;
 
 export class ApiKeyRepository {
   constructor(private readonly db: DatabaseAdapter) {
-    initializeSchema(db);
   }
 
   list(workspaceId: number): ApiKeyRecord[] {

@@ -7,6 +7,7 @@ import { after, before, test } from 'node:test';
 
 import { createApp } from '../src/app';
 import { SqliteDatabase } from '../src/db/sqlite';
+import { createSqliteDatabase } from '../src/db/databaseFactory';
 
 const SUBJECT_ID = '11111111-1111-4111-8111-111111111111';
 const EVENT_ID = '22222222-2222-4222-8222-222222222222';
@@ -105,7 +106,7 @@ test('analytics rejects sensitive or unbounded properties', async () => {
 });
 
 test('privacy and analytics evidence is immutable', () => {
-  const db = new SqliteDatabase(dbPath);
+  const db = createSqliteDatabase(dbPath);
   assert.equal(db.query<{ count: number }>('SELECT COUNT(*) AS count FROM privacy_consent_receipts;')[0]?.count, 4);
   assert.equal(db.query<{ count: number }>('SELECT COUNT(*) AS count FROM product_analytics_events;')[0]?.count, 1);
   assert.throws(

@@ -1,6 +1,5 @@
 import { randomUUID } from 'node:crypto';
 
-import { initializeSchema } from '../db/schema';
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
 
@@ -65,7 +64,6 @@ export class WorkspaceLegalHoldRepository {
     private readonly db: DatabaseAdapter,
     private readonly now: () => Date = () => new Date(),
   ) {
-    initializeSchema(db);
   }
 
   list(limit = 100): WorkspaceLegalHoldRecord[] {

@@ -1,4 +1,3 @@
-import { initializeSchema } from '../db/schema';
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
 import { LocalSecretVault } from './localSecretVault';
@@ -40,7 +39,6 @@ export class ProviderConfigRepository {
   private readonly secrets: LocalSecretVault;
 
   constructor(private readonly db: DatabaseAdapter) {
-    initializeSchema(db);
     this.secrets = new LocalSecretVault(db);
   }
 

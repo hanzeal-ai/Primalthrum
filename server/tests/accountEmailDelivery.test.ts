@@ -8,6 +8,7 @@ import { after, before, test } from 'node:test';
 
 import { createApp } from '../src/app';
 import { SqliteDatabase } from '../src/db/sqlite';
+import { createSqliteDatabase } from '../src/db/databaseFactory';
 import { createAccountEmailIntegration } from '../src/services/accountEmailConfiguration';
 import { AccountEmailOutboxRepository } from '../src/services/accountEmailOutboxRepository';
 import { SignedAccountEmailWebhookVerifier } from '../src/services/accountEmailWebhook';
@@ -23,7 +24,7 @@ let baseUrl = '';
 before(async () => {
   rootDir = mkdtempSync(join(tmpdir(), 'primalthrum-account-email-'));
   dbPath = join(rootDir, 'platform.sqlite');
-  const db = new SqliteDatabase(dbPath);
+  const db = createSqliteDatabase(dbPath);
   const user = new UserRepository(db).createUser('webhook@example.com', 'hash');
   const outbox = new AccountEmailOutboxRepository(db, () => NOW);
   outbox.enqueue({ template: 'verify_email', recipientEmail: user.email,
@@ -69,7 +70,7 @@ test('signed email webhooks record delivery evidence idempotently', async () => 
   }), 'event-delivered-1');
   assert.equal(alteredReplay.status, 400);
 
-  const db = new SqliteDatabase(dbPath);
+  const db = createSqliteDatabase(dbPath);
   assert.equal(db.query<{ count: number }>(`
     SELECT COUNT(*) AS count FROM account_email_delivery_events;
   `)[0]?.count, 2);
@@ -90,7 +91,7 @@ test('bounce webhook updates operational status without persisting recipient pay
   });
   const response = await webhook(body, 'event-bounced-1');
   assert.equal(response.status, 200);
-  const db = new SqliteDatabase(dbPath);
+  const db = createSqliteDatabase(dbPath);
   assert.equal(new AccountEmailOutboxRepository(db).summary().bounced, 1);
   const stored = db.query<{ provider_message_id: string }>(`
     SELECT provider_message_id FROM account_email_delivery_events

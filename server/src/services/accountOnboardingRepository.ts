@@ -1,4 +1,3 @@
-import { initializeSchema } from '../db/schema';
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
 
@@ -12,7 +11,6 @@ export interface AccountOnboardingRecord {
 
 export class AccountOnboardingRepository {
   constructor(private readonly db: DatabaseAdapter) {
-    initializeSchema(db);
   }
 
   create(workspaceId: number, ownerUserId: number, planKey: 'free' | 'pro'): AccountOnboardingRecord {

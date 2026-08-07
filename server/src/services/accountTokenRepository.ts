@@ -1,6 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
 
-import { initializeSchema } from '../db/schema';
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
 
@@ -16,7 +15,6 @@ export class AccountTokenRepository {
     private readonly db: DatabaseAdapter,
     private readonly now: () => Date = () => new Date(),
   ) {
-    initializeSchema(db);
   }
 
   create(input: {

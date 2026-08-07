@@ -2117,7 +2117,11 @@ complete. Follow the same dependency and verification protocol used above.
   into a shared database module, adds adapter-owned dialect metadata and safe
   schema introspection, and enforces the boundary with tests. The database API
   and SQL remain synchronous/SQLite-specific; asynchronous parameterized
-  repositories and a real PostgreSQL adapter are the next required slice.
+  repositories and a real PostgreSQL adapter are the next required slice. The
+  third P22 slice centralizes schema initialization at application composition,
+  removes migration side effects from 37 service constructors, supports an
+  injected database adapter in `createApp`, and enforces the lifecycle boundary
+  in tests. Async bootstrap and parameterized repository conversion remain open.
 
 ### P23-01 Full Commercial End-To-End Suite
 

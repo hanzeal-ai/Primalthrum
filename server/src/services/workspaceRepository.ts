@@ -1,6 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
 
-import { initializeSchema } from '../db/schema';
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
 import { normalizeEmail, type PublicUserRecord } from './userRepository';
@@ -83,7 +82,6 @@ const INVITATION_TTL_MS = 1000 * 60 * 60 * 24 * 7;
 
 export class WorkspaceRepository {
   constructor(private readonly db: DatabaseAdapter) {
-    initializeSchema(db);
   }
 
   create(ownerUserId: number, name: unknown): WorkspaceRecord {

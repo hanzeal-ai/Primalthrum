@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { test } from 'node:test';
 
 import { sqlValue } from '../src/db/sql';
+import { createSqliteDatabase, initializeDatabase } from '../src/db/databaseFactory';
 import { SqliteDatabase } from '../src/db/sqlite';
 
 test('service persistence depends on the database contract rather than SQLite', () => {
@@ -14,6 +15,28 @@ test('service persistence depends on the database contract rather than SQLite', 
     .filter((filename) => readFileSync(join(servicesDir, filename), 'utf8').includes("../db/sqlite"));
 
   assert.deepEqual(concreteImports, []);
+});
+
+test('repositories do not perform schema migrations during construction', () => {
+  const servicesDir = join(process.cwd(), 'src', 'services');
+  const schemaImports = readdirSync(servicesDir)
+    .filter((filename) => filename.endsWith('.ts'))
+    .filter((filename) => readFileSync(join(servicesDir, filename), 'utf8').includes("../db/schema"));
+
+  assert.deepEqual(schemaImports, []);
+});
+
+test('database lifecycle initialization is explicit and idempotent', () => {
+  const root = mkdtempSync(join(tmpdir(), 'primalthrum-database-lifecycle-'));
+  try {
+    const db = createSqliteDatabase(join(root, 'platform.sqlite'));
+    assert.equal(db.query<{ count: number }>('SELECT COUNT(*) AS count FROM schema_migrations;')[0]?.count, 32);
+
+    assert.equal(initializeDatabase(db), db);
+    assert.equal(db.query<{ count: number }>('SELECT COUNT(*) AS count FROM schema_migrations;')[0]?.count, 32);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
 });
 
 test('SQLite implements dialect metadata and safe schema introspection', () => {

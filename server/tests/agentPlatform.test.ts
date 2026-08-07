@@ -12,6 +12,7 @@ import { createApp } from '../src/app';
 import { type DatabaseAdapter } from '../src/db/adapter';
 import { MIGRATIONS } from '../src/db/migrations';
 import { SqliteDatabase, sqlValue } from '../src/db/sqlite';
+import { createSqliteDatabase } from '../src/db/databaseFactory';
 import { InProcessJobWorker } from '../src/services/inProcessJobWorker';
 import { JobRepository } from '../src/services/jobRepository';
 import { LocalDocumentStorage } from '../src/services/fileStorage';
@@ -152,7 +153,7 @@ async function assertErrorPayload(
 }
 
 test('schema bootstrap creates the default local workspace', () => {
-  const db = new SqliteDatabase(dbPath);
+  const db = createSqliteDatabase(dbPath);
   const workspaces = db.query<{
     id: number;
     name: string;
@@ -383,7 +384,7 @@ test('Workspace invitation email migration preserves existing delivery evidence'
 test('in-process job worker records retry and failure states', () => {
   const jobRootDir = mkdtempSync(join(tmpdir(), 'primalthrum-jobs-'));
   try {
-    const db = new SqliteDatabase(join(jobRootDir, 'platform.sqlite'));
+    const db = createSqliteDatabase(join(jobRootDir, 'platform.sqlite'));
     const jobs = new JobRepository(db);
     const worker = new InProcessJobWorker(jobs);
     const job = jobs.create({
@@ -413,7 +414,7 @@ test('in-process job worker records retry and failure states', () => {
 test('durable dispatcher recovers interrupted jobs and retries from SQLite state', async () => {
   const dispatcherRootDir = mkdtempSync(join(tmpdir(), 'primalthrum-dispatcher-'));
   try {
-    const db = new SqliteDatabase(join(dispatcherRootDir, 'platform.sqlite'));
+    const db = createSqliteDatabase(join(dispatcherRootDir, 'platform.sqlite'));
     const jobs = new JobRepository(db);
     const queued = jobs.create({
       type: 'document.index',
@@ -469,7 +470,7 @@ test('backup service restores metadata database and document files', () => {
     const dbPathForBackup = join(backupRootDir, 'platform.sqlite');
     const documentDirForBackup = join(backupRootDir, 'documents');
     const backupDir = join(backupRootDir, 'backup');
-    const db = new SqliteDatabase(dbPathForBackup);
+    const db = createSqliteDatabase(dbPathForBackup);
     db.run(`
       CREATE TABLE marker (value TEXT NOT NULL);
       INSERT INTO marker VALUES ('before');
@@ -1014,7 +1015,7 @@ test('provider config APIs store secrets as redacted references', async () => {
   });
   assert.doesNotMatch(JSON.stringify(updated), /sk-rotated-secret-value/);
 
-  const db = new SqliteDatabase(dbPath);
+  const db = createSqliteDatabase(dbPath);
   const storedSecrets = db.query<{
     secret_ref: string;
     ciphertext: string;
@@ -1126,7 +1127,7 @@ test('speech APIs resolve encrypted STT and TTS provider configs', async () => {
     mimeType: 'audio/mpeg',
     audioBase64: Buffer.from('speech-bytes').toString('base64'),
   });
-  const speechUsage = new SqliteDatabase(dbPath).query<{
+  const speechUsage = createSqliteDatabase(dbPath).query<{
     meter: string;
     quantity: number;
     credits_charged: number;
@@ -1141,7 +1142,7 @@ test('speech APIs resolve encrypted STT and TTS provider configs', async () => {
     { meter: 'speech.transcription_seconds', quantity: 3, credits_charged: 20 },
   ]);
 
-  const capabilitySettings = new CapabilitySettingsRepository(new SqliteDatabase(dbPath));
+  const capabilitySettings = new CapabilitySettingsRepository(createSqliteDatabase(dbPath));
   capabilitySettings.set(1, 'tts:openai-compatible', false, 1);
   const disabledSynthesisResponse = await fetch(`${baseUrl}/api/speech/synthesis`, {
     method: 'POST',
@@ -1346,7 +1347,7 @@ test('document APIs register and list agent document metadata', async () => {
   assert.equal(documents[1]?.filename, 'owners.csv');
   assert.equal(documents[1]?.mimeType, 'text/csv');
   assert.equal(documents[1]?.sizeBytes, Buffer.byteLength(uploadContent));
-  const storageUsage = new SqliteDatabase(dbPath).query<{ quantity: number }>(`
+  const storageUsage = createSqliteDatabase(dbPath).query<{ quantity: number }>(`
     SELECT quantity FROM rated_usage_events
     WHERE resource_type = 'document.storage'
     ORDER BY id DESC LIMIT 2;
@@ -1408,7 +1409,7 @@ test('document APIs register and list agent document metadata', async () => {
   const indexed = completedJob?.result.document;
   assert.equal(indexed?.id, document.id);
   assert.equal(indexed?.indexStatus, 'indexed');
-  const db = new SqliteDatabase(dbPath);
+  const db = createSqliteDatabase(dbPath);
   const indexedEntries = db.query<{ count: number }>(`
     SELECT COUNT(*) AS count
     FROM document_index_entries

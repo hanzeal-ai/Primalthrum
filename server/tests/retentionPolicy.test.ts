@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, test } from 'node:test';
 
 import { SqliteDatabase } from '../src/db/sqlite';
+import { createSqliteDatabase } from '../src/db/databaseFactory';
 import { LocalDocumentStorage } from '../src/services/fileStorage';
 import { JobRepository } from '../src/services/jobRepository';
 import { hashPassword } from '../src/services/passwordHash';
@@ -23,7 +24,7 @@ afterEach(() => {
 
 test('retention enforcement is tenant-scoped, durable, and preserves security audit evidence', async () => {
   const root = temporaryRoot();
-  const db = new SqliteDatabase(join(root, 'platform.sqlite'));
+  const db = createSqliteDatabase(join(root, 'platform.sqlite'));
   const now = new Date('2026-08-01T12:00:00.000Z');
   const policies = new RetentionPolicyRepository(db, () => now);
   const storage = new LocalDocumentStorage(join(root, 'documents'));
@@ -97,7 +98,7 @@ test('retention enforcement is tenant-scoped, durable, and preserves security au
 
 test('retention scheduler creates one durable job for each due workspace', () => {
   const root = temporaryRoot();
-  const db = new SqliteDatabase(join(root, 'platform.sqlite'));
+  const db = createSqliteDatabase(join(root, 'platform.sqlite'));
   const now = new Date('2026-08-01T12:00:00.000Z');
   const policies = new RetentionPolicyRepository(db, () => now);
   const user = new UserRepository(db).createAdmin('scheduler-owner@example.com', hashPassword('strong password'));
@@ -124,7 +125,7 @@ test('retention scheduler creates one durable job for each due workspace', () =>
 
 test('active legal hold atomically blocks retention records and physical file deletion', async () => {
   const root = temporaryRoot();
-  const db = new SqliteDatabase(join(root, 'platform.sqlite'));
+  const db = createSqliteDatabase(join(root, 'platform.sqlite'));
   const now = new Date('2026-08-01T12:00:00.000Z');
   const policies = new RetentionPolicyRepository(db, () => now);
   const storage = new LocalDocumentStorage(join(root, 'documents'));

@@ -1,6 +1,5 @@
 import { join } from 'node:path';
 
-import { initializeSchema } from '../db/schema';
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
 import { DEFAULT_WORKSPACE_ID } from '../db/workspaceDefaults';
@@ -54,7 +53,6 @@ export class AgentRepository {
     private readonly db: DatabaseAdapter,
     private readonly generatedAgentsDir: string,
   ) {
-    initializeSchema(db);
   }
 
   create(input: CreateAgentInput, workspaceId: number): AgentRecord {

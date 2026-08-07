@@ -6,7 +6,6 @@ import {
   randomUUID,
 } from 'node:crypto';
 
-import { initializeSchema } from '../db/schema';
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
 
@@ -14,7 +13,6 @@ const SECRET_REF_PREFIX = 'secret://local/';
 
 export class LocalSecretVault {
   constructor(private readonly db: DatabaseAdapter) {
-    initializeSchema(db);
   }
 
   create(plaintext: string, workspaceId: number): string {

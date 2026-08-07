@@ -7,6 +7,7 @@ import { after, before, test } from 'node:test';
 
 import { createApp } from '../src/app';
 import { SqliteDatabase } from '../src/db/sqlite';
+import { createSqliteDatabase } from '../src/db/databaseFactory';
 import { AgentRepository } from '../src/services/agentRepository';
 import { BillingRepository } from '../src/services/billingRepository';
 import { UserRepository } from '../src/services/userRepository';
@@ -52,7 +53,7 @@ async function body<T>(response: Response): Promise<T> {
 test('agent repository requires an explicit workspace scope for lists and lookups', () => {
   const repositoryRoot = mkdtempSync(join(tmpdir(), 'primalthrum-repository-scope-'));
   try {
-    const db = new SqliteDatabase(join(repositoryRoot, 'platform.sqlite'));
+    const db = createSqliteDatabase(join(repositoryRoot, 'platform.sqlite'));
     const users = new UserRepository(db);
     const workspaces = new WorkspaceRepository(db);
     const agents = new AgentRepository(db, join(repositoryRoot, 'generated-agents'));
@@ -143,7 +144,7 @@ test('workspace memberships scope resources and enforce role permissions', async
   });
   assert.equal(switchDefaultResponse.status, 200);
 
-  new BillingRepository(new SqliteDatabase(dbPath)).grantEntitlement({
+  new BillingRepository(createSqliteDatabase(dbPath)).grantEntitlement({
     workspaceId: defaultWorkspaceId,
     feature: 'seats',
     enabled: true,

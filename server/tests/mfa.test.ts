@@ -7,6 +7,7 @@ import { after, before, test } from 'node:test';
 
 import { createApp } from '../src/app';
 import { SqliteDatabase, sqlValue } from '../src/db/sqlite';
+import { createSqliteDatabase } from '../src/db/databaseFactory';
 import { BillingRepository } from '../src/services/billingRepository';
 import { hashPassword } from '../src/services/passwordHash';
 import { hashToken, SessionRepository } from '../src/services/sessionRepository';
@@ -58,7 +59,7 @@ after(async () => {
 });
 
 test('all workspace roles can read and manage account-level MFA', async () => {
-  const db = new SqliteDatabase(dbPath);
+  const db = createSqliteDatabase(dbPath);
   const users = new UserRepository(db);
   const workspaces = new WorkspaceRepository(db);
   const sessions = new SessionRepository(db);
@@ -102,7 +103,7 @@ test('MFA setup encrypts the secret, upgrades the current session, and revokes o
   secret = setupBody.secret;
   assert.match(setupBody.otpauthUri, /^otpauth:\/\/totp\//);
 
-  const db = new SqliteDatabase(dbPath);
+  const db = createSqliteDatabase(dbPath);
   const stored = db.query<{ ciphertext: string; secret_ref: string }>(`
     SELECT s.ciphertext, f.secret_ref
     FROM user_mfa_factors f JOIN secrets s ON s.secret_ref = f.secret_ref
@@ -162,7 +163,7 @@ test('an MFA challenge is locked after five failed attempts', async () => {
   for (let attempt = 0; attempt < 5; attempt += 1) {
     assert.equal((await verifyChallenge(challenge.challengeToken, '000000')).status, 401);
   }
-  const db = new SqliteDatabase(dbPath);
+  const db = createSqliteDatabase(dbPath);
   const stored = db.query<{ attempts: number }>(`
     SELECT attempts FROM user_mfa_challenges
     WHERE token_hash = ${sqlValue(hashToken(challenge.challengeToken))};
@@ -176,7 +177,7 @@ test('an MFA challenge is locked after five failed attempts', async () => {
 });
 
 test('an existing MFA user must complete MFA before an invitation is consumed', async () => {
-  const db = new SqliteDatabase(dbPath);
+  const db = createSqliteDatabase(dbPath);
   const users = new UserRepository(db);
   const workspaces = new WorkspaceRepository(db);
   const inviter = users.createUser('inviter@example.com', hashPassword(PASSWORD), true);
@@ -221,7 +222,7 @@ test('MFA can be disabled with password and an unused recovery code', async () =
   const status = await fetch(`${baseUrl}/api/settings/mfa`, { headers: jsonHeaders(ownerToken) });
   assert.equal((await body<{ enabled: boolean }>(status)).enabled, false);
   assert.equal((await passwordLogin()).status, 200);
-  const db = new SqliteDatabase(dbPath);
+  const db = createSqliteDatabase(dbPath);
   assert.equal(db.query<{ count: number }>(`
     SELECT COUNT(*) AS count FROM user_mfa_factors WHERE user_id = ${sqlValue(ownerId)};
   `)[0]?.count, 0);

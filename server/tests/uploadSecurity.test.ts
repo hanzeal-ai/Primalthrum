@@ -8,6 +8,7 @@ import { after, before, test } from 'node:test';
 
 import { createApp } from '../src/app';
 import { SqliteDatabase } from '../src/db/sqlite';
+import { createSqliteDatabase } from '../src/db/databaseFactory';
 import {
   ClamAvDocumentMalwareScanner,
   createDocumentMalwareScanner,
@@ -127,7 +128,7 @@ test('HTTP uploads fail before persistence and retain minimized immutable scan e
   assert.equal(unavailable.status, 503);
   assert.equal((await errorCode(unavailable)), 'DOCUMENT_SCAN_UNAVAILABLE');
 
-  const database = new SqliteDatabase(dbPath);
+  const database = createSqliteDatabase(dbPath);
   const events = new DocumentUploadSecurityRepository(database).list(1);
   assert.deepEqual(events.map((event) => event.status), ['error', 'rejected', 'clean']);
   assert.equal(events.every((event) => event.filenameHash.length === 64), true);

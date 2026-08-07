@@ -1,4 +1,3 @@
-import { initializeSchema } from '../db/schema';
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
 import { type UsageMeterExportPayload } from './usageMeterExporter';
@@ -38,7 +37,6 @@ export class UsageExportOutboxRepository {
     private readonly db: DatabaseAdapter,
     private readonly now: () => Date = () => new Date(),
   ) {
-    initializeSchema(db);
   }
 
   claimNext(destination: string): ClaimedUsageExport | null {

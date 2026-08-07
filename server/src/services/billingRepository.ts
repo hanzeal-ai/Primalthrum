@@ -1,4 +1,3 @@
-import { initializeSchema } from '../db/schema';
 import { type DatabaseAdapter } from '../db/adapter';
 import { BillingPlanRepository } from './billingPlanRepository';
 import { CreditLedgerRepository } from './creditLedgerRepository';
@@ -26,7 +25,6 @@ export class BillingRepository {
     db: DatabaseAdapter,
     now: () => Date = () => new Date(),
   ) {
-    initializeSchema(db);
     this.plans = new BillingPlanRepository(db);
     this.entitlements = new EntitlementRepository(db, now);
     this.credits = new CreditLedgerRepository(db, now);

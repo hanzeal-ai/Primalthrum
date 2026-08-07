@@ -1,4 +1,3 @@
-import { initializeSchema } from '../db/schema';
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
 import { DEFAULT_WORKSPACE_ID } from '../db/workspaceDefaults';
@@ -30,7 +29,6 @@ interface UserRow {
 
 export class UserRepository {
   constructor(private readonly db: DatabaseAdapter) {
-    initializeSchema(db);
   }
 
   hasAdmin(): boolean {

@@ -1,4 +1,3 @@
-import { initializeSchema } from '../db/schema';
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
 import {
@@ -34,7 +33,6 @@ export class AccountEmailOutboxRepository {
     private readonly now: () => Date = () => new Date(),
     private readonly onEnqueued?: () => void,
   ) {
-    initializeSchema(db);
   }
 
   enqueue(input: Omit<AccountEmailMessage, 'id'>): void {

@@ -7,6 +7,7 @@ import { after, before, test } from 'node:test';
 
 import { createApp } from '../src/app';
 import { SqliteDatabase } from '../src/db/sqlite';
+import { createSqliteDatabase } from '../src/db/databaseFactory';
 import { AbuseProtectionService, type AbusePolicy } from '../src/services/abuseProtection';
 import { createAbuseProtectionConfiguration } from '../src/services/abuseProtectionConfiguration';
 import { AbuseProtectionRepository } from '../src/services/abuseProtectionRepository';
@@ -24,7 +25,7 @@ let challengeVerifications = 0;
 before(async () => {
   rootDir = mkdtempSync(join(tmpdir(), 'primalthrum-abuse-'));
   dbPath = join(rootDir, 'platform.sqlite');
-  const repository = new AbuseProtectionRepository(new SqliteDatabase(dbPath), HASH_SECRET, () => NOW);
+  const repository = new AbuseProtectionRepository(createSqliteDatabase(dbPath), HASH_SECRET, () => NOW);
   const policies: AbusePolicy[] = [
     {
       key: 'test_login',
@@ -81,7 +82,7 @@ after(async () => {
 
 test('rate limit buckets are atomic, reset by window, and store only HMAC subjects', () => {
   let now = NOW;
-  const db = new SqliteDatabase(join(rootDir, 'repository.sqlite'));
+  const db = createSqliteDatabase(join(rootDir, 'repository.sqlite'));
   const repository = new AbuseProtectionRepository(db, HASH_SECRET, () => now);
   assert.equal(repository.consume({ ruleKey: 'login.ip', subject: 'ip:203.0.113.8', limit: 2, windowMs: 60_000 }).allowed, true);
   assert.equal(repository.consume({ ruleKey: 'login.ip', subject: 'ip:203.0.113.8', limit: 2, windowMs: 60_000 }).allowed, true);
@@ -125,7 +126,7 @@ test('registration challenge is verified before business logic', async () => {
   assert.equal((await request()).status, 403);
   assert.equal((await request('invalid-token-value')).status, 403);
   assert.equal((await request('valid-challenge-token')).status, 400);
-  const db = new SqliteDatabase(dbPath);
+  const db = createSqliteDatabase(dbPath);
   assert.equal(db.query<{ count: number }>(`
     SELECT COUNT(*) AS count FROM abuse_enforcement_events
     WHERE outcome = 'challenge_failed';

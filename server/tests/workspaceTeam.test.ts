@@ -7,6 +7,7 @@ import { after, before, test } from 'node:test';
 
 import { createApp } from '../src/app';
 import { SqliteDatabase } from '../src/db/sqlite';
+import { createSqliteDatabase } from '../src/db/databaseFactory';
 import { type AccountEmailMessage } from '../src/services/accountEmailSender';
 import { BillingRepository } from '../src/services/billingRepository';
 import { hashPassword } from '../src/services/passwordHash';
@@ -76,7 +77,7 @@ test('workspace invitations reserve seats, reject existing members, and can be r
   assert.equal(freeInvite.status, 403);
   assert.equal((await body<{ error: { code: string } }>(freeInvite)).error.code, 'ENTITLEMENT_LIMIT_EXCEEDED');
 
-  new BillingRepository(new SqliteDatabase(dbPath)).grantEntitlement({
+  new BillingRepository(createSqliteDatabase(dbPath)).grantEntitlement({
     workspaceId,
     feature: 'seats',
     enabled: true,
@@ -155,7 +156,7 @@ test('workspace ownership transfer is reauthenticated, tenant-scoped, atomic, an
     session: { token: string };
   }>(successorAccept);
 
-  const database = new SqliteDatabase(dbPath);
+  const database = createSqliteDatabase(dbPath);
   const outsider = new UserRepository(database).createUser(
     'outsider@example.com',
     hashPassword('outsider password value'),

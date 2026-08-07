@@ -7,6 +7,7 @@ import { after, before, test } from 'node:test';
 
 import { createApp } from '../src/app';
 import { SqliteDatabase } from '../src/db/sqlite';
+import { createSqliteDatabase } from '../src/db/databaseFactory';
 import { hashPassword } from '../src/services/passwordHash';
 
 let root = '';
@@ -38,7 +39,7 @@ before(async () => {
   assert.equal(setup.status, 201);
   ownerToken = (await payload<{ session: { token: string } }>(setup)).session.token;
 
-  const db = new SqliteDatabase(dbPath);
+  const db = createSqliteDatabase(dbPath);
   db.run(`
     INSERT INTO users (workspace_id, email, password_hash, role, email_verified_at)
     VALUES (1, 'developer@example.com', '${hashPassword('developer password')}', 'member', CURRENT_TIMESTAMP);
@@ -73,7 +74,7 @@ test('retention settings require role, plan entitlement, and password reauthenti
   assert.equal(freePlanUpdate.status, 403);
   assert.equal((await errorCode(freePlanUpdate)), 'ENTITLEMENT_REQUIRED');
 
-  const db = new SqliteDatabase(dbPath);
+  const db = createSqliteDatabase(dbPath);
   db.run(`
     UPDATE workspace_subscriptions
     SET plan_key = 'business', state = 'active'
@@ -131,7 +132,7 @@ test('manual enforcement is reauthenticated and writes immutable execution evide
   });
   assert.equal(outcome.filesDeleted, 0);
 
-  const db = new SqliteDatabase(dbPath);
+  const db = createSqliteDatabase(dbPath);
   assert.throws(() => db.run('DELETE FROM retention_events;'), /immutable/);
 });
 

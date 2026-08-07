@@ -1,4 +1,3 @@
-import { initializeSchema } from '../db/schema';
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
 import { ensureBillingWorkspaceBaseline } from './billingWorkspaceBaseline';
@@ -84,7 +83,6 @@ export class PaymentLifecycleRepository {
     private readonly db: DatabaseAdapter,
     private readonly now: () => Date = () => new Date(),
   ) {
-    initializeSchema(db);
   }
 
   configurePrice(provider: string, planKey: string, priceRef: string): PaymentPriceRecord {

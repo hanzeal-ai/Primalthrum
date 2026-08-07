@@ -5,6 +5,7 @@ import { join } from 'node:path';
 import { afterEach, beforeEach, test } from 'node:test';
 
 import { SqliteDatabase } from '../src/db/sqlite';
+import { createSqliteDatabase } from '../src/db/databaseFactory';
 import { AccountEmailDispatcher } from '../src/services/accountEmailDispatcher';
 import { AccountEmailOutboxRepository } from '../src/services/accountEmailOutboxRepository';
 import {
@@ -23,7 +24,7 @@ let now: Date;
 
 beforeEach(() => {
   rootDir = mkdtempSync(join(tmpdir(), 'primalthrum-account-identity-'));
-  db = new SqliteDatabase(join(rootDir, 'platform.sqlite'));
+  db = createSqliteDatabase(join(rootDir, 'platform.sqlite'));
   now = new Date('2026-08-15T12:00:00.000Z');
 });
 

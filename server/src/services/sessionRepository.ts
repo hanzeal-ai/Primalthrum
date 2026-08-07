@@ -1,6 +1,5 @@
 import { createHash, randomBytes } from 'node:crypto';
 
-import { initializeSchema } from '../db/schema';
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
 import { type PublicUserRecord } from './userRepository';
@@ -49,7 +48,6 @@ interface SessionSecurityRow {
 
 export class SessionRepository {
   constructor(private readonly db: DatabaseAdapter) {
-    initializeSchema(db);
   }
 
   create(user: PublicUserRecord, authenticationMethod = 'password'): CreatedSession {

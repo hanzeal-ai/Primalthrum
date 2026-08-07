@@ -4,7 +4,8 @@ import bodyParser from 'koa-bodyparser';
 import { createHash, randomUUID } from 'node:crypto';
 import { join } from 'node:path';
 
-import { SqliteDatabase } from './db/sqlite';
+import { type DatabaseAdapter } from './db/adapter';
+import { createSqliteDatabase, initializeDatabase } from './db/databaseFactory';
 import { generateAgentProject } from './generators/agentProjectGenerator';
 import { AgentRepository, type CreateAgentInput } from './services/agentRepository';
 import { AgentVersionRepository } from './services/agentVersionRepository';
@@ -161,6 +162,7 @@ export interface AppOptions {
   startBackgroundSchedulers?: boolean;
   agentBaseUrl?: string;
   dbPath?: string;
+  database?: DatabaseAdapter;
   documentMalwareScanner?: DocumentMalwareScanner;
   documentStorage?: DocumentFileStorage;
   documentStorageDir?: string;
@@ -265,7 +267,9 @@ export function createApp(options: AppOptions = {}): Koa {
   const agentBaseUrl = options.agentBaseUrl ?? DEFAULT_AGENT_BASE_URL;
   const logger = options.logger ?? new JsonConsoleLogger();
   const metrics = options.metrics ?? new MetricsRegistry();
-  const db = new SqliteDatabase(options.dbPath ?? DEFAULT_DB_PATH);
+  const db = options.database
+    ? initializeDatabase(options.database)
+    : createSqliteDatabase(options.dbPath ?? DEFAULT_DB_PATH);
   const abuseProtection = options.abuseProtection ?? new AbuseProtectionService(
     new AbuseProtectionRepository(db, options.abuseHashSecret ?? DEFAULT_ABUSE_HASH_SECRET),
     options.botChallengeVerifier,

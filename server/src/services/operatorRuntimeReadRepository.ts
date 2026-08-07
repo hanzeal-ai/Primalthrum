@@ -1,4 +1,3 @@
-import { initializeSchema } from '../db/schema';
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
 
@@ -63,7 +62,6 @@ interface JobRow {
 
 export class OperatorRuntimeReadRepository {
   constructor(private readonly db: DatabaseAdapter) {
-    initializeSchema(db);
   }
 
   listAgents(workspaceId: number | undefined, limit = 100): OperatorAgentSummary[] {

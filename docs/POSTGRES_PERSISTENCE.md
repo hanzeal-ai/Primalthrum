@@ -2,10 +2,12 @@
 
 Primalthrum currently ships with SQLite for a single-node local deployment.
 Repositories now depend on `DatabaseAdapter` instead of the concrete
-`SqliteDatabase`, and schema introspection is owned by the adapter. This removes
-the concrete storage dependency, but it does not yet make the runtime PostgreSQL
-compatible: repository operations are synchronous and much of the SQL is still
-SQLite-specific.
+`SqliteDatabase`, schema introspection is owned by the adapter, and repository
+constructors no longer execute migrations. Database initialization now happens
+once at the application composition boundary. This removes the concrete storage
+and constructor-lifecycle dependencies, but it does not yet make the runtime
+PostgreSQL compatible: repository operations are synchronous and much of the SQL
+is still SQLite-specific.
 
 ## SQLite Assumption Audit
 
@@ -20,6 +22,10 @@ SQLite-specific.
 ## Compatibility Rules
 
 - Services must import `DatabaseAdapter` and must never import `db/sqlite`.
+- Services must not import `db/schema` or perform migration work in constructors.
+- Application composition must initialize an injected database before creating
+  repositories. Local tests should use `createSqliteDatabase` unless they are
+  intentionally testing an uninitialized migration state.
 - Keep shared SQL helpers outside concrete adapters.
 - Treat synchronous `run(sql)` and `query<T>(sql)` as a temporary compatibility
   boundary, not as a PostgreSQL-ready network contract.

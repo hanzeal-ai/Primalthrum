@@ -1,6 +1,5 @@
 import { createHash, randomUUID } from 'node:crypto';
 
-import { initializeSchema } from '../db/schema';
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
 import { type ParsedDocumentUpload } from './documentUpload';
@@ -41,7 +40,6 @@ interface SecurityEventRow {
 
 export class DocumentUploadSecurityRepository {
   constructor(private readonly db: DatabaseAdapter) {
-    initializeSchema(db);
   }
 
   record(input: {

@@ -1,6 +1,5 @@
 import { randomBytes } from 'node:crypto';
 
-import { initializeSchema } from '../db/schema';
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
 import { LocalSecretVault } from './localSecretVault';
@@ -53,7 +52,6 @@ export class MfaRepository {
     private readonly db: DatabaseAdapter,
     private readonly secrets: LocalSecretVault,
   ) {
-    initializeSchema(db);
   }
 
   status(userId: number): { enabled: boolean; recoveryCodesRemaining: number; enabledAt: string | null } {

@@ -1,6 +1,5 @@
 import { createHash } from 'node:crypto';
 
-import { initializeSchema } from '../db/schema';
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
 import { type AgentConfig, type AgentRecord } from './agentRepository';
@@ -68,7 +67,6 @@ interface DeploymentRow {
 
 export class AgentVersionRepository {
   constructor(private readonly db: DatabaseAdapter) {
-    initializeSchema(db);
   }
 
   createPreview(agent: AgentRecord, createdByUserId: number): {

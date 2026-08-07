@@ -8,6 +8,7 @@ import { after, before, test } from 'node:test';
 
 import { createApp } from '../src/app';
 import { SqliteDatabase, sqlValue } from '../src/db/sqlite';
+import { createSqliteDatabase } from '../src/db/databaseFactory';
 import { OperatorAuditRepository } from '../src/services/operatorAuditRepository';
 import { bootstrapAdminSession } from './authTestHelpers';
 
@@ -38,7 +39,7 @@ const operatorTokens = new Map<OperatorRole, string>();
 before(async () => {
   rootDir = mkdtempSync(join(tmpdir(), 'primalthrum-operator-'));
   dbPath = join(rootDir, 'platform.sqlite');
-  database = new SqliteDatabase(dbPath);
+  database = createSqliteDatabase(dbPath);
   server = createApp({
     dbPath,
     documentStorageDir: join(rootDir, 'documents'),
