@@ -2121,7 +2121,10 @@ complete. Follow the same dependency and verification protocol used above.
   third P22 slice centralizes schema initialization at application composition,
   removes migration side effects from 37 service constructors, supports an
   injected database adapter in `createApp`, and enforces the lifecycle boundary
-  in tests. Async bootstrap and parameterized repository conversion remain open.
+  in tests. The fourth P22 slice adds an asynchronous parameterized database
+  contract, a pooled `pg` adapter with transaction-scoped clients and rollback,
+  and a real PostgreSQL container smoke. PostgreSQL-native migrations and
+  parameterized repository conversion remain open.
 
 ### P23-01 Full Commercial End-To-End Suite
 

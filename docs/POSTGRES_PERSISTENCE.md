@@ -9,6 +9,13 @@ and constructor-lifecycle dependencies, but it does not yet make the runtime
 PostgreSQL compatible: repository operations are synchronous and much of the SQL
 is still SQLite-specific.
 
+The next-generation persistence boundary is available in
+`server/src/db/asyncAdapter.ts`. `PostgresDatabase` implements this boundary with
+the `pg` connection pool, positional parameters, transaction-scoped clients,
+rollback, schema introspection, and explicit pool shutdown. Existing repositories
+do not use it yet, so PostgreSQL must not be selected as the application database
+until repository migration and PostgreSQL-native migrations are complete.
+
 ## SQLite Assumption Audit
 
 - `server/src/db/sqlite.ts` executes SQL by shelling out to the `sqlite3` CLI and returns JSON rows through `.mode json`.
@@ -52,3 +59,15 @@ Use Postgres when running multiple server instances, deploying to managed cloud 
    pinned PostgreSQL container in CI.
 5. Add SQLite-to-PostgreSQL migration, reconciliation, backup, restore, rollback,
    and deployment evidence before selecting PostgreSQL in production.
+
+## Integration Smoke
+
+Run the real provider check with Docker:
+
+```bash
+scripts/postgres-smoke.sh
+```
+
+The script starts an isolated, digest-pinned PostgreSQL 17.10 container and verifies pooled
+connectivity, positional parameter binding, commit, rollback, and health queries.
+Set `POSTGRES_SMOKE_IMAGE` only when validating another PostgreSQL image explicitly.

@@ -135,6 +135,12 @@ scripts/commercial-smoke.sh
 scripts/object-storage-smoke.sh
 ```
 
+真实 PostgreSQL 连接池、参数绑定与事务 smoke（需要 Docker）：
+
+```bash
+scripts/postgres-smoke.sh
+```
+
 商业授权基础接口：
 
 - `GET /api/public/plans`：公开套餐与权益目录。
