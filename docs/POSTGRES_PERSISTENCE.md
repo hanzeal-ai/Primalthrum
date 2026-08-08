@@ -22,7 +22,11 @@ serialize Workspace mutations in transactions, preserve idempotent immutable evi
 and enforce cost or balance limits before insertion. Export workers atomically claim rows with
 PostgreSQL `SKIP LOCKED`, retain bounded retry evidence, and avoid duplicate
 delivery across workers. Application composition selects these repositories
-together for runtime metering when an async database is available. PostgreSQL
+together for runtime metering when an async database is available. Account action
+tokens, Workspace onboarding, transactional email Outbox claims, delivery state,
+and immutable Provider events also use the parameterized async identity database.
+The application-level PostgreSQL smoke completes registration and email verification
+over HTTP and asserts that no account lifecycle records leak into local SQLite. PostgreSQL
 must not be selected as the sole application database until the remaining
 repositories and production data-transfer gates are complete.
 
@@ -112,5 +116,6 @@ concurrent migration locking, migration idempotency, core tables, and identity
 sequence behavior. It also executes all 33 migrations and exercises billing
 invariants, immutable security evidence, Operator revision guards, invitation
 targets, two-operator legal-hold release, atomic Job claims, Capability settings,
-and idempotent Tool audit persistence.
+and idempotent Tool audit persistence. The same run verifies Account registration,
+one-time email verification, Trial activation, and identity-database isolation.
 Set `POSTGRES_SMOKE_IMAGE` only when validating another PostgreSQL image explicitly.

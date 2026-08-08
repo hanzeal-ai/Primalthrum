@@ -159,8 +159,12 @@ import { AsyncCreditLedgerRepository } from './services/asyncCreditLedgerReposit
 import { CreditLedgerRepository } from './services/creditLedgerRepository';
 import { type CreditLedgerStore } from './services/creditLedgerStore';
 import { AccountTokenRepository } from './services/accountTokenRepository';
+import { AsyncAccountTokenRepository } from './services/asyncAccountTokenRepository';
 import { AccountOnboardingRepository } from './services/accountOnboardingRepository';
+import { AsyncAccountOnboardingRepository } from './services/asyncAccountOnboardingRepository';
 import { AccountEmailOutboxRepository } from './services/accountEmailOutboxRepository';
+import { AsyncAccountEmailOutboxRepository } from './services/asyncAccountEmailOutboxRepository';
+import { type AccountEmailOutboxStore } from './services/accountEmailOutboxStore';
 import { AccountEmailDispatcher } from './services/accountEmailDispatcher';
 import { type AccountEmailSender } from './services/accountEmailSender';
 import { AccountIdentityService } from './services/accountIdentityService';
@@ -460,16 +464,26 @@ export function createApp(options: AppOptions = {}): Koa {
   );
   const publicAppUrl = (options.publicAppUrl ?? DEFAULT_PUBLIC_APP_URL).replace(/\/$/, '');
   let accountEmailDispatcher: AccountEmailDispatcher | undefined;
-  const accountEmailOutbox = new AccountEmailOutboxRepository(
-    db,
-    undefined,
-    () => accountEmailDispatcher?.kick(),
-  );
+  const accountEmailOutbox: AccountEmailOutboxStore = identityDatabase
+    ? new AsyncAccountEmailOutboxRepository(
+        identityDatabase,
+        undefined,
+        () => accountEmailDispatcher?.kick(),
+      )
+    : new AccountEmailOutboxRepository(
+        db,
+        undefined,
+        () => accountEmailDispatcher?.kick(),
+      );
   const accountIdentityService = new AccountIdentityService(
     userRepository,
-    new AccountTokenRepository(db),
+    identityDatabase
+      ? new AsyncAccountTokenRepository(identityDatabase)
+      : new AccountTokenRepository(db),
     accountEmailOutbox,
-    new AccountOnboardingRepository(db),
+    identityDatabase
+      ? new AsyncAccountOnboardingRepository(identityDatabase)
+      : new AccountOnboardingRepository(db),
     billingRepository,
     publicAppUrl,
   );
@@ -910,7 +924,7 @@ export function createApp(options: AppOptions = {}): Koa {
           user.id,
           user.email,
         );
-        accountEmailOutbox.supersedeInvitation(invitationId);
+        await accountEmailOutbox.supersedeInvitation(invitationId);
         const invitedPrincipal = await workspaceRepository.principalForUser(user.id, workspaceId);
         if (!invitedPrincipal) throw new Error('workspace membership could not be loaded');
         return {
@@ -1014,9 +1028,9 @@ export function createApp(options: AppOptions = {}): Koa {
     ctx.body = report;
   });
 
-  router.get('/metrics', (ctx) => {
+  router.get('/metrics', async (ctx) => {
     ctx.type = 'text/plain; version=0.0.4';
-    ctx.body = metrics.toPrometheusText(accountEmailOutbox.summary());
+    ctx.body = metrics.toPrometheusText(await accountEmailOutbox.summary());
   });
 
   router.get('/api/setup/status', async (ctx) => {
@@ -1120,7 +1134,7 @@ export function createApp(options: AppOptions = {}): Koa {
       const user = await workspaceRepository.principalForUser(createdUser.id, workspace.id);
       if (!user) throw new Error('workspace owner membership could not be loaded');
       const session = await sessionRepository.create(user);
-      const emailPreviewUrl = accountIdentityService.beginRegistration({
+      const emailPreviewUrl = await accountIdentityService.beginRegistration({
         userId: user.id,
         workspaceId: workspace.id,
         email: user.email,
@@ -1204,7 +1218,7 @@ export function createApp(options: AppOptions = {}): Koa {
     try {
       const body = ctx.request.body as { token?: unknown; password?: unknown };
       const password = normalizePassword(body.password);
-      const userId = accountIdentityService.consumePasswordReset(String(body.token ?? ''));
+      const userId = await accountIdentityService.consumePasswordReset(String(body.token ?? ''));
       await userRepository.updatePassword(userId, hashPassword(password));
       await sessionRepository.revokeAllForUser(userId);
       ctx.body = { reset: true };
@@ -1369,8 +1383,8 @@ export function createApp(options: AppOptions = {}): Koa {
       if (!workspace) throw new Error('workspace not found');
       const acceptUrl = `${publicAppUrl}/accept-invitation?token=${encodeURIComponent(invitation.token)}`;
       try {
-        accountEmailOutbox.supersedePendingInvitations(workspaceId, email, invitation.id);
-        accountEmailOutbox.enqueue({
+        await accountEmailOutbox.supersedePendingInvitations(workspaceId, email, invitation.id);
+        await accountEmailOutbox.enqueue({
           template: 'workspace_invitation',
           recipientEmail: email,
           payload: {
@@ -1405,7 +1419,7 @@ export function createApp(options: AppOptions = {}): Koa {
     try {
       const invitationId = Number(ctx.params.invitationId);
       await workspaceRepository.revokeInvitation(workspaceId, invitationId);
-      accountEmailOutbox.supersedeInvitation(invitationId);
+      await accountEmailOutbox.supersedeInvitation(invitationId);
       ctx.status = 204;
     } catch (error) {
       sendApiError(ctx, logger, {
@@ -1445,7 +1459,7 @@ export function createApp(options: AppOptions = {}): Koa {
       }
       user ??= await userRepository.createUser(invitation.email, hashPassword(password), true);
       await workspaceRepository.acceptInvitation(token, user.id, user.email);
-      accountEmailOutbox.supersedeInvitation(invitation.id);
+      await accountEmailOutbox.supersedeInvitation(invitation.id);
       const principal = await workspaceRepository.principalForUser(user.id, invitation.workspaceId);
       if (!principal) throw new Error('workspace membership could not be loaded');
       const session = await sessionRepository.create(principal);

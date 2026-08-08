@@ -4,6 +4,9 @@ Primalthrum sends account verification, password recovery, and Workspace
 invitations through a durable Outbox. Customer requests only enqueue messages;
 a dispatcher claims them with a five-minute lease and sends them with the stable idempotency key
 `primalthrum-account-email-<outbox-id>`.
+The Outbox has parameterized SQLite and PostgreSQL implementations. PostgreSQL
+uses a transaction and `FOR UPDATE SKIP LOCKED` for multi-worker claims; delivery
+state and the accepted Provider event commit together.
 
 ## Provider Configuration
 

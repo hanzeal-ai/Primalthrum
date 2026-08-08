@@ -2,27 +2,21 @@ import { createHash, randomBytes } from 'node:crypto';
 
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
+import {
+  type AccountTokenPurpose,
+  type AccountTokenStore,
+  type ConsumedAccountToken,
+  type CreateAccountTokenInput,
+} from './accountTokenStore';
 
-export type AccountTokenPurpose = 'verify_email' | 'reset_password';
-
-export interface ConsumedAccountToken {
-  userId: number;
-  payload: Record<string, unknown>;
-}
-
-export class AccountTokenRepository {
+export class AccountTokenRepository implements AccountTokenStore {
   constructor(
     private readonly db: DatabaseAdapter,
     private readonly now: () => Date = () => new Date(),
   ) {
   }
 
-  create(input: {
-    userId: number;
-    purpose: AccountTokenPurpose;
-    ttlMs: number;
-    payload?: Record<string, unknown>;
-  }): string {
+  create(input: CreateAccountTokenInput): string {
     const token = randomBytes(32).toString('base64url');
     const now = this.now().toISOString();
     const expiresAt = new Date(this.now().getTime() + input.ttlMs).toISOString();

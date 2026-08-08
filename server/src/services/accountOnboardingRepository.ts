@@ -1,15 +1,11 @@
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
+import {
+  type AccountOnboardingRecord,
+  type AccountOnboardingStore,
+} from './accountOnboardingStore';
 
-export interface AccountOnboardingRecord {
-  workspaceId: number;
-  ownerUserId: number;
-  selectedPlanKey: 'free' | 'pro';
-  state: 'pending_email' | 'active';
-  activatedAt: string | null;
-}
-
-export class AccountOnboardingRepository {
+export class AccountOnboardingRepository implements AccountOnboardingStore {
   constructor(private readonly db: DatabaseAdapter) {
   }
 

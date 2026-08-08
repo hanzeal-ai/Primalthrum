@@ -1,4 +1,4 @@
-import { type AccountEmailDeliverySummary } from './accountEmailOutboxRepository';
+import { type AccountEmailDeliverySummary } from './accountEmailOutboxStore';
 
 export interface HttpMetricInput {
   method: string;

@@ -1,6 +1,6 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 
-import { type AccountEmailProviderEventType } from './accountEmailOutboxRepository';
+import { type AccountEmailProviderEventType } from './accountEmailOutboxStore';
 
 export interface VerifiedAccountEmailEvent {
   provider: string;

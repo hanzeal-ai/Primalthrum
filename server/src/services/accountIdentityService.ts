@@ -1,7 +1,7 @@
 import { type BillingStore } from './billingStore';
-import { AccountEmailOutboxRepository } from './accountEmailOutboxRepository';
-import { AccountOnboardingRepository } from './accountOnboardingRepository';
-import { AccountTokenRepository } from './accountTokenRepository';
+import { type AccountEmailOutboxStore } from './accountEmailOutboxStore';
+import { type AccountOnboardingStore } from './accountOnboardingStore';
+import { type AccountTokenStore } from './accountTokenStore';
 import { type UserStore } from './userStore';
 
 const VERIFY_TTL_MS = 24 * 60 * 60 * 1000;
@@ -10,21 +10,21 @@ const RESET_TTL_MS = 30 * 60 * 1000;
 export class AccountIdentityService {
   constructor(
     private readonly users: UserStore,
-    private readonly tokens: AccountTokenRepository,
-    private readonly emails: AccountEmailOutboxRepository,
-    private readonly onboarding: AccountOnboardingRepository,
+    private readonly tokens: AccountTokenStore,
+    private readonly emails: AccountEmailOutboxStore,
+    private readonly onboarding: AccountOnboardingStore,
     private readonly billing: BillingStore,
     private readonly publicAppUrl: string,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
-  beginRegistration(input: {
+  async beginRegistration(input: {
     userId: number;
     workspaceId: number;
     email: string;
     planKey: 'free' | 'pro';
-  }): string {
-    this.onboarding.create(input.workspaceId, input.userId, input.planKey);
+  }): Promise<string> {
+    await this.onboarding.create(input.workspaceId, input.userId, input.planKey);
     return this.issueVerification(input.userId, input.email);
   }
 
@@ -35,9 +35,9 @@ export class AccountIdentityService {
   }
 
   async verifyEmail(token: string) {
-    const consumed = this.tokens.consume(token, 'verify_email');
+    const consumed = await this.tokens.consume(token, 'verify_email');
     if (!consumed) throw new Error('email verification token is invalid or expired');
-    const onboarding = this.onboarding.findForUser(consumed.userId);
+    const onboarding = await this.onboarding.findForUser(consumed.userId);
     if (!onboarding) throw new Error('account onboarding state is missing');
     const verifiedAt = this.now().toISOString();
     await this.users.markEmailVerified(consumed.userId, verifiedAt);
@@ -46,32 +46,32 @@ export class AccountIdentityService {
       : null;
     const entitlementSnapshot = await this.billing.entitlementSnapshot(onboarding.workspaceId);
     const creditAccount = await this.billing.creditAccount(onboarding.workspaceId);
-    this.onboarding.activate(onboarding.workspaceId, verifiedAt);
+    await this.onboarding.activate(onboarding.workspaceId, verifiedAt);
     return { onboarding, trial, entitlementSnapshot, creditAccount };
   }
 
   async requestPasswordReset(email: string): Promise<string | null> {
     const user = await this.users.findByEmail(email);
     if (!user || !user.emailVerifiedAt) return null;
-    this.emails.supersedePending(user.id, 'reset_password');
-    const token = this.tokens.create({ userId: user.id, purpose: 'reset_password', ttlMs: RESET_TTL_MS });
+    await this.emails.supersedePending(user.id, 'reset_password');
+    const token = await this.tokens.create({ userId: user.id, purpose: 'reset_password', ttlMs: RESET_TTL_MS });
     const actionUrl = `${this.publicAppUrl}/reset-password?token=${encodeURIComponent(token)}`;
-    this.emails.enqueue({ template: 'reset_password', recipientEmail: user.email,
+    await this.emails.enqueue({ template: 'reset_password', recipientEmail: user.email,
       payload: { userId: user.id, actionUrl } });
     return actionUrl;
   }
 
-  consumePasswordReset(token: string): number {
-    const consumed = this.tokens.consume(token, 'reset_password');
+  async consumePasswordReset(token: string): Promise<number> {
+    const consumed = await this.tokens.consume(token, 'reset_password');
     if (!consumed) throw new Error('password reset token is invalid or expired');
     return consumed.userId;
   }
 
-  private issueVerification(userId: number, email: string): string {
-    this.emails.supersedePending(userId, 'verify_email');
-    const token = this.tokens.create({ userId, purpose: 'verify_email', ttlMs: VERIFY_TTL_MS });
+  private async issueVerification(userId: number, email: string): Promise<string> {
+    await this.emails.supersedePending(userId, 'verify_email');
+    const token = await this.tokens.create({ userId, purpose: 'verify_email', ttlMs: VERIFY_TTL_MS });
     const actionUrl = `${this.publicAppUrl}/verify-email?token=${encodeURIComponent(token)}`;
-    this.emails.enqueue({ template: 'verify_email', recipientEmail: email,
+    await this.emails.enqueue({ template: 'verify_email', recipientEmail: email,
       payload: { userId, actionUrl } });
     return actionUrl;
   }

@@ -2165,9 +2165,14 @@ complete. Follow the same dependency and verification protocol used above.
   customers, Checkout, subscription transitions, invoices, refunds, and retryable
   Webhook evidence now use the async runtime database. API Key creation,
   authentication, revocation, active-Key limits, and immutable use evidence are
-  also async and verified through the PostgreSQL application composition.
-  Remaining security, compliance, Operator repositories, payment reconciliation,
-  and production data transfer remain open before runtime cutover.
+  also async and verified through the PostgreSQL application composition. Account
+  action tokens, onboarding, transactional email Outbox processing, and Provider
+  Webhook evidence now share an async identity-store contract. PostgreSQL uses
+  transactional `SKIP LOCKED` claims, and an HTTP composition smoke proves
+  registration, verification, Trial activation, and zero account-lifecycle leakage
+  into the fallback SQLite database. Remaining security, compliance, Operator
+  repositories, payment reconciliation, and production data transfer remain open
+  before runtime cutover.
 
 ### P23-01 Full Commercial End-To-End Suite
 

@@ -13,6 +13,10 @@ confirmation, and logout remain available. Verification marks the email, starts
 the selected Pro trial when applicable, and activates onboarding. A resend
 invalidates older tokens and supersedes undelivered messages.
 
+The token and onboarding stores support both local SQLite and pooled PostgreSQL.
+Registration, resend, verification, and reset handlers await the same store contract,
+so identity records stay in the configured identity database.
+
 ## Password Recovery
 
 `POST /api/auth/password/forgot` always returns `202 { accepted: true }`, including
@@ -29,6 +33,8 @@ errors, retries transient failures with exponential delay, and dead-letters
 permanent failures. It uses `primalthrum-account-email-<id>` as the Provider
 idempotency key. The signed delivery Webhook stores immutable delivery, delay,
 bounce, complaint, and rejection evidence without duplicating recipient data.
+PostgreSQL dispatchers claim work with `FOR UPDATE SKIP LOCKED`, allowing multiple
+server workers without duplicate claims.
 Configure direct Resend delivery with:
 
 - `TRANSACTIONAL_EMAIL_PROVIDER=resend`

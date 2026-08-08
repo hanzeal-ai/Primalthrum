@@ -1,7 +1,7 @@
 import Router from '@koa/router';
 
 import { sendApiError } from '../services/apiErrors';
-import { type AccountEmailOutboxRepository } from '../services/accountEmailOutboxRepository';
+import { type AccountEmailOutboxStore } from '../services/accountEmailOutboxStore';
 import { type AccountEmailWebhookVerifier } from '../services/accountEmailWebhook';
 import { type StructuredLogger } from '../services/logger';
 import { type MetricsRegistry } from '../services/metricsRegistry';
@@ -9,13 +9,13 @@ import { type MetricsRegistry } from '../services/metricsRegistry';
 export function registerAccountEmailRoutes(
   router: Router,
   options: {
-    outbox: AccountEmailOutboxRepository;
+    outbox: AccountEmailOutboxStore;
     verifier?: AccountEmailWebhookVerifier;
     logger: StructuredLogger;
     metrics: MetricsRegistry;
   },
 ): void {
-  router.post('/api/webhooks/email', (ctx) => {
+  router.post('/api/webhooks/email', async (ctx) => {
     if (!options.verifier) {
       sendApiError(ctx, options.logger, {
         status: 503,
@@ -27,7 +27,7 @@ export function registerAccountEmailRoutes(
     try {
       const rawBody = String((ctx.request as typeof ctx.request & { rawBody?: string }).rawBody ?? '');
       const event = options.verifier.verify(rawBody, ctx.headers);
-      const result = options.outbox.recordProviderEvent(event);
+      const result = await options.outbox.recordProviderEvent(event);
       if (!result.duplicate) options.metrics.observeAccountEmail(event.eventType);
       options.logger.log({
         level: ['bounced', 'complained', 'rejected'].includes(event.eventType) ? 'warn' : 'info',

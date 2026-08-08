@@ -4,30 +4,16 @@ import {
   type AccountEmailDeliveryReceipt,
   type AccountEmailMessage,
 } from './accountEmailSender';
+import {
+  type AccountEmailDeliverySummary,
+  type AccountEmailOutboxStore,
+  type AccountEmailProviderEvent,
+  type AccountEmailProviderEventResult,
+  type AccountEmailProviderEventType,
+  type ClaimedAccountEmail,
+} from './accountEmailOutboxStore';
 
-export interface ClaimedAccountEmail extends AccountEmailMessage {
-  attempts: number;
-}
-
-export type AccountEmailProviderEventType =
-  | 'accepted'
-  | 'delivered'
-  | 'delayed'
-  | 'bounced'
-  | 'complained'
-  | 'rejected';
-
-export interface AccountEmailDeliverySummary {
-  pending: number;
-  delivering: number;
-  delivered: number;
-  retrying: number;
-  deadLettered: number;
-  bounced: number;
-  complained: number;
-}
-
-export class AccountEmailOutboxRepository {
+export class AccountEmailOutboxRepository implements AccountEmailOutboxStore {
   constructor(
     private readonly db: DatabaseAdapter,
     private readonly now: () => Date = () => new Date(),
@@ -175,13 +161,7 @@ export class AccountEmailOutboxRepository {
     return row?.delay_ms === null || row?.delay_ms === undefined ? null : Number(row.delay_ms);
   }
 
-  recordProviderEvent(input: {
-    provider: string;
-    providerEventId: string;
-    providerMessageId: string;
-    eventType: AccountEmailProviderEventType;
-    occurredAt: string;
-  }): { duplicate: boolean; matched: boolean; outboxId: number | null } {
+  recordProviderEvent(input: AccountEmailProviderEvent): AccountEmailProviderEventResult {
     const existing = this.db.query<{
       outbox_id: number | null;
       provider_message_id: string;
