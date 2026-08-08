@@ -1,16 +1,18 @@
 import { AccountPrivacyRepository } from './accountPrivacyRepository';
-import { JobRepository } from './jobRepository';
+import { type JobStore } from './jobStore';
 
 const DEFAULT_INTERVAL_MS = 60_000;
 
 export class AccountPrivacyScheduler {
   private timer: NodeJS.Timeout | null = null;
+  private ticking = false;
 
   constructor(
     private readonly privacy: AccountPrivacyRepository,
-    private readonly jobs: JobRepository,
+    private readonly jobs: JobStore,
     private readonly kick: () => void,
     private readonly intervalMs = DEFAULT_INTERVAL_MS,
+    private readonly onError: (error: unknown) => void = () => undefined,
   ) {
     if (!Number.isInteger(intervalMs) || intervalMs < 100) {
       throw new Error('account privacy scheduler interval is invalid');
@@ -18,9 +20,9 @@ export class AccountPrivacyScheduler {
   }
 
   start(): void {
-    this.tick();
+    this.scheduleTick();
     if (this.timer) return;
-    this.timer = setInterval(() => this.tick(), this.intervalMs);
+    this.timer = setInterval(() => this.scheduleTick(), this.intervalMs);
     this.timer.unref();
   }
 
@@ -30,18 +32,28 @@ export class AccountPrivacyScheduler {
     this.timer = null;
   }
 
-  tick(): void {
+  async tick(): Promise<void> {
+    if (this.ticking) return;
+    this.ticking = true;
     let created = 0;
-    for (const request of this.privacy.dueDeletions()) {
-      if (this.jobs.hasActiveForPayload('account.delete', 'requestId', request.requestId)) continue;
-      this.jobs.create({
-        type: 'account.delete',
-        workspaceId: request.workspaceId ?? undefined,
-        payload: { requestId: request.requestId },
-        maxAttempts: 3,
-      });
-      created += 1;
+    try {
+      for (const request of this.privacy.dueDeletions()) {
+        const job = await this.jobs.createUnique({
+          type: 'account.delete',
+          workspaceId: request.workspaceId ?? undefined,
+          payload: { requestId: request.requestId },
+          maxAttempts: 3,
+          dedupeKey: `request:${request.requestId}`,
+        });
+        if (job) created += 1;
+      }
+      if (created) this.kick();
+    } finally {
+      this.ticking = false;
     }
-    if (created) this.kick();
+  }
+
+  private scheduleTick(): void {
+    void this.tick().catch(this.onError);
   }
 }

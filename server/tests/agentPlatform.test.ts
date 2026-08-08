@@ -381,7 +381,7 @@ test('Workspace invitation email migration preserves existing delivery evidence'
   }
 });
 
-test('in-process job worker records retry and failure states', () => {
+test('in-process job worker records retry and failure states', async () => {
   const jobRootDir = mkdtempSync(join(tmpdir(), 'primalthrum-jobs-'));
   try {
     const db = createSqliteDatabase(join(jobRootDir, 'platform.sqlite'));
@@ -393,14 +393,14 @@ test('in-process job worker records retry and failure states', () => {
       maxAttempts: 2,
     });
 
-    const firstAttempt = worker.run(job.id, () => {
+    const firstAttempt = await worker.run(job.id, () => {
       throw new Error('first failure');
     });
     assert.equal(firstAttempt.status, 'retrying');
     assert.equal(firstAttempt.attempts, 1);
     assert.equal(firstAttempt.error, 'first failure');
 
-    const secondAttempt = worker.run(job.id, () => {
+    const secondAttempt = await worker.run(job.id, () => {
       throw new Error('final failure');
     });
     assert.equal(secondAttempt.status, 'failed');
@@ -432,7 +432,9 @@ test('durable dispatcher recovers interrupted jobs and retries from SQLite state
     });
 
     dispatcher.resume();
-    await new Promise((resolve) => setImmediate(resolve));
+    for (let attempt = 0; attempt < 20 && jobs.findById(queued.id)?.status !== 'succeeded'; attempt += 1) {
+      await new Promise((resolve) => setTimeout(resolve, 5));
+    }
     const completed = jobs.findById(queued.id);
     assert.equal(completed?.status, 'succeeded');
     assert.equal(completed?.attempts, 3);

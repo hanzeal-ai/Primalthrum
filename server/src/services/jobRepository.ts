@@ -1,6 +1,7 @@
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
 import { DEFAULT_WORKSPACE_ID } from '../db/workspaceDefaults';
+import { type CreateUniqueJobInput } from './jobStore';
 
 export type JobStatus = 'queued' | 'running' | 'retrying' | 'succeeded' | 'failed';
 
@@ -83,6 +84,28 @@ export class JobRepository {
     return toJobRecord(rows[0]);
   }
 
+  createUnique(input: CreateUniqueJobInput): JobRecord | null {
+    const normalized = normalizeJobInput(input);
+    const dedupeKey = normalizeDedupeKey(input.dedupeKey);
+    const rows = this.db.query<JobRow>(`
+      INSERT INTO jobs (
+        workspace_id, type, status, payload_json, max_attempts, run_at, dedupe_key
+      )
+      VALUES (
+        ${sqlValue(normalized.workspaceId)},
+        ${sqlValue(normalized.type)},
+        'queued',
+        ${sqlValue(JSON.stringify(normalized.payload))},
+        ${sqlValue(normalized.maxAttempts)},
+        ${sqlValue(normalized.runAt)},
+        ${sqlValue(dedupeKey)}
+      )
+      ON CONFLICT DO NOTHING
+      RETURNING ${JOB_COLUMNS};
+    `);
+    return rows[0] ? toJobRecord(rows[0]) : null;
+  }
+
   findById(id: number): JobRecord | null {
     const rows = this.db.query<JobRow>(`
       SELECT ${JOB_COLUMNS}
@@ -130,6 +153,29 @@ export class JobRepository {
         AND type IN (${types.map(sqlValue).join(', ')})
       ORDER BY id ASC
       LIMIT 1;
+    `);
+    return rows[0] ? toJobRecord(rows[0]) : null;
+  }
+
+  claimNext(types: string[]): JobRecord | null {
+    if (!types.length) return null;
+    const rows = this.db.query<JobRow>(`
+      UPDATE jobs
+      SET
+        status = 'running',
+        attempts = attempts + 1,
+        error = '',
+        started_at = CURRENT_TIMESTAMP,
+        updated_at = CURRENT_TIMESTAMP
+      WHERE id = (
+        SELECT id FROM jobs
+        WHERE status IN ('queued', 'retrying')
+          AND datetime(run_at) <= datetime('now')
+          AND type IN (${types.map(sqlValue).join(', ')})
+        ORDER BY id ASC
+        LIMIT 1
+      )
+      RETURNING ${JOB_COLUMNS};
     `);
     return rows[0] ? toJobRecord(rows[0]) : null;
   }
@@ -242,6 +288,12 @@ function normalizeJobInput(input: CreateJobInput): Required<CreateJobInput> {
     maxAttempts,
     runAt: input.runAt ?? new Date().toISOString(),
   };
+}
+
+function normalizeDedupeKey(value: string): string {
+  const normalized = typeof value === 'string' ? value.trim() : '';
+  if (!normalized || normalized.length > 200) throw new Error('job dedupeKey is invalid');
+  return normalized;
 }
 
 function toJobRecord(row: JobRow): JobRecord {

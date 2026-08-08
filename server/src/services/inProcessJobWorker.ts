@@ -1,18 +1,19 @@
-import { JobRepository, type JobRecord } from './jobRepository';
+import { type JobRecord } from './jobRepository';
+import { type JobStore } from './jobStore';
 
 export class InProcessJobWorker {
-  constructor(private readonly jobs: JobRepository) {}
+  constructor(private readonly jobs: JobStore) {}
 
-  run(
+  async run(
     jobId: number,
-    handler: () => Record<string, unknown>,
-  ): JobRecord {
-    const running = this.jobs.markRunning(jobId);
+    handler: () => Record<string, unknown> | Promise<Record<string, unknown>>,
+  ): Promise<JobRecord> {
+    const running = await this.jobs.markRunning(jobId);
     try {
-      const result = handler();
-      return this.jobs.markSucceeded(running.id, result);
+      const result = await handler();
+      return await this.jobs.markSucceeded(running.id, result);
     } catch (error) {
-      return this.jobs.markFailed(
+      return await this.jobs.markFailed(
         running.id,
         error instanceof Error ? error.message : 'job failed',
       );

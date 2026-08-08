@@ -140,6 +140,10 @@ export const MIGRATIONS: Migration[] = [
     id: '032_workspace_legal_holds',
     up: applyWorkspaceLegalHolds,
   },
+  {
+    id: '033_job_reliability',
+    up: applyJobReliability,
+  },
 ];
 
 export function runMigrations(db: DatabaseAdapter): void {
@@ -349,6 +353,16 @@ function applyBackgroundJobs(db: DatabaseAdapter): void {
       updated_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP,
       FOREIGN KEY(workspace_id) REFERENCES workspaces(id) ON DELETE CASCADE
     );
+  `);
+}
+
+function applyJobReliability(db: DatabaseAdapter): void {
+  ensureColumn(db, 'jobs', 'dedupe_key', 'TEXT');
+  db.run(`
+    CREATE UNIQUE INDEX IF NOT EXISTS jobs_active_dedupe_idx
+    ON jobs (workspace_id, type, dedupe_key)
+    WHERE dedupe_key IS NOT NULL
+      AND status IN ('queued', 'running', 'retrying');
   `);
 }
 

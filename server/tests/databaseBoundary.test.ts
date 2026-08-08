@@ -6,6 +6,7 @@ import { test } from 'node:test';
 
 import { sqlValue } from '../src/db/sql';
 import { createSqliteDatabase, initializeDatabase } from '../src/db/databaseFactory';
+import { MIGRATIONS } from '../src/db/migrations';
 import { SqliteDatabase } from '../src/db/sqlite';
 
 test('service persistence depends on the database contract rather than SQLite', () => {
@@ -30,10 +31,16 @@ test('database lifecycle initialization is explicit and idempotent', () => {
   const root = mkdtempSync(join(tmpdir(), 'primalthrum-database-lifecycle-'));
   try {
     const db = createSqliteDatabase(join(root, 'platform.sqlite'));
-    assert.equal(db.query<{ count: number }>('SELECT COUNT(*) AS count FROM schema_migrations;')[0]?.count, 32);
+    assert.equal(
+      db.query<{ count: number }>('SELECT COUNT(*) AS count FROM schema_migrations;')[0]?.count,
+      MIGRATIONS.length,
+    );
 
     assert.equal(initializeDatabase(db), db);
-    assert.equal(db.query<{ count: number }>('SELECT COUNT(*) AS count FROM schema_migrations;')[0]?.count, 32);
+    assert.equal(
+      db.query<{ count: number }>('SELECT COUNT(*) AS count FROM schema_migrations;')[0]?.count,
+      MIGRATIONS.length,
+    );
   } finally {
     rmSync(root, { recursive: true, force: true });
   }

@@ -29,6 +29,7 @@ import {
 } from './postgres-migrations/security';
 import { POSTGRES_USAGE_MIGRATIONS } from './postgres-migrations/usage';
 import { POSTGRES_WORKSPACE_MIGRATIONS } from './postgres-migrations/workspaces';
+import { POSTGRES_JOB_RELIABILITY_MIGRATIONS } from './postgres-migrations/jobReliability';
 
 export interface PostgresMigration {
   id: string;
@@ -160,6 +161,7 @@ export const POSTGRES_MIGRATIONS: readonly PostgresMigration[] = [
   ...POSTGRES_INVITATION_MIGRATIONS,
   ...POSTGRES_OPERATOR_MIGRATIONS,
   ...POSTGRES_COMPLIANCE_MIGRATIONS,
+  ...POSTGRES_JOB_RELIABILITY_MIGRATIONS,
 ];
 
 function validateMigrations(migrations: readonly PostgresMigration[]): void {

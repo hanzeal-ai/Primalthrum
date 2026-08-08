@@ -203,7 +203,7 @@ test('scheduled deletion can be cancelled and due execution anonymizes account d
   const privacy = new AccountPrivacyRepository(db, () => now);
   const jobs = new JobRepository(db);
   let kicks = 0;
-  new AccountPrivacyScheduler(privacy, jobs, () => { kicks += 1; }, 60_000).tick();
+  await new AccountPrivacyScheduler(privacy, jobs, () => { kicks += 1; }, 60_000).tick();
   const deletionJob = jobs.nextRunnable(['account.delete']);
   assert.equal(deletionJob?.payload.requestId, request.requestId);
   assert.equal(kicks, 1);

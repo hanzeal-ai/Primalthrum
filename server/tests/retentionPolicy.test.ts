@@ -96,7 +96,7 @@ test('retention enforcement is tenant-scoped, durable, and preserves security au
   assert.equal(policies.listEvents(2).length, 0);
 });
 
-test('retention scheduler creates one durable job for each due workspace', () => {
+test('retention scheduler creates one durable job for each due workspace', async () => {
   const root = temporaryRoot();
   const db = createSqliteDatabase(join(root, 'platform.sqlite'));
   const now = new Date('2026-08-01T12:00:00.000Z');
@@ -113,8 +113,8 @@ test('retention scheduler creates one durable job for each due workspace', () =>
   let kicks = 0;
   const scheduler = new RetentionScheduler(policies, jobs, () => { kicks += 1; }, 60_000);
 
-  scheduler.tick();
-  scheduler.tick();
+  await scheduler.tick();
+  await scheduler.tick();
 
   assert.equal(kicks, 1);
   assert.equal(db.query<{ count: number }>(`

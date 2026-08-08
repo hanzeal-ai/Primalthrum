@@ -76,6 +76,8 @@ import { JsonConsoleLogger, type StructuredLogger } from './services/logger';
 import { MetricsRegistry } from './services/metricsRegistry';
 import { hashPassword, verifyPassword, verifyPasswordOrDummy } from './services/passwordHash';
 import { JobRepository } from './services/jobRepository';
+import { AsyncJobRepository } from './services/asyncJobRepository';
+import { type JobStore } from './services/jobStore';
 import {
   ProviderConfigRepository,
   type CreateProviderConfigInput,
@@ -463,7 +465,9 @@ export function createApp(options: AppOptions = {}): Koa {
     if (priceRef.trim()) paymentRepository.configurePrice('stripe', planKey, priceRef.trim());
   }
   const toolAuditRepository = new ToolAuditRepository(db);
-  const jobRepository = new JobRepository(db);
+  const jobRepository: JobStore = runtimeDatabase
+    ? new AsyncJobRepository(runtimeDatabase)
+    : new JobRepository(db);
   const jobDispatcher = new DurableJobDispatcher(jobRepository, {
     'document.index': async (payload) => {
       const agentId = Number(payload.agentId);
@@ -577,12 +581,23 @@ export function createApp(options: AppOptions = {}): Koa {
     retentionPolicies,
     jobRepository,
     () => jobDispatcher.kick(),
+    undefined,
+    (error) => logger.log({
+      level: 'error',
+      code: 'RETENTION_SCHEDULER_FAILED',
+      message: error instanceof Error ? error.message : 'retention scheduler failed',
+    }),
   );
   const accountPrivacyScheduler = new AccountPrivacyScheduler(
     accountPrivacyRepository,
     jobRepository,
     () => jobDispatcher.kick(),
     options.accountPrivacySchedulerIntervalMs,
+    (error) => logger.log({
+      level: 'error',
+      code: 'ACCOUNT_PRIVACY_SCHEDULER_FAILED',
+      message: error instanceof Error ? error.message : 'account privacy scheduler failed',
+    }),
   );
   if (options.startBackgroundSchedulers !== false) {
     jobDispatcher.resume();
@@ -1608,7 +1623,7 @@ export function createApp(options: AppOptions = {}): Koa {
       return;
     }
 
-    const job = jobRepository.create({
+    const job = await jobRepository.create({
       type: 'document.index',
       workspaceId: agent.workspaceId,
       payload: { agentId, documentId },
@@ -1923,9 +1938,9 @@ export function createApp(options: AppOptions = {}): Koa {
     ctx.body = run;
   });
 
-  router.get('/api/jobs/:id', (ctx) => {
+  router.get('/api/jobs/:id', async (ctx) => {
     if (!authorize(ctx, 'agents.read')) return;
-    const job = jobRepository.findByIdInWorkspace(
+    const job = await jobRepository.findByIdInWorkspace(
       Number(ctx.params.id),
       currentWorkspaceId(ctx),
     );

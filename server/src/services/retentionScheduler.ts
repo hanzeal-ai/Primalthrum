@@ -1,22 +1,24 @@
-import { JobRepository } from './jobRepository';
+import { type JobStore } from './jobStore';
 import { RetentionPolicyRepository } from './retentionPolicyRepository';
 
 const DEFAULT_INTERVAL_MS = 60 * 60_000;
 
 export class RetentionScheduler {
   private timer: NodeJS.Timeout | null = null;
+  private ticking = false;
 
   constructor(
     private readonly policies: RetentionPolicyRepository,
-    private readonly jobs: JobRepository,
+    private readonly jobs: JobStore,
     private readonly kick: () => void,
     private readonly intervalMs = DEFAULT_INTERVAL_MS,
+    private readonly onError: (error: unknown) => void = () => undefined,
   ) {}
 
   start(): void {
-    this.tick();
+    this.scheduleTick();
     if (this.timer) return;
-    this.timer = setInterval(() => this.tick(), this.intervalMs);
+    this.timer = setInterval(() => this.scheduleTick(), this.intervalMs);
     this.timer.unref();
   }
 
@@ -26,20 +28,30 @@ export class RetentionScheduler {
     this.timer = null;
   }
 
-  trigger(workspaceId: number): void {
-    if (this.jobs.hasActive('retention.enforce', workspaceId)) return;
-    this.jobs.create({
+  async trigger(workspaceId: number): Promise<void> {
+    const job = await this.jobs.createUnique({
       type: 'retention.enforce',
       workspaceId,
       payload: { workspaceId },
       maxAttempts: 3,
+      dedupeKey: `workspace:${workspaceId}`,
     });
-    this.kick();
+    if (job) this.kick();
   }
 
-  tick(): void {
-    for (const workspaceId of this.policies.dueWorkspaceIds()) {
-      this.trigger(workspaceId);
+  async tick(): Promise<void> {
+    if (this.ticking) return;
+    this.ticking = true;
+    try {
+      for (const workspaceId of this.policies.dueWorkspaceIds()) {
+        await this.trigger(workspaceId);
+      }
+    } finally {
+      this.ticking = false;
     }
+  }
+
+  private scheduleTick(): void {
+    void this.tick().catch(this.onError);
   }
 }

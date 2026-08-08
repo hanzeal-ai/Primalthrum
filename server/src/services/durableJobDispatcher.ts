@@ -1,4 +1,5 @@
-import { JobRepository, type JobRecord } from './jobRepository';
+import { type JobRecord } from './jobRepository';
+import { type JobStore } from './jobStore';
 
 type JobHandler = (
   payload: Record<string, unknown>,
@@ -8,19 +9,19 @@ type DispatchErrorHandler = (error: unknown) => void;
 export class DurableJobDispatcher {
   private running = false;
   private scheduled = false;
+  private recovery: Promise<void> | null = null;
 
   constructor(
-    private readonly jobs: JobRepository,
+    private readonly jobs: JobStore,
     private readonly handlers: Record<string, JobHandler>,
     private readonly onDispatchError: DispatchErrorHandler = () => undefined,
   ) {}
 
   resume(): void {
-    const types = Object.keys(this.handlers);
-    this.jobs.recoverInterrupted(types);
-    if (this.jobs.nextRunnable(types)) {
-      this.kick();
-    }
+    if (this.recovery) return;
+    this.recovery = Promise.resolve()
+      .then(() => this.jobs.recoverInterrupted(Object.keys(this.handlers)));
+    void this.recovery.then(() => this.kick()).catch(this.onDispatchError);
   }
 
   kick(): void {
@@ -36,8 +37,9 @@ export class DurableJobDispatcher {
     if (this.running) return;
     this.running = true;
     try {
+      if (this.recovery) await this.recovery;
       while (true) {
-        const job = this.jobs.nextRunnable(Object.keys(this.handlers));
+        const job = await this.jobs.claimNext(Object.keys(this.handlers));
         if (!job) break;
         await this.run(job);
       }
@@ -49,15 +51,15 @@ export class DurableJobDispatcher {
   private async run(job: JobRecord): Promise<void> {
     const handler = this.handlers[job.type];
     if (!handler) return;
-    const running = this.jobs.markRunning(job.id);
     try {
       const result = await handler(job.payload);
-      this.jobs.markSucceeded(running.id, result);
+      await this.jobs.markSucceeded(job.id, result);
     } catch (error) {
-      this.jobs.markFailed(
-        running.id,
+      await this.jobs.markFailed(
+        job.id,
         error instanceof Error ? error.message : 'job failed',
       );
     }
   }
+
 }
