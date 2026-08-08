@@ -25,6 +25,10 @@ SQLite and PostgreSQL access. Catalog ordering is database-neutral, active plan
 and grant precedence are resolved per Workspace, expired trials fall back to
 Free, and `past_due` subscriptions become restricted after their grace deadline.
 
+Trial activation has a parameterized async implementation with one transaction
+for the grant, credit top-up, and subscription transition. Database uniqueness
+enforces one Trial per user and one per Workspace, including concurrent requests.
+
 ## Ledger Invariants
 
 1. Every balance change appends one idempotent `credit_ledger_entries` row.

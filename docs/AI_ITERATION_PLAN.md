@@ -2160,9 +2160,10 @@ complete. Follow the same dependency and verification protocol used above.
   rating/Credits/outbox chain for Runs, speech, uploads, Embeddings, and RAG;
   async Plan and Entitlement repositories now preserve catalog order, active
   subscription rules, grant priority, Trial expiry, grace restriction, and tenant
-  isolation. Trial mutation, payment lifecycle, remaining security, compliance,
-  and Operator repositories plus production data transfer remain open before
-  runtime cutover.
+  isolation. Trial activation now atomically enforces one use per user and
+  Workspace while applying Credits and subscription state. Payment lifecycle,
+  remaining security, compliance, and Operator repositories plus production data
+  transfer remain open before runtime cutover.
 
 ### P23-01 Full Commercial End-To-End Suite
 
