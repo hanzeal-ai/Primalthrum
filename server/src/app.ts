@@ -33,6 +33,8 @@ import {
   ConversationRepository,
   type ConversationSource,
 } from './services/conversationRepository';
+import { AsyncConversationRepository } from './services/asyncConversationRepository';
+import { type ConversationStore } from './services/conversationStore';
 import {
   clearSessionCookie,
   createAuthMiddleware,
@@ -339,7 +341,9 @@ export function createApp(options: AppOptions = {}): Koa {
     options.documentMalwareScanner ?? createDocumentMalwareScanner(),
     new DocumentUploadSecurityRepository(db),
   );
-  const conversationRepository = new ConversationRepository(db);
+  const conversationRepository: ConversationStore = runtimeDatabase
+    ? new AsyncConversationRepository(runtimeDatabase)
+    : new ConversationRepository(db);
   const documentStorage = options.documentStorage ?? new LocalDocumentStorage(
     options.documentStorageDir ?? DEFAULT_DOCUMENT_STORAGE_DIR,
   );
@@ -1649,7 +1653,7 @@ export function createApp(options: AppOptions = {}): Koa {
   router.get('/api/agents/:id/conversations', async (ctx) => {
     const agentId = Number(ctx.params.id);
     if (!await scopedAgent(ctx, agentId, 'agents.read')) return;
-    ctx.body = conversationRepository.listByAgent(agentId);
+    ctx.body = await conversationRepository.listByAgent(agentId);
   });
 
   router.post('/api/agents/:id/conversations', async (ctx) => {
@@ -1658,13 +1662,16 @@ export function createApp(options: AppOptions = {}): Koa {
     const body = ctx.request.body as { title?: unknown };
     const title = typeof body.title === 'string' ? body.title : '新对话';
     ctx.status = 201;
-    ctx.body = conversationRepository.create(agentId, title);
+    ctx.body = await conversationRepository.create(agentId, title);
   });
 
-  router.get('/api/conversations/:id/messages', (ctx) => {
+  router.get('/api/conversations/:id/messages', async (ctx) => {
     const conversationId = Number(ctx.params.id);
     if (!authorize(ctx, 'agents.read')) return;
-    if (!conversationRepository.findByIdInWorkspace(conversationId, currentWorkspaceId(ctx))) {
+    if (!await conversationRepository.findByIdInWorkspace(
+      conversationId,
+      currentWorkspaceId(ctx),
+    )) {
       sendApiError(ctx, logger, {
         status: 404,
         code: 'CONVERSATION_NOT_FOUND',
@@ -1672,7 +1679,7 @@ export function createApp(options: AppOptions = {}): Koa {
       });
       return;
     }
-    ctx.body = conversationRepository.listMessages(conversationId);
+    ctx.body = await conversationRepository.listMessages(conversationId);
   });
 
   router.get('/api/providers', (ctx) => {
@@ -2134,20 +2141,20 @@ export function createApp(options: AppOptions = {}): Koa {
         }
 
         let conversation = requestedConversationId
-          ? conversationRepository.findByIdInWorkspace(requestedConversationId, workspaceId)
+          ? await conversationRepository.findByIdInWorkspace(requestedConversationId, workspaceId)
           : null;
         if (conversation && conversation.agentId !== agentId) {
           throw new StreamRequestError(404, 'conversation not found for agent');
         }
         if (!conversation) {
-          conversation = conversationRepository.create(
+          conversation = await conversationRepository.create(
             agentId,
             String(body.input ?? '').slice(0, 120),
           );
         }
         conversationId = conversation.id;
         await runRepository.attachConversation(streamRequest.runId, conversationId);
-        conversationRepository.addMessage({
+        await conversationRepository.addMessage({
           conversationId,
           role: 'user',
           content: String(body.input ?? ''),
@@ -2294,7 +2301,7 @@ export function createApp(options: AppOptions = {}): Koa {
               && event.eventType === 'message.completed'
               && typeof event.payload.message === 'string'
             ) {
-              conversationRepository.addMessage({
+              await conversationRepository.addMessage({
                 conversationId,
                 role: 'assistant',
                 content: event.payload.message,
