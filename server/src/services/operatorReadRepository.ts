@@ -1,6 +1,7 @@
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
 import { type SupportGrantPermission } from './operatorAuthorization';
+import { type OperatorReadStore } from './operatorReadStore';
 
 export interface OperatorOverview {
   workspaces: number;
@@ -43,7 +44,7 @@ interface WorkspaceSummaryRow {
   created_at: string;
 }
 
-export class OperatorReadRepository {
+export class OperatorReadRepository implements OperatorReadStore {
   constructor(
     private readonly db: DatabaseAdapter,
     private readonly now: () => Date = () => new Date(),

@@ -10,7 +10,7 @@ import {
 } from '../services/operatorAuthorization';
 import { type AuthenticatedOperatorSession } from '../services/operatorIdentityRepository';
 import { type OperatorIdentityStore } from '../services/operatorIdentityStore';
-import { OperatorReadRepository } from '../services/operatorReadRepository';
+import { type OperatorReadStore } from '../services/operatorReadStore';
 import { hashPassword, verifyPassword, verifyPasswordOrDummy } from '../services/passwordHash';
 import { type SupportAccessStore } from '../services/supportAccessStore';
 
@@ -23,7 +23,7 @@ export interface OperatorRouteSecurityOptions {
 interface OperatorRouteOptions extends OperatorRouteSecurityOptions {
   bootstrapToken?: string;
   enforceAbuse: (ctx: Koa.Context) => Promise<boolean>;
-  reads: OperatorReadRepository;
+  reads: OperatorReadStore;
   readiness: () => Promise<unknown>;
   support: SupportAccessStore;
 }

@@ -1,7 +1,7 @@
 import Router from '@koa/router';
 import type Koa from 'koa';
 
-import { OperatorBillingReadRepository } from '../services/operatorBillingReadRepository';
+import { type OperatorBillingReadStore } from '../services/operatorBillingReadStore';
 import { type OperatorCustomerReadStore } from '../services/operatorCustomerReadStore';
 import { type OperatorRuntimeReadStore } from '../services/operatorRuntimeReadStore';
 import { type OperatorSecurityReadStore } from '../services/operatorSecurityReadStore';
@@ -12,7 +12,7 @@ import {
 } from './operatorRoutes';
 
 interface OperatorDomainRouteOptions extends OperatorRouteSecurityOptions {
-  billingReads: OperatorBillingReadRepository;
+  billingReads: OperatorBillingReadStore;
   customerReads: OperatorCustomerReadStore;
   runtimeReads: OperatorRuntimeReadStore;
   securityReads: OperatorSecurityReadStore;

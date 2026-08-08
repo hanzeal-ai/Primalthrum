@@ -2201,8 +2201,10 @@ complete. Follow the same dependency and verification protocol used above.
   Grants now serialize active-grant creation with Workspace and assignee locks and
   preserve scoped revocation evidence. Customer-account, Agent/Job, and abuse-event
   Operator reads now use parameterized async repositories while retaining Workspace
-  filters and minimized fields. Global composition waits for overview, billing, Flag,
-  and incident repositories so no Operator flow spans stores.
+  filters and minimized fields. Platform/Workspace overview plus subscription, monthly
+  usage, invoice, refund, and failed-Webhook views now use the same async boundary and
+  omit provider payloads, URLs, and errors. Global composition waits for Flag and
+  incident repositories so no Operator flow spans stores.
 
 ### P23-01 Full Commercial End-To-End Suite
 

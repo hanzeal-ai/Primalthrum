@@ -1,5 +1,6 @@
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
+import { type OperatorBillingReadStore } from './operatorBillingReadStore';
 
 export interface OperatorSubscriptionSummary {
   workspaceId: number;
@@ -133,7 +134,7 @@ interface WebhookFailureRow {
   processed_at: string | null;
 }
 
-export class OperatorBillingReadRepository {
+export class OperatorBillingReadRepository implements OperatorBillingReadStore {
   constructor(
     private readonly db: DatabaseAdapter,
     private readonly now: () => Date = () => new Date(),
