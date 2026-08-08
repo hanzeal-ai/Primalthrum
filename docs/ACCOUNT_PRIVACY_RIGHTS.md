@@ -41,6 +41,10 @@ restricted to authorized Operators.
 The same blockers are checked again immediately before execution. A durable
 `account.delete` job retries three times. Every transition is recorded in the
 immutable `account_privacy_events` evidence stream using a one-way subject hash.
+When an asynchronous runtime database is configured, request state, export
+evidence, scheduling, blockers, and deletion execution use that shared SQLite or
+PostgreSQL store. PostgreSQL locks the account and every active member Workspace,
+then rechecks legal holds and commercial blockers before deleting any file.
 
 ## Deletion Result
 

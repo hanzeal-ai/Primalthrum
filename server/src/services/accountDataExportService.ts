@@ -2,6 +2,7 @@ import { type DocumentFileStorage } from './fileStorage';
 import { AccountPrivacyRepository, type AccountPrivacyScope } from './accountPrivacyRepository';
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
+import { type AccountDataExportStore } from './accountDataExportStore';
 
 export interface AccountDataExport {
   format: 'primalthrum-account-data';
@@ -12,7 +13,7 @@ export interface AccountDataExport {
   workspace?: Record<string, unknown>;
 }
 
-export class AccountDataExportService {
+export class AccountDataExportService implements AccountDataExportStore {
   constructor(
     private readonly db: DatabaseAdapter,
     private readonly storage: DocumentFileStorage,

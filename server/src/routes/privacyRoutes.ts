@@ -1,11 +1,11 @@
 import Router from '@koa/router';
 import type Koa from 'koa';
 
-import { AccountDataExportService } from '../services/accountDataExportService';
+import { type AccountDataExportStore } from '../services/accountDataExportStore';
 import {
   AccountDeletionBlockedError,
-  AccountDeletionService,
 } from '../services/accountDeletionService';
+import { type AccountDeletionStore } from '../services/accountDeletionStore';
 import { sendApiError } from '../services/apiErrors';
 import { type StructuredLogger } from '../services/logger';
 import { verifyPassword } from '../services/passwordHash';
@@ -28,8 +28,8 @@ export function registerPrivacyRoutes(
     analytics: PrivacyAnalyticsStore;
     currentUserId: (ctx: Koa.Context) => number;
     currentWorkspaceId: (ctx: Koa.Context) => number;
-    deletion: AccountDeletionService;
-    exports: AccountDataExportService;
+    deletion: AccountDeletionStore;
+    exports: AccountDataExportStore;
     logger: StructuredLogger;
     users: UserStore;
   },
@@ -100,8 +100,8 @@ export function registerPrivacyRoutes(
     }
   });
 
-  router.get('/api/settings/privacy', (ctx) => {
-    ctx.body = options.deletion.state(options.currentUserId(ctx));
+  router.get('/api/settings/privacy', async (ctx) => {
+    ctx.body = await options.deletion.state(options.currentUserId(ctx));
   });
 
   router.post('/api/settings/privacy/export', async (ctx) => {
@@ -138,7 +138,7 @@ export function registerPrivacyRoutes(
         throw new Error('account email confirmation does not match');
       }
       ctx.status = 202;
-      ctx.body = options.deletion.request(userId, options.currentWorkspaceId(ctx));
+      ctx.body = await options.deletion.request(userId, options.currentWorkspaceId(ctx));
     } catch (error) {
       if (error instanceof AccountDeletionBlockedError) {
         sendApiError(ctx, options.logger, {
@@ -162,7 +162,7 @@ export function registerPrivacyRoutes(
     const userId = options.currentUserId(ctx);
     if (!await reauthenticate(ctx, options.logger, options.users, userId, body.password)) return;
     try {
-      ctx.body = options.deletion.cancel(userId);
+      ctx.body = await options.deletion.cancel(userId);
     } catch (error) {
       sendApiError(ctx, options.logger, {
         status: 400,

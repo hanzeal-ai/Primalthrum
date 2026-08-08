@@ -38,10 +38,15 @@ Workspace Retention policies, immutable enforcement evidence, Tool audit archive
 and durable physical-file deletion queues use the same async runtime database.
 Policy enforcement locks each Workspace policy and commits legal-hold checks,
 metadata deletion, archive evidence, and the next schedule in one transaction.
+Account and Owner-authorized Workspace exports, privacy request transitions,
+deletion scheduling, credential revocation, file removal, and account/Workspace
+anonymization now use the async runtime database. Deletion locks every active
+member Workspace and rechecks legal holds and commercial blockers before files
+or metadata are removed.
 The application-level PostgreSQL smoke completes registration and email verification
 over HTTP and asserts that no account lifecycle records leak into local SQLite. PostgreSQL
 must not be selected as the sole application database until the remaining
-repositories and production data-transfer gates are complete.
+Operator repositories and production data-transfer gates are complete.
 
 `server/src/db/postgresMigrations.ts` owns a separate PostgreSQL-native migration
 chain. It applies immutable ordered IDs in one transaction behind a PostgreSQL

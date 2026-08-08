@@ -2187,7 +2187,11 @@ complete. Follow the same dependency and verification protocol used above.
   in fallback SQLite. Workspace Retention policies and enforcement now also use
   the async runtime database; PostgreSQL atomically applies legal-hold checks,
   audit archival, metadata deletion, durable file deletion, and future scheduling
-  without leaking compliance evidence into fallback SQLite.
+  without leaking compliance evidence into fallback SQLite. Account and Workspace
+  export, privacy request state, deletion scheduling, credential revocation, file
+  removal, and account/Workspace anonymization now use that same async database.
+  PostgreSQL locks every active member Workspace and rechecks legal and commercial
+  blockers before deletion, while application smoke proves zero fallback leakage.
 
 ### P23-01 Full Commercial End-To-End Suite
 

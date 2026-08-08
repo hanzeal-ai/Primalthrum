@@ -9,6 +9,7 @@ import {
 } from './accountPrivacyRepository';
 import { type DocumentFileStorage } from './fileStorage';
 import { hashPassword } from './passwordHash';
+import { type AccountDeletionStore } from './accountDeletionStore';
 
 const DEFAULT_GRACE_PERIOD_MS = 7 * 24 * 60 * 60_000;
 
@@ -18,7 +19,7 @@ export class AccountDeletionBlockedError extends Error {
   }
 }
 
-export class AccountDeletionService {
+export class AccountDeletionService implements AccountDeletionStore {
   constructor(
     private readonly db: DatabaseAdapter,
     private readonly privacy: AccountPrivacyRepository,

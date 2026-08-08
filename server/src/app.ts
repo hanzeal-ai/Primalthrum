@@ -171,8 +171,14 @@ import { AccountEmailDispatcher } from './services/accountEmailDispatcher';
 import { type AccountEmailSender } from './services/accountEmailSender';
 import { AccountIdentityService } from './services/accountIdentityService';
 import { AccountDataExportService } from './services/accountDataExportService';
+import { AsyncAccountDataExportService } from './services/asyncAccountDataExportService';
+import { type AccountDataExportStore } from './services/accountDataExportStore';
 import { AccountDeletionService } from './services/accountDeletionService';
+import { AsyncAccountDeletionService } from './services/asyncAccountDeletionService';
+import { type AccountDeletionStore } from './services/accountDeletionStore';
 import { AccountPrivacyRepository } from './services/accountPrivacyRepository';
+import { AsyncAccountPrivacyRepository } from './services/asyncAccountPrivacyRepository';
+import { type AccountPrivacyStore } from './services/accountPrivacyStore';
 import { AccountPrivacyScheduler } from './services/accountPrivacyScheduler';
 import { PrivacyAnalyticsRepository } from './services/privacyAnalyticsRepository';
 import { AsyncPrivacyAnalyticsRepository } from './services/asyncPrivacyAnalyticsRepository';
@@ -510,20 +516,38 @@ export function createApp(options: AppOptions = {}): Koa {
   const privacyAnalyticsRepository: PrivacyAnalyticsStore = runtimeDatabase
     ? new AsyncPrivacyAnalyticsRepository(runtimeDatabase)
     : new PrivacyAnalyticsRepository(db);
-  const accountPrivacyRepository = new AccountPrivacyRepository(db, options.accountPrivacyNow);
-  const accountDataExports = new AccountDataExportService(
-    db,
-    documentStorage,
-    accountPrivacyRepository,
-    options.accountPrivacyNow,
-  );
-  const accountDeletionService = new AccountDeletionService(
-    db,
-    accountPrivacyRepository,
-    documentStorage,
-    options.accountPrivacyNow,
-    options.accountDeletionGracePeriodMs,
-  );
+  const syncAccountPrivacyRepository = new AccountPrivacyRepository(db, options.accountPrivacyNow);
+  const accountPrivacyRepository: AccountPrivacyStore = runtimeDatabase
+    ? new AsyncAccountPrivacyRepository(runtimeDatabase, options.accountPrivacyNow)
+    : syncAccountPrivacyRepository;
+  const accountDataExports: AccountDataExportStore = runtimeDatabase
+    ? new AsyncAccountDataExportService(
+        runtimeDatabase,
+        documentStorage,
+        accountPrivacyRepository,
+        options.accountPrivacyNow,
+      )
+    : new AccountDataExportService(
+        db,
+        documentStorage,
+        syncAccountPrivacyRepository,
+        options.accountPrivacyNow,
+      );
+  const accountDeletionService: AccountDeletionStore = runtimeDatabase
+    ? new AsyncAccountDeletionService(
+        runtimeDatabase,
+        accountPrivacyRepository,
+        documentStorage,
+        options.accountPrivacyNow,
+        options.accountDeletionGracePeriodMs,
+      )
+    : new AccountDeletionService(
+        db,
+        syncAccountPrivacyRepository,
+        documentStorage,
+        options.accountPrivacyNow,
+        options.accountDeletionGracePeriodMs,
+      );
   const retentionPolicies: RetentionPolicyStore = runtimeDatabase
     ? new AsyncRetentionPolicyRepository(runtimeDatabase)
     : new RetentionPolicyRepository(db);

@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
+import { type AccountPrivacyStore } from './accountPrivacyStore';
 
 export type AccountPrivacyRequestType = 'export' | 'deletion';
 export type AccountPrivacyScope = 'account' | 'workspace';
@@ -62,7 +63,7 @@ interface HeldWorkspaceRow {
 
 const MAX_DELETION_ATTEMPTS = 3;
 
-export class AccountPrivacyRepository {
+export class AccountPrivacyRepository implements AccountPrivacyStore {
   constructor(
     private readonly db: DatabaseAdapter,
     private readonly now: () => Date = () => new Date(),

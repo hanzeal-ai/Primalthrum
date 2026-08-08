@@ -1,4 +1,4 @@
-import { AccountPrivacyRepository } from './accountPrivacyRepository';
+import { type AccountPrivacyStore } from './accountPrivacyStore';
 import { type JobStore } from './jobStore';
 
 const DEFAULT_INTERVAL_MS = 60_000;
@@ -8,7 +8,7 @@ export class AccountPrivacyScheduler {
   private ticking = false;
 
   constructor(
-    private readonly privacy: AccountPrivacyRepository,
+    private readonly privacy: AccountPrivacyStore,
     private readonly jobs: JobStore,
     private readonly kick: () => void,
     private readonly intervalMs = DEFAULT_INTERVAL_MS,
@@ -37,7 +37,7 @@ export class AccountPrivacyScheduler {
     this.ticking = true;
     let created = 0;
     try {
-      for (const request of this.privacy.dueDeletions()) {
+      for (const request of await this.privacy.dueDeletions()) {
         const job = await this.jobs.createUnique({
           type: 'account.delete',
           workspaceId: request.workspaceId ?? undefined,
