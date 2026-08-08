@@ -20,6 +20,11 @@ serialized by Workspace inside database transactions. New Workspaces receive
 their Free-plan baseline exactly once, while every later balance mutation remains
 an immutable ledger entry applied by the database projection trigger.
 
+The plan catalog and entitlement resolver also support parameterized async
+SQLite and PostgreSQL access. Catalog ordering is database-neutral, active plan
+and grant precedence are resolved per Workspace, expired trials fall back to
+Free, and `past_due` subscriptions become restricted after their grace deadline.
+
 ## Ledger Invariants
 
 1. Every balance change appends one idempotent `credit_ledger_entries` row.

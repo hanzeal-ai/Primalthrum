@@ -14,8 +14,8 @@ the `pg` connection pool, positional parameters, transaction-scoped clients,
 rollback, schema introspection, and explicit pool shutdown. Identity, Workspace,
 Session, Agent, Agent version, Run, StreamEvent, Document, RAG index, Conversation,
 ProviderConfig, Job, CapabilitySettings, ToolAudit, DocumentUploadSecurity,
-UsageRating, CreditLedger, and UsageExportOutbox repositories now use this
-boundary. Async usage rating and Credits serialize Workspace mutations in
+UsageRating, CreditLedger, UsageExportOutbox, BillingPlan, and Entitlement
+repositories now use this boundary. Async usage rating and Credits serialize Workspace mutations in
 transactions, preserve idempotent immutable evidence, and enforce cost or
 balance limits before insertion. Export workers atomically claim rows with
 PostgreSQL `SKIP LOCKED`, retain bounded retry evidence, and avoid duplicate

@@ -2158,8 +2158,11 @@ complete. Follow the same dependency and verification protocol used above.
   lease recovery, `SKIP LOCKED` multi-worker claims, retry evidence, and exactly
   one delivery verification. Application runtime composition awaits the async
   rating/Credits/outbox chain for Runs, speech, uploads, Embeddings, and RAG;
-  remaining commercial, security, compliance, and Operator repositories plus
-  production data transfer remain open before runtime cutover.
+  async Plan and Entitlement repositories now preserve catalog order, active
+  subscription rules, grant priority, Trial expiry, grace restriction, and tenant
+  isolation. Trial mutation, payment lifecycle, remaining security, compliance,
+  and Operator repositories plus production data transfer remain open before
+  runtime cutover.
 
 ### P23-01 Full Commercial End-To-End Suite
 
