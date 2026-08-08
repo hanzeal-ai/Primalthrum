@@ -3,31 +3,16 @@ import { randomBytes } from 'node:crypto';
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
 import { LocalSecretVault } from './localSecretVault';
+import {
+  type MfaChallenge,
+  type MfaChallengePurpose,
+  type MfaFactor,
+  type MfaStore,
+} from './mfaStore';
 import { hashToken } from './sessionRepository';
 
 const CHALLENGE_TTL_MS = 5 * 60 * 1000;
 const MAX_CHALLENGE_ATTEMPTS = 5;
-
-export type MfaChallengePurpose = 'login' | 'invitation';
-export type MfaAuthenticationMethod = 'totp' | 'recovery_code';
-
-export interface MfaFactor {
-  userId: number;
-  secretWorkspaceId: number;
-  secretRef: string;
-  state: 'pending' | 'enabled';
-  lastUsedStep: number;
-  enabledAt: string | null;
-}
-
-export interface MfaChallenge {
-  id: number;
-  userId: number;
-  purpose: MfaChallengePurpose;
-  context: Record<string, unknown>;
-  attempts: number;
-  expiresAt: string;
-}
 
 interface FactorRow {
   user_id: number;
@@ -47,7 +32,7 @@ interface ChallengeRow {
   expires_at: string;
 }
 
-export class MfaRepository {
+export class MfaRepository implements MfaStore {
   constructor(
     private readonly db: DatabaseAdapter,
     private readonly secrets: LocalSecretVault,

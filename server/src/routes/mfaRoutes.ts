@@ -7,7 +7,7 @@ import { type StructuredLogger } from '../services/logger';
 import {
   type MfaAuthenticationMethod,
   type MfaChallengePurpose,
-} from '../services/mfaRepository';
+} from '../services/mfaStore';
 import { MfaService, MfaVerificationError } from '../services/mfaService';
 import { verifyPassword } from '../services/passwordHash';
 import { type SessionStore } from '../services/sessionStore';
@@ -41,8 +41,8 @@ export function registerMfaRoutes(
 ): void {
   const { completeChallenge, currentUserId, logger, mfa, sessions, users } = dependencies;
 
-  router.get('/api/settings/mfa', (ctx) => {
-    ctx.body = mfa.status(currentUserId(ctx));
+  router.get('/api/settings/mfa', async (ctx) => {
+    ctx.body = await mfa.status(currentUserId(ctx));
   });
 
   router.post('/api/settings/mfa/setup', async (ctx) => {
@@ -50,7 +50,7 @@ export function registerMfaRoutes(
     if (!user) return;
     try {
       ctx.status = 201;
-      ctx.body = mfa.beginSetup({
+      ctx.body = await mfa.beginSetup({
         userId: user.id,
         secretWorkspaceId: user.workspaceId,
         email: user.email,
@@ -66,10 +66,10 @@ export function registerMfaRoutes(
     if (!token) return sessionRequired(ctx, logger);
     try {
       const body = ctx.request.body as Record<string, unknown>;
-      const result = mfa.confirmSetup(userId, body.code);
+      const result = await mfa.confirmSetup(userId, body.code);
       await sessions.markMfaAuthenticated(token, userId);
       await sessions.revokeOthers(userId, token);
-      ctx.body = { ...result, ...mfa.status(userId) };
+      ctx.body = { ...result, ...await mfa.status(userId) };
     } catch (error) {
       sendMfaError(ctx, logger, error, 'failed to confirm MFA setup');
     }
@@ -80,7 +80,7 @@ export function registerMfaRoutes(
     if (!await requireCurrentPassword(ctx, userId, users, logger)) return;
     try {
       const body = ctx.request.body as Record<string, unknown>;
-      ctx.body = mfa.regenerateRecoveryCodes(userId, body.code);
+      ctx.body = await mfa.regenerateRecoveryCodes(userId, body.code);
     } catch (error) {
       sendMfaError(ctx, logger, error, 'failed to regenerate recovery codes');
     }
@@ -93,7 +93,7 @@ export function registerMfaRoutes(
     if (!await requireCurrentPassword(ctx, userId, users, logger)) return;
     try {
       const body = ctx.request.body as Record<string, unknown>;
-      mfa.disable(userId, body.code);
+      await mfa.disable(userId, body.code);
       await sessions.revokeOthers(userId, token);
       await sessions.markPasswordAuthenticated(token, userId);
       ctx.status = 204;
@@ -105,7 +105,7 @@ export function registerMfaRoutes(
   router.post('/api/auth/mfa/verify', async (ctx) => {
     try {
       const body = ctx.request.body as Record<string, unknown>;
-      const verified = mfa.verifyChallenge(body.challengeToken, body.code);
+      const verified = await mfa.verifyChallenge(body.challengeToken, body.code);
       const completed = await completeChallenge(verified);
       const session = await sessions.create(completed.user, verified.authenticationMethod);
       ctx.set('Set-Cookie', sessionCookie(session.token, session.expiresAt));

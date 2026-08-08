@@ -2172,7 +2172,10 @@ complete. Follow the same dependency and verification protocol used above.
   registration, verification, Trial activation, and zero account-lifecycle leakage
   into the fallback SQLite database. Remaining security, compliance, Operator
   repositories, payment reconciliation, and production data transfer remain open
-  before runtime cutover.
+  before runtime cutover. Account MFA now also uses the async identity database for
+  encrypted Secrets, Factors, recovery codes, one-time Challenges, and immutable
+  events; a PostgreSQL HTTP smoke verifies setup, confirmation, login challenge,
+  replay rejection, and zero local SQLite leakage.
 
 ### P23-01 Full Commercial End-To-End Suite
 

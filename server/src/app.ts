@@ -192,6 +192,7 @@ import { ApiKeyRepository } from './services/apiKeyRepository';
 import { AsyncApiKeyRepository } from './services/asyncApiKeyRepository';
 import { type ApiKeyStore } from './services/apiKeyStore';
 import { MfaRepository } from './services/mfaRepository';
+import { AsyncMfaRepository } from './services/asyncMfaRepository';
 import { MfaService } from './services/mfaService';
 import { RetentionPolicyRepository } from './services/retentionPolicyRepository';
 import { RetentionScheduler } from './services/retentionScheduler';
@@ -400,7 +401,12 @@ export function createApp(options: AppOptions = {}): Koa {
   const operatorSecurityReads = new OperatorSecurityReadRepository(db);
   const supportAccess = new SupportAccessRepository(db);
   const localSecretVault = new LocalSecretVault(db);
-  const mfaService = new MfaService(new MfaRepository(db, localSecretVault));
+  const asyncIdentitySecretVault = identityDatabase
+    ? new AsyncSecretVault(identityDatabase)
+    : null;
+  const mfaService = new MfaService(identityDatabase && asyncIdentitySecretVault
+    ? new AsyncMfaRepository(identityDatabase, asyncIdentitySecretVault)
+    : new MfaRepository(db, localSecretVault));
   const apiKeyRepository: ApiKeyStore = runtimeDatabase
     ? new AsyncApiKeyRepository(runtimeDatabase)
     : new ApiKeyRepository(db);
@@ -1086,9 +1092,9 @@ export function createApp(options: AppOptions = {}): Koa {
         ctx.body = { error: 'workspace membership is required' };
         return;
       }
-      if (mfaService.isEnabled(user.id)) {
+      if (await mfaService.isEnabled(user.id)) {
         ctx.status = 202;
-        ctx.body = mfaService.createChallenge(user.id, 'login');
+        ctx.body = await mfaService.createChallenge(user.id, 'login');
         return;
       }
       const session = await sessionRepository.create(publicUser);
@@ -1449,9 +1455,9 @@ export function createApp(options: AppOptions = {}): Koa {
         (await workspaceRepository.listMembers(invitation.workspaceId)).length,
         1,
       );
-      if (user && mfaService.isEnabled(user.id)) {
+      if (user && await mfaService.isEnabled(user.id)) {
         ctx.status = 202;
-        ctx.body = mfaService.createChallenge(user.id, 'invitation', {
+        ctx.body = await mfaService.createChallenge(user.id, 'invitation', {
           invitationId: invitation.id,
           workspaceId: invitation.workspaceId,
         });

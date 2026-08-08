@@ -3,6 +3,9 @@
 Primalthrum supports account-level time-based one-time passwords (TOTP) for every
 Workspace role. MFA belongs to the user identity, not to a Workspace, so changing
 the active Workspace or accepting a new invitation cannot bypass it.
+The Factor, encrypted Secret, recovery codes, one-time Challenges, and immutable
+events share the configured async identity database. PostgreSQL and SQLite use the
+same awaited service contract, so PostgreSQL users never fall back to local MFA state.
 
 ## Authentication Contract
 

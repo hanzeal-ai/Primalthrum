@@ -25,6 +25,8 @@ delivery across workers. Application composition selects these repositories
 together for runtime metering when an async database is available. Account action
 tokens, Workspace onboarding, transactional email Outbox claims, delivery state,
 and immutable Provider events also use the parameterized async identity database.
+MFA Factors, encrypted Secrets, recovery codes, Challenges, and immutable security
+events use that same identity database and transaction boundary.
 The application-level PostgreSQL smoke completes registration and email verification
 over HTTP and asserts that no account lifecycle records leak into local SQLite. PostgreSQL
 must not be selected as the sole application database until the remaining

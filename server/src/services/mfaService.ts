@@ -7,27 +7,27 @@ import {
   verifyTotp,
 } from './totp';
 import {
-  MfaRepository,
   type MfaAuthenticationMethod,
   type MfaChallengePurpose,
-} from './mfaRepository';
+  type MfaStore,
+} from './mfaStore';
 
 export class MfaVerificationError extends Error {}
 
 export class MfaService {
-  constructor(private readonly repository: MfaRepository) {}
+  constructor(private readonly repository: MfaStore) {}
 
   status(userId: number) {
     return this.repository.status(userId);
   }
 
-  isEnabled(userId: number): boolean {
-    return this.repository.factor(userId)?.state === 'enabled';
+  async isEnabled(userId: number): Promise<boolean> {
+    return (await this.repository.factor(userId))?.state === 'enabled';
   }
 
-  beginSetup(input: { userId: number; secretWorkspaceId: number; email: string }) {
+  async beginSetup(input: { userId: number; secretWorkspaceId: number; email: string }) {
     const secret = generateTotpSecret();
-    this.repository.beginSetup(input.userId, input.secretWorkspaceId, secret);
+    await this.repository.beginSetup(input.userId, input.secretWorkspaceId, secret);
     return {
       secret,
       otpauthUri: createTotpUri({
@@ -38,58 +38,58 @@ export class MfaService {
     };
   }
 
-  confirmSetup(userId: number, code: unknown): { recoveryCodes: string[] } {
-    const factor = this.repository.factor(userId);
+  async confirmSetup(userId: number, code: unknown): Promise<{ recoveryCodes: string[] }> {
+    const factor = await this.repository.factor(userId);
     if (!factor || factor.state !== 'pending') throw new Error('MFA setup has not been started');
-    const step = verifyTotp(this.repository.secret(factor), code);
+    const step = verifyTotp(await this.repository.secret(factor), code);
     if (step === null) throw new MfaVerificationError('invalid authentication code');
     const recoveryCodes = generateRecoveryCodes();
-    this.repository.enable(userId, step, recoveryCodes.map(hashRecoveryCode));
+    await this.repository.enable(userId, step, recoveryCodes.map(hashRecoveryCode));
     return { recoveryCodes };
   }
 
-  regenerateRecoveryCodes(userId: number, code: unknown): { recoveryCodes: string[] } {
-    this.verifyEnabledCredential(userId, code, false);
+  async regenerateRecoveryCodes(userId: number, code: unknown): Promise<{ recoveryCodes: string[] }> {
+    await this.verifyEnabledCredential(userId, code, false);
     const recoveryCodes = generateRecoveryCodes();
-    this.repository.replaceRecoveryCodes(userId, recoveryCodes.map(hashRecoveryCode));
+    await this.repository.replaceRecoveryCodes(userId, recoveryCodes.map(hashRecoveryCode));
     return { recoveryCodes };
   }
 
-  disable(userId: number, code: unknown): void {
-    this.verifyEnabledCredential(userId, code, true);
-    this.repository.disable(userId);
+  async disable(userId: number, code: unknown): Promise<void> {
+    await this.verifyEnabledCredential(userId, code, true);
+    await this.repository.disable(userId);
   }
 
-  createChallenge(
+  async createChallenge(
     userId: number,
     purpose: MfaChallengePurpose,
     context: Record<string, unknown> = {},
   ) {
-    if (!this.isEnabled(userId)) throw new Error('MFA is not enabled');
+    if (!await this.isEnabled(userId)) throw new Error('MFA is not enabled');
     return {
       mfaRequired: true as const,
       methods: ['totp', 'recovery_code'] as MfaAuthenticationMethod[],
-      ...this.repository.createChallenge(userId, purpose, context),
+      ...await this.repository.createChallenge(userId, purpose, context),
     };
   }
 
-  verifyChallenge(challengeToken: unknown, code: unknown): {
+  async verifyChallenge(challengeToken: unknown, code: unknown): Promise<{
     userId: number;
     purpose: MfaChallengePurpose;
     context: Record<string, unknown>;
     authenticationMethod: MfaAuthenticationMethod;
-  } {
+  }> {
     const token = typeof challengeToken === 'string' ? challengeToken : '';
-    const challenge = this.repository.activeChallenge(token);
+    const challenge = await this.repository.activeChallenge(token);
     if (!challenge) throw new MfaVerificationError('MFA challenge is invalid or expired');
     let authenticationMethod: MfaAuthenticationMethod;
     try {
-      authenticationMethod = this.verifyEnabledCredential(challenge.userId, code, true);
+      authenticationMethod = await this.verifyEnabledCredential(challenge.userId, code, true);
     } catch (error) {
-      this.repository.recordFailedChallenge(challenge);
+      await this.repository.recordFailedChallenge(challenge);
       throw error;
     }
-    if (!this.repository.consumeChallenge(challenge)) {
+    if (!await this.repository.consumeChallenge(challenge)) {
       throw new MfaVerificationError('MFA challenge is invalid or expired');
     }
     return {
@@ -100,18 +100,18 @@ export class MfaService {
     };
   }
 
-  private verifyEnabledCredential(
+  private async verifyEnabledCredential(
     userId: number,
     code: unknown,
     allowRecoveryCode: boolean,
-  ): MfaAuthenticationMethod {
-    const factor = this.repository.factor(userId);
+  ): Promise<MfaAuthenticationMethod> {
+    const factor = await this.repository.factor(userId);
     if (!factor || factor.state !== 'enabled') throw new Error('MFA is not enabled');
-    const secret = this.repository.secret(factor);
+    const secret = await this.repository.secret(factor);
     const step = verifyTotp(secret, code);
-    if (step !== null && this.repository.claimTotpStep(userId, step)) return 'totp';
+    if (step !== null && await this.repository.claimTotpStep(userId, step)) return 'totp';
     const recoveryCode = allowRecoveryCode ? normalizeRecoveryCode(code) : '';
-    if (recoveryCode && this.repository.consumeRecoveryCode(userId, hashRecoveryCode(recoveryCode))) {
+    if (recoveryCode && await this.repository.consumeRecoveryCode(userId, hashRecoveryCode(recoveryCode))) {
       return 'recovery_code';
     }
     throw new MfaVerificationError('invalid or previously used authentication code');
