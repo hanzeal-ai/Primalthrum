@@ -5,6 +5,12 @@ versioned price converts each raw quantity into billable units, platform credits
 and provider cost in integer micro-US dollars. Runtime settlement later sums the
 rated events for one resource and posts one atomic ledger settlement.
 
+The usage rating repository supports parameterized asynchronous SQLite and
+PostgreSQL access. Rating obtains a workspace-scoped transaction lock before the
+budget check and immutable event insertion, so concurrent requests cannot bypass
+a hard monthly limit. Repository tests exercise the asynchronous SQLite adapter
+and the real PostgreSQL smoke suite.
+
 Every persisted Run performs this lifecycle before contacting a model:
 
 ```text

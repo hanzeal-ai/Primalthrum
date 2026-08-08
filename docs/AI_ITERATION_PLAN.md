@@ -2149,8 +2149,11 @@ complete. Follow the same dependency and verification protocol used above.
   history, legal-hold dual control, blocked retention evidence, Job concurrency,
   Capability settings, Tool audit idempotency, and immutable minimized upload
   security evidence. Core identity and Agent runtime repositories are asynchronous
-  and parameterized; remaining commercial, security, compliance, and Operator
-  repositories plus production data transfer remain open before runtime cutover.
+  and parameterized. Usage rating now also has a transactionally serialized,
+  parameterized async SQLite/PostgreSQL repository with idempotency, hard-budget,
+  threshold-alert, tenant-isolation, and immutable-evidence verification;
+  remaining commercial, security, compliance, and Operator repositories plus
+  production data transfer remain open before runtime cutover.
 
 ### P23-01 Full Commercial End-To-End Suite
 
