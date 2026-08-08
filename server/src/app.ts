@@ -175,6 +175,8 @@ import { AccountDeletionService } from './services/accountDeletionService';
 import { AccountPrivacyRepository } from './services/accountPrivacyRepository';
 import { AccountPrivacyScheduler } from './services/accountPrivacyScheduler';
 import { PrivacyAnalyticsRepository } from './services/privacyAnalyticsRepository';
+import { AsyncPrivacyAnalyticsRepository } from './services/asyncPrivacyAnalyticsRepository';
+import { type PrivacyAnalyticsStore } from './services/privacyAnalyticsStore';
 import { registerPrivacyRoutes } from './routes/privacyRoutes';
 import { registerAccountEmailRoutes } from './routes/accountEmailRoutes';
 import { type AccountEmailWebhookVerifier } from './services/accountEmailWebhook';
@@ -503,7 +505,9 @@ export function createApp(options: AppOptions = {}): Koa {
     billingRepository,
     publicAppUrl,
   );
-  const privacyAnalyticsRepository = new PrivacyAnalyticsRepository(db);
+  const privacyAnalyticsRepository: PrivacyAnalyticsStore = runtimeDatabase
+    ? new AsyncPrivacyAnalyticsRepository(runtimeDatabase)
+    : new PrivacyAnalyticsRepository(db);
   const accountPrivacyRepository = new AccountPrivacyRepository(db, options.accountPrivacyNow);
   const accountDataExports = new AccountDataExportService(
     db,

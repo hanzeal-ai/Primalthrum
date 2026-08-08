@@ -2181,6 +2181,10 @@ complete. Follow the same dependency and verification protocol used above.
   SQLite ownership evidence. Abuse limits, Challenge Grants, and enforcement events
   now share the async runtime database; two PostgreSQL repository instances and the
   default HTTP composition prove global atomic quotas and zero local leakage.
+  Privacy consent and product analytics now share the async runtime database;
+  PostgreSQL transactions serialize each pseudonymous subject, preserve global
+  event idempotency, reject stale grants after withdrawal, and leave no evidence
+  in fallback SQLite.
 
 ### P23-01 Full Commercial End-To-End Suite
 

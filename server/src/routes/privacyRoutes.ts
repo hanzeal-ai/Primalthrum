@@ -12,10 +12,10 @@ import { verifyPassword } from '../services/passwordHash';
 import {
   ANALYTICS_EVENT_NAMES,
   PRIVACY_POLICY_VERSION,
-  PrivacyAnalyticsRepository,
   type AnalyticsEventName,
   type ConsentSource,
-} from '../services/privacyAnalyticsRepository';
+  type PrivacyAnalyticsStore,
+} from '../services/privacyAnalyticsStore';
 import { normalizeEmail, type UserRecord } from '../services/userRepository';
 import { type UserStore } from '../services/userStore';
 
@@ -25,7 +25,7 @@ const PROPERTY_KEYS = new Set(['source', 'planKey', 'authenticated']);
 export function registerPrivacyRoutes(
   router: Router,
   options: {
-    analytics: PrivacyAnalyticsRepository;
+    analytics: PrivacyAnalyticsStore;
     currentUserId: (ctx: Koa.Context) => number;
     currentWorkspaceId: (ctx: Koa.Context) => number;
     deletion: AccountDeletionService;
@@ -44,7 +44,7 @@ export function registerPrivacyRoutes(
     };
   });
 
-  router.post('/api/public/privacy/consents', (ctx) => {
+  router.post('/api/public/privacy/consents', async (ctx) => {
     try {
       const body = ctx.request.body as Record<string, unknown>;
       const subjectId = opaqueId(body.subjectId, 'subjectId');
@@ -54,7 +54,7 @@ export function registerPrivacyRoutes(
         throw new Error('the current privacy policy version is required');
       }
       ctx.status = 201;
-      ctx.body = options.analytics.recordConsent({
+      ctx.body = await options.analytics.recordConsent({
         subjectId,
         analytics,
         source,
@@ -69,10 +69,10 @@ export function registerPrivacyRoutes(
     }
   });
 
-  router.post('/api/public/analytics/events', (ctx) => {
+  router.post('/api/public/analytics/events', async (ctx) => {
     try {
       const body = ctx.request.body as Record<string, unknown>;
-      const event = options.analytics.recordEvent({
+      const event = await options.analytics.recordEvent({
         subjectId: opaqueId(body.subjectId, 'subjectId'),
         consentReceiptId: opaqueId(body.consentReceiptId, 'consentReceiptId'),
         eventId: opaqueId(body.eventId, 'eventId'),

@@ -1,73 +1,29 @@
-import { createHash, randomUUID } from 'node:crypto';
+import { randomUUID } from 'node:crypto';
 
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
 
-export const PRIVACY_POLICY_VERSION = '2026-07-31';
+import {
+  type PrivacyAnalyticsStore,
+  PRIVACY_POLICY_VERSION,
+  type RecordAnalyticsEventInput,
+  type RecordConsentInput,
+} from './privacyAnalyticsStore';
+import {
+  type AnalyticsRow,
+  type ConsentRow,
+  hashPrivacySubject,
+  mapAnalyticsEvent,
+  mapConsentReceipt,
+  sameAnalyticsEvent,
+} from './privacyAnalyticsShared';
 
-export const ANALYTICS_EVENT_NAMES = [
-  'page_view',
-  'agent_intent_started',
-  'plan_selected',
-  'signup_viewed',
-  'signup_submitted',
-  'signup_completed',
-  'email_verification_completed',
-] as const;
-
-export type AnalyticsEventName = typeof ANALYTICS_EVENT_NAMES[number];
-export type ConsentSource = 'banner' | 'preferences';
-
-export interface ConsentReceipt {
-  receiptId: string;
-  policyVersion: string;
-  necessary: true;
-  analytics: boolean;
-  action: 'granted' | 'denied' | 'withdrawn';
-  recordedAt: string;
-}
-
-export interface ProductAnalyticsEvent {
-  id: number;
-  eventId: string;
-  eventName: AnalyticsEventName;
-  path: string;
-  properties: Record<string, string | boolean>;
-  occurredAt: string;
-  duplicate: boolean;
-}
-
-interface ConsentRow {
-  id: number;
-  receipt_id: string;
-  policy_version: string;
-  analytics_granted: number;
-  action: ConsentReceipt['action'];
-  created_at: string;
-}
-
-interface AnalyticsRow {
-  id: number;
-  event_id: string;
-  consent_receipt_ref: string;
-  subject_hash: string;
-  event_name: AnalyticsEventName;
-  path: string;
-  properties_json: string;
-  occurred_at: string;
-}
-
-export class PrivacyAnalyticsRepository {
+export class PrivacyAnalyticsRepository implements PrivacyAnalyticsStore {
   constructor(private readonly db: DatabaseAdapter) {
   }
 
-  recordConsent(input: {
-    subjectId: string;
-    analytics: boolean;
-    source: ConsentSource;
-    policyVersion?: string;
-  }): ConsentReceipt {
-    const subjectHash = hashSubject(input.subjectId);
+  recordConsent(input: RecordConsentInput) {
+    const subjectHash = hashPrivacySubject(input.subjectId);
     const receiptId = randomUUID();
     const policyVersion = input.policyVersion ?? PRIVACY_POLICY_VERSION;
     this.db.run(`
@@ -89,26 +45,18 @@ export class PrivacyAnalyticsRepository {
     `);
     const receipt = this.findReceipt(receiptId);
     if (!receipt) throw new Error('privacy consent receipt could not be loaded');
-    return mapConsent(receipt);
+    return mapConsentReceipt(receipt);
   }
 
-  recordEvent(input: {
-    subjectId: string;
-    consentReceiptId: string;
-    eventId: string;
-    eventName: AnalyticsEventName;
-    path: string;
-    properties: Record<string, string | boolean>;
-    occurredAt: string;
-  }): ProductAnalyticsEvent | null {
-    const subjectHash = hashSubject(input.subjectId);
+  recordEvent(input: RecordAnalyticsEventInput) {
+    const subjectHash = hashPrivacySubject(input.subjectId);
     if (!this.hasCurrentGrant(subjectHash, input.consentReceiptId)) return null;
     const existing = this.findEvent(input.eventId);
     if (existing) {
       if (!sameEvent(existing, input, subjectHash)) {
         throw new Error('analytics event idempotency conflict');
       }
-      return { ...mapEvent(existing), duplicate: true };
+      return { ...mapAnalyticsEvent(existing), duplicate: true };
     }
 
     const created = this.db.query<AnalyticsRow>(`
@@ -131,7 +79,7 @@ export class PrivacyAnalyticsRepository {
       RETURNING id, event_id, ${sqlValue(input.consentReceiptId)} AS consent_receipt_ref,
         subject_hash, event_name, path, properties_json, occurred_at;
     `)[0];
-    return created ? { ...mapEvent(created), duplicate: false } : null;
+    return created ? { ...mapAnalyticsEvent(created), duplicate: false } : null;
   }
 
   private findReceipt(receiptId: string): ConsentRow | null {
@@ -167,47 +115,10 @@ export class PrivacyAnalyticsRepository {
   }
 }
 
-function hashSubject(subjectId: string): string {
-  return createHash('sha256').update(`primalthrum-consent:${subjectId}`).digest('hex');
-}
-
-function mapConsent(row: ConsentRow): ConsentReceipt {
-  return {
-    receiptId: row.receipt_id,
-    policyVersion: row.policy_version,
-    necessary: true,
-    analytics: Boolean(row.analytics_granted),
-    action: row.action,
-    recordedAt: row.created_at,
-  };
-}
-
-function mapEvent(row: AnalyticsRow): Omit<ProductAnalyticsEvent, 'duplicate'> {
-  return {
-    id: Number(row.id),
-    eventId: row.event_id,
-    eventName: row.event_name,
-    path: row.path,
-    properties: JSON.parse(row.properties_json) as Record<string, string | boolean>,
-    occurredAt: row.occurred_at,
-  };
-}
-
 function sameEvent(
   row: AnalyticsRow,
-  input: {
-    consentReceiptId: string;
-    eventName: AnalyticsEventName;
-    path: string;
-    properties: Record<string, string | boolean>;
-    occurredAt: string;
-  },
+  input: RecordAnalyticsEventInput,
   subjectHash: string,
 ): boolean {
-  return row.consent_receipt_ref === input.consentReceiptId
-    && row.subject_hash === subjectHash
-    && row.event_name === input.eventName
-    && row.path === input.path
-    && row.properties_json === JSON.stringify(input.properties)
-    && row.occurred_at === input.occurredAt;
+  return sameAnalyticsEvent(row, input, subjectHash);
 }

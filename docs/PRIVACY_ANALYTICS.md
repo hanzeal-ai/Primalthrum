@@ -15,6 +15,9 @@ consent.
 The browser subject and receipt IDs are random UUIDs. The server stores only a
 SHA-256 subject hash. Consent receipts and accepted events are append-only.
 Changing an event while reusing its event ID returns an idempotency conflict.
+When an asynchronous runtime database is configured, consent and analytics use
+that shared SQLite or PostgreSQL store. Per-subject transactions serialize grants,
+withdrawals, and event acceptance across server instances.
 
 ## Data Minimization
 
