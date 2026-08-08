@@ -180,6 +180,7 @@ import { registerAccountEmailRoutes } from './routes/accountEmailRoutes';
 import { type AccountEmailWebhookVerifier } from './services/accountEmailWebhook';
 import { AbuseProtectionService } from './services/abuseProtection';
 import { AbuseProtectionRepository } from './services/abuseProtectionRepository';
+import { AsyncAbuseProtectionRepository } from './services/asyncAbuseProtectionRepository';
 import { type BotChallengeVerifier } from './services/botChallengeVerifier';
 import { registerAbuseRoutes } from './routes/abuseRoutes';
 import { registerSecuritySettingsRoutes } from './routes/securitySettingsRoutes';
@@ -342,7 +343,12 @@ export function createApp(options: AppOptions = {}): Koa {
     registerAppCleanup(app, () => ownedIdentityDatabase.close());
   }
   const abuseProtection = options.abuseProtection ?? new AbuseProtectionService(
-    new AbuseProtectionRepository(db, options.abuseHashSecret ?? DEFAULT_ABUSE_HASH_SECRET),
+    runtimeDatabase
+      ? new AsyncAbuseProtectionRepository(
+          runtimeDatabase,
+          options.abuseHashSecret ?? DEFAULT_ABUSE_HASH_SECRET,
+        )
+      : new AbuseProtectionRepository(db, options.abuseHashSecret ?? DEFAULT_ABUSE_HASH_SECRET),
     options.botChallengeVerifier,
     options.trustedProxyHops ?? 0,
   );

@@ -2178,7 +2178,9 @@ complete. Follow the same dependency and verification protocol used above.
   replay rejection, and zero local SQLite leakage. Workspace ownership transfer
   now uses the same async identity boundary; a concurrent PostgreSQL HTTP smoke
   proves one winning transfer, one active Owner, one immutable event, and no local
-  SQLite ownership evidence.
+  SQLite ownership evidence. Abuse limits, Challenge Grants, and enforcement events
+  now share the async runtime database; two PostgreSQL repository instances and the
+  default HTTP composition prove global atomic quotas and zero local leakage.
 
 ### P23-01 Full Commercial End-To-End Suite
 

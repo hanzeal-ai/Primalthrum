@@ -3,7 +3,10 @@ import { createHash } from 'node:crypto';
 import type Koa from 'koa';
 
 import { sendApiError } from './apiErrors';
-import { AbuseProtectionRepository, type RateLimitDecision } from './abuseProtectionRepository';
+import {
+  type AbuseProtectionStore,
+  type RateLimitDecision,
+} from './abuseProtectionStore';
 import {
   BotChallengeUnavailableError,
   type BotChallengeVerifier,
@@ -58,7 +61,7 @@ export const DEFAULT_ABUSE_POLICIES: readonly AbusePolicy[] = [
 
 export class AbuseProtectionService {
   constructor(
-    private readonly repository: AbuseProtectionRepository,
+    private readonly repository: AbuseProtectionStore,
     private readonly botChallengeVerifier: BotChallengeVerifier | undefined,
     private readonly trustedProxyHops: number,
     private readonly policies: readonly AbusePolicy[] = DEFAULT_ABUSE_POLICIES,
@@ -78,18 +81,18 @@ export class AbuseProtectionService {
       forwardedFor: ctx.get('x-forwarded-for'),
       trustedProxyHops: this.trustedProxyHops,
     });
-    const decisions = selected.limits.map((limit) => this.repository.consume({
+    const decisions = await Promise.all(selected.limits.map((limit) => this.repository.consume({
       ruleKey: `${selected.key}.${limit.scope}`,
       subject: subjectFor(ctx, clientIp, limit.scope),
       limit: limit.limit,
       windowMs: limit.windowMs,
-    }));
+    })));
     setRateLimitHeaders(ctx, decisions);
     const blocked = decisions
       .filter((decision) => !decision.allowed)
       .sort((left, right) => right.retryAfterSeconds - left.retryAfterSeconds)[0];
     if (blocked) {
-      this.repository.recordEnforcement({
+      await this.repository.recordEnforcement({
         ruleKey: selected.key,
         action: selected.action,
         subjectHash: blocked.subjectHash,
@@ -111,7 +114,7 @@ export class AbuseProtectionService {
     const challengeGrant = selected.action === 'public_agent_stream'
       ? challengeGrantInput(ctx, selected.key, clientIp)
       : null;
-    if (challengeGrant && this.repository.hasChallengeGrant(challengeGrant)) return true;
+    if (challengeGrant && await this.repository.hasChallengeGrant(challengeGrant)) return true;
     const challengeToken = ctx.get('x-bot-challenge-token');
     try {
       const result = await this.botChallengeVerifier.verify({
@@ -120,10 +123,10 @@ export class AbuseProtectionService {
         action: selected.action,
       });
       if (result.success) {
-        if (challengeGrant) this.repository.grantChallenge(challengeGrant);
+        if (challengeGrant) await this.repository.grantChallenge(challengeGrant);
         return true;
       }
-      this.repository.recordEnforcement({
+      await this.repository.recordEnforcement({
         ruleKey: selected.key,
         action: selected.action,
         subjectHash: this.repository.hash(`ip:${clientIp}`),

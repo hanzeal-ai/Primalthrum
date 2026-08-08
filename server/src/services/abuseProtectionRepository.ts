@@ -2,17 +2,15 @@ import { createHmac, randomUUID } from 'node:crypto';
 
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
+import {
+  type AbuseProtectionStore,
+  type ChallengeGrantInput,
+  type ConsumeRateLimitInput,
+  type RateLimitDecision,
+  validateAbuseRule,
+} from './abuseProtectionStore';
 
-export interface RateLimitDecision {
-  allowed: boolean;
-  count: number;
-  limit: number;
-  remaining: number;
-  retryAfterSeconds: number;
-  subjectHash: string;
-}
-
-export class AbuseProtectionRepository {
+export class AbuseProtectionRepository implements AbuseProtectionStore {
   private operations = 0;
 
   constructor(
@@ -23,13 +21,8 @@ export class AbuseProtectionRepository {
     if (Buffer.byteLength(hashSecret) < 32) throw new Error('abuse hash secret must be at least 32 bytes');
   }
 
-  consume(input: {
-    ruleKey: string;
-    subject: string;
-    limit: number;
-    windowMs: number;
-  }): RateLimitDecision {
-    validateRule(input.ruleKey, input.limit, input.windowMs);
+  consume(input: ConsumeRateLimitInput): RateLimitDecision {
+    validateAbuseRule(input.ruleKey, input.limit, input.windowMs);
     if (!input.subject) throw new Error('abuse rate limit subject is required');
     const nowMs = this.now().getTime();
     const windowStartedAt = new Date(Math.floor(nowMs / input.windowMs) * input.windowMs).toISOString();
@@ -85,7 +78,7 @@ export class AbuseProtectionRepository {
     return createHmac('sha256', this.hashSecret).update(subject).digest('hex');
   }
 
-  hasChallengeGrant(input: { ruleKey: string; subject: string; idempotencyKey: string }): boolean {
+  hasChallengeGrant(input: ChallengeGrantInput): boolean {
     const grantHash = this.challengeGrantHash(input);
     return Boolean(this.db.query<{ grant_hash: string }>(`
       SELECT grant_hash FROM abuse_challenge_grants
@@ -95,12 +88,7 @@ export class AbuseProtectionRepository {
     `)[0]);
   }
 
-  grantChallenge(input: {
-    ruleKey: string;
-    subject: string;
-    idempotencyKey: string;
-    ttlMs?: number;
-  }): void {
+  grantChallenge(input: ChallengeGrantInput & { ttlMs?: number }): void {
     const grantHash = this.challengeGrantHash(input);
     const subjectHash = this.hash(input.subject);
     const expiresAt = new Date(this.now().getTime() + (input.ttlMs ?? 10 * 60_000)).toISOString();
@@ -125,21 +113,7 @@ export class AbuseProtectionRepository {
     `);
   }
 
-  private challengeGrantHash(input: {
-    ruleKey: string;
-    subject: string;
-    idempotencyKey: string;
-  }): string {
+  private challengeGrantHash(input: ChallengeGrantInput): string {
     return this.hash(`challenge:${input.ruleKey}:${input.subject}:${input.idempotencyKey}`);
-  }
-}
-
-function validateRule(ruleKey: string, limit: number, windowMs: number): void {
-  if (!/^[a-z][a-z0-9_.-]{0,63}$/.test(ruleKey)) throw new Error('abuse rule key is invalid');
-  if (!Number.isSafeInteger(limit) || limit < 1 || limit > 1_000_000) {
-    throw new Error('abuse rate limit is invalid');
-  }
-  if (!Number.isSafeInteger(windowMs) || windowMs < 1000 || windowMs > 7 * 24 * 60 * 60 * 1000) {
-    throw new Error('abuse rate limit window is invalid');
   }
 }

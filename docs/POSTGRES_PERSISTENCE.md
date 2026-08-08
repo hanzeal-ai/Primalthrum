@@ -29,6 +29,8 @@ MFA Factors, encrypted Secrets, recovery codes, Challenges, and immutable securi
 events use that same identity database and transaction boundary.
 Workspace ownership transfer now locks both memberships in the async identity
 database and commits the role swap with its immutable event atomically.
+Abuse rate-limit Buckets, Challenge Grants, and immutable enforcement evidence use
+the async runtime database, including atomic cross-instance window increments.
 The application-level PostgreSQL smoke completes registration and email verification
 over HTTP and asserts that no account lifecycle records leak into local SQLite. PostgreSQL
 must not be selected as the sole application database until the remaining

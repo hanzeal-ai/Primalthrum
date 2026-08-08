@@ -75,6 +75,7 @@ counters. Alert on challenge service outages, sustained rate-limit increases,
 and public stream blocks. Investigations should use event IDs and HMAC subjects;
 do not add raw identity data to logs or metrics.
 
-SQLite provides atomic enforcement for the current runtime. The production data
-milestone must migrate the same repository contract to shared PostgreSQL or Redis
-before horizontal Node scaling; per-process memory is intentionally not used.
+Rate-limit Buckets, Challenge Grants, and immutable enforcement evidence use the
+configured async runtime database. PostgreSQL atomically increments shared windows,
+so separate server instances cannot each grant an independent quota. Per-process
+memory is intentionally not used.
