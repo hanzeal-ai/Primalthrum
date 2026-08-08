@@ -7,31 +7,12 @@ import {
   type WorkspaceMembershipRecord,
   WorkspaceRepository,
 } from './workspaceRepository';
-
-export type WorkspaceOwnershipTransferErrorCode =
-  | 'CURRENT_OWNER_REQUIRED'
-  | 'TARGET_MEMBER_NOT_FOUND'
-  | 'TARGET_MEMBER_INVALID'
-  | 'TARGET_CONFIRMATION_MISMATCH'
-  | 'TRANSFER_CONFLICT';
-
-export class WorkspaceOwnershipTransferError extends Error {
-  constructor(
-    public readonly code: WorkspaceOwnershipTransferErrorCode,
-    message: string,
-  ) {
-    super(message);
-    this.name = 'WorkspaceOwnershipTransferError';
-  }
-}
-
-export interface WorkspaceOwnershipTransferRecord {
-  eventId: string;
-  workspaceId: number;
-  previousOwner: WorkspaceMembershipRecord;
-  newOwner: WorkspaceMembershipRecord;
-  transferredAt: string;
-}
+import {
+  type TransferWorkspaceOwnershipInput,
+  type WorkspaceOwnershipStore,
+  type WorkspaceOwnershipTransferRecord,
+  WorkspaceOwnershipTransferError,
+} from './workspaceOwnershipStore';
 
 interface OwnershipEventRow {
   event_id: string;
@@ -41,18 +22,13 @@ interface OwnershipEventRow {
   created_at: string;
 }
 
-export class WorkspaceOwnershipRepository {
+export class WorkspaceOwnershipRepository implements WorkspaceOwnershipStore {
   constructor(
     private readonly db: DatabaseAdapter,
     private readonly workspaces = new WorkspaceRepository(db),
   ) {}
 
-  transfer(input: {
-    workspaceId: number;
-    currentOwnerUserId: number;
-    targetUserId: unknown;
-    confirmedTargetEmail: unknown;
-  }): WorkspaceOwnershipTransferRecord {
+  transfer(input: TransferWorkspaceOwnershipInput): WorkspaceOwnershipTransferRecord {
     const targetUserId = positiveInteger(input.targetUserId, 'targetUserId');
     const currentOwner = this.workspaces.findMembership(
       input.workspaceId,

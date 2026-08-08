@@ -2175,7 +2175,10 @@ complete. Follow the same dependency and verification protocol used above.
   before runtime cutover. Account MFA now also uses the async identity database for
   encrypted Secrets, Factors, recovery codes, one-time Challenges, and immutable
   events; a PostgreSQL HTTP smoke verifies setup, confirmation, login challenge,
-  replay rejection, and zero local SQLite leakage.
+  replay rejection, and zero local SQLite leakage. Workspace ownership transfer
+  now uses the same async identity boundary; a concurrent PostgreSQL HTTP smoke
+  proves one winning transfer, one active Owner, one immutable event, and no local
+  SQLite ownership evidence.
 
 ### P23-01 Full Commercial End-To-End Suite
 

@@ -27,6 +27,8 @@ tokens, Workspace onboarding, transactional email Outbox claims, delivery state,
 and immutable Provider events also use the parameterized async identity database.
 MFA Factors, encrypted Secrets, recovery codes, Challenges, and immutable security
 events use that same identity database and transaction boundary.
+Workspace ownership transfer now locks both memberships in the async identity
+database and commits the role swap with its immutable event atomically.
 The application-level PostgreSQL smoke completes registration and email verification
 over HTTP and asserts that no account lifecycle records leak into local SQLite. PostgreSQL
 must not be selected as the sole application database until the remaining

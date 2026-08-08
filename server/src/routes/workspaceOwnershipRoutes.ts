@@ -6,16 +6,16 @@ import { type StructuredLogger } from '../services/logger';
 import { verifyPassword } from '../services/passwordHash';
 import { type UserStore } from '../services/userStore';
 import {
-  WorkspaceOwnershipRepository,
+  type WorkspaceOwnershipStore,
   WorkspaceOwnershipTransferError,
-} from '../services/workspaceOwnershipRepository';
+} from '../services/workspaceOwnershipStore';
 import { type WorkspacePermission } from '../services/workspaceAuthorization';
 
 interface WorkspaceOwnershipRouteDependencies {
   authorize: (ctx: Koa.Context, permission: WorkspacePermission) => boolean;
   currentUserId: (ctx: Koa.Context) => number;
   logger: StructuredLogger;
-  ownership: WorkspaceOwnershipRepository;
+  ownership: WorkspaceOwnershipStore;
   requireCurrentWorkspace: (ctx: Koa.Context, workspaceId: number) => boolean;
   users: UserStore;
 }
@@ -32,7 +32,7 @@ export function registerWorkspaceOwnershipRoutes(
     const userId = dependencies.currentUserId(ctx);
     if (!await reauthenticate(ctx, dependencies, userId, body.password)) return;
     try {
-      ctx.body = dependencies.ownership.transfer({
+      ctx.body = await dependencies.ownership.transfer({
         workspaceId,
         currentOwnerUserId: userId,
         targetUserId: body.targetUserId,

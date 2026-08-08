@@ -125,6 +125,8 @@ import { WorkspaceRepository } from './services/workspaceRepository';
 import { AsyncWorkspaceRepository } from './services/asyncWorkspaceRepository';
 import { type WorkspaceStore } from './services/workspaceStore';
 import { WorkspaceOwnershipRepository } from './services/workspaceOwnershipRepository';
+import { AsyncWorkspaceOwnershipRepository } from './services/asyncWorkspaceOwnershipRepository';
+import { type WorkspaceOwnershipStore } from './services/workspaceOwnershipStore';
 import { WorkspaceLegalHoldRepository } from './services/workspaceLegalHoldRepository';
 import { AsyncSecretVault } from './services/asyncSecretVault';
 import { LocalSecretVault } from './services/localSecretVault';
@@ -388,7 +390,9 @@ export function createApp(options: AppOptions = {}): Koa {
   const sessionRepository: SessionStore = identityDatabase
     ? new AsyncSessionRepository(identityDatabase)
     : syncSessionRepository;
-  const workspaceOwnershipRepository = new WorkspaceOwnershipRepository(db, syncWorkspaceRepository);
+  const workspaceOwnershipRepository: WorkspaceOwnershipStore = identityDatabase
+    ? new AsyncWorkspaceOwnershipRepository(identityDatabase)
+    : new WorkspaceOwnershipRepository(db, syncWorkspaceRepository);
   const operatorIdentity = new OperatorIdentityRepository(db);
   const operatorAudit = new OperatorAuditRepository(db);
   const operatorBillingReads = new OperatorBillingReadRepository(db);
