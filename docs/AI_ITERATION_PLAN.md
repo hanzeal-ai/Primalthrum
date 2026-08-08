@@ -2203,8 +2203,10 @@ complete. Follow the same dependency and verification protocol used above.
   Operator reads now use parameterized async repositories while retaining Workspace
   filters and minimized fields. Platform/Workspace overview plus subscription, monthly
   usage, invoice, refund, and failed-Webhook views now use the same async boundary and
-  omit provider payloads, URLs, and errors. Global composition waits for Flag and
-  incident repositories so no Operator flow spans stores.
+  omit provider payloads, URLs, and errors. Feature Flags now serialize revision updates
+  and active Workspace overrides while committing immutable events atomically; real
+  PostgreSQL concurrency smoke verifies one-winner semantics and deterministic evaluation.
+  Global composition waits for the incident repository so no Operator flow spans stores.
 
 ### P23-01 Full Commercial End-To-End Suite
 

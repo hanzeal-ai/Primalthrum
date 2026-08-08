@@ -2,6 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
+import { type OperatorFeatureFlagStore } from './operatorFeatureFlagStore';
 
 export interface OperatorFeatureFlagOverride {
   id: number;
@@ -82,7 +83,7 @@ interface EventRow {
   created_at: string;
 }
 
-export class OperatorFeatureFlagRepository {
+export class OperatorFeatureFlagRepository implements OperatorFeatureFlagStore {
   constructor(
     private readonly db: DatabaseAdapter,
     private readonly now: () => Date = () => new Date(),

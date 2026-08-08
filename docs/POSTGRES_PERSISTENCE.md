@@ -56,8 +56,10 @@ abuse-event Operator reads now also have parameterized async repositories with e
 Workspace filters and minimized response contracts. Platform/Workspace overview and
 subscription, monthly usage, invoice, refund, and failed-Webhook views now share the same
 async boundary without exposing payment URLs, payloads, or error text. Application
-composition remains on the synchronous fallback until Flag and incident repositories
-share the asynchronous database boundary.
+Feature Flags now also have an async repository with row-locked revision updates,
+one-active-Workspace-override enforcement, deterministic evaluation, and transactional
+immutable events. Application composition remains on the synchronous fallback until the
+incident repository shares the asynchronous database boundary.
 The application-level PostgreSQL smoke completes registration and email verification
 over HTTP and asserts that no account lifecycle records leak into local SQLite. PostgreSQL
 must not be selected as the sole application database until the remaining
