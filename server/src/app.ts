@@ -132,7 +132,11 @@ import { type SecretStore } from './services/secretStore';
 import { RuntimeProviderResolver } from './services/runtimeProviderResolver';
 import { RuntimeSpeechResolver } from './services/runtimeSpeechResolver';
 import { BillingError, BillingRepository } from './services/billingRepository';
+import { AsyncBillingRepository } from './services/asyncBillingRepository';
+import { type BillingStore } from './services/billingStore';
 import { PaymentLifecycleRepository } from './services/paymentLifecycleRepository';
+import { AsyncPaymentLifecycleRepository } from './services/asyncPaymentLifecycleRepository';
+import { type PaymentLifecycleStore } from './services/paymentLifecycleStore';
 import { type PaymentProviderAdapter } from './services/paymentProvider';
 import { PaymentWebhookProcessor } from './services/paymentWebhookProcessor';
 import { registerBillingRoutes } from './routes/billingRoutes';
@@ -412,12 +416,12 @@ export function createApp(options: AppOptions = {}): Koa {
   const capabilitySettingsRepository: CapabilitySettingsStore = identityDatabase
     ? new AsyncCapabilitySettingsRepository(identityDatabase)
     : new CapabilitySettingsRepository(db);
-  const billingRepository = new BillingRepository(db);
-  const paymentRepository = new PaymentLifecycleRepository(db);
-  const paymentWebhookProcessor = new PaymentWebhookProcessor(
-    paymentRepository,
-    billingRepository,
-  );
+  const billingRepository: BillingStore = runtimeDatabase
+    ? new AsyncBillingRepository(runtimeDatabase)
+    : new BillingRepository(db);
+  const paymentRepository: PaymentLifecycleStore = runtimeDatabase
+    ? new AsyncPaymentLifecycleRepository(runtimeDatabase)
+    : new PaymentLifecycleRepository(db);
   const paymentAdapter = options.paymentAdapter;
   const usageExportOutboxRepository: UsageExportOutboxStore = runtimeDatabase
     ? new AsyncUsageExportOutboxRepository(runtimeDatabase)
@@ -433,6 +437,10 @@ export function createApp(options: AppOptions = {}): Koa {
   const runtimeCreditLedger: CreditLedgerStore = runtimeDatabase
     ? new AsyncCreditLedgerRepository(runtimeDatabase)
     : new CreditLedgerRepository(db, () => new Date());
+  const paymentWebhookProcessor = new PaymentWebhookProcessor(
+    paymentRepository,
+    billingRepository,
+  );
   if (options.usageMeterExporter) {
     usageExportDispatcher = new UsageExportDispatcher(
       usageExportOutboxRepository,
@@ -486,9 +494,20 @@ export function createApp(options: AppOptions = {}): Koa {
     );
     accountEmailDispatcher.kick();
   }
-  for (const [planKey, priceRef] of Object.entries(options.paymentPriceRefs ?? {})) {
-    if (priceRef.trim()) paymentRepository.configurePrice('stripe', planKey, priceRef.trim());
-  }
+  const paymentReady = Promise.all(
+    Object.entries(options.paymentPriceRefs ?? {})
+      .filter(([, priceRef]) => Boolean(priceRef.trim()))
+      .map(([planKey, priceRef]) => Promise.resolve(
+        paymentRepository.configurePrice('stripe', planKey, priceRef.trim()),
+      )),
+  ).then(() => undefined);
+  void paymentReady.catch((error) => {
+    logger.log({
+      level: 'error',
+      code: 'PAYMENT_PRICE_CONFIGURATION_FAILED',
+      message: error instanceof Error ? error.message : 'payment price configuration failed',
+    });
+  });
   const toolAuditRepository: ToolAuditStore = runtimeDatabase
     ? new AsyncToolAuditRepository(runtimeDatabase)
     : new ToolAuditRepository(db);
@@ -801,6 +820,7 @@ export function createApp(options: AppOptions = {}): Koa {
     logger,
     paymentAdapter,
     payments: paymentRepository,
+    paymentsReady: paymentReady,
     publicAppUrl,
     stripeWebhookSecret: options.stripeWebhookSecret,
     usage: usageRatingRepository,
@@ -874,7 +894,7 @@ export function createApp(options: AppOptions = {}): Koa {
         if (!Number.isSafeInteger(workspaceId) || !Number.isSafeInteger(invitationId)) {
           throw new Error('invitation challenge context is invalid');
         }
-        billingRepository.assertEntitled(
+        await billingRepository.assertEntitled(
           workspaceId,
           'seats',
           (await workspaceRepository.listMembers(workspaceId)).length,
@@ -1112,8 +1132,8 @@ export function createApp(options: AppOptions = {}): Koa {
         verificationRequired: true,
         emailVerified: false,
         ...(options.exposeAccountEmailPreview ? { emailPreviewUrl } : {}),
-        entitlementSnapshot: billingRepository.entitlementSnapshot(workspace.id),
-        creditAccount: billingRepository.creditAccount(workspace.id),
+        entitlementSnapshot: await billingRepository.entitlementSnapshot(workspace.id),
+        creditAccount: await billingRepository.creditAccount(workspace.id),
       };
     } catch (error) {
       if (isDuplicateEmailError(error)) {
@@ -1328,7 +1348,7 @@ export function createApp(options: AppOptions = {}): Koa {
       const email = await workspaceRepository.validateInvitationTarget(workspaceId, body.email);
       const memberCount = (await workspaceRepository.listMembers(workspaceId)).length;
       const pendingInvitationCount = await workspaceRepository.pendingInvitationCount(workspaceId, email);
-      billingRepository.assertEntitled(
+      await billingRepository.assertEntitled(
         workspaceId,
         'seats',
         memberCount + pendingInvitationCount,
@@ -1405,7 +1425,7 @@ export function createApp(options: AppOptions = {}): Koa {
         ctx.body = { error: 'invalid email or password' };
         return;
       }
-      billingRepository.assertEntitled(
+      await billingRepository.assertEntitled(
         invitation.workspaceId,
         'seats',
         (await workspaceRepository.listMembers(invitation.workspaceId)).length,

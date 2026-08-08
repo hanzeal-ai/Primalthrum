@@ -1,5 +1,5 @@
-import { BillingRepository } from './billingRepository';
-import { PaymentLifecycleRepository } from './paymentLifecycleRepository';
+import { type PaymentBillingStore } from './paymentBillingStore';
+import { type PaymentLifecycleStore } from './paymentLifecycleStore';
 import {
   PaymentError,
   type CommercialSubscriptionState,
@@ -11,28 +11,28 @@ const PROVIDER = 'stripe';
 
 export class PaymentWebhookProcessor {
   constructor(
-    private readonly payments: PaymentLifecycleRepository,
-    private readonly billing: BillingRepository,
+    private readonly payments: PaymentLifecycleStore,
+    private readonly billing: PaymentBillingStore,
     private readonly gracePeriodDays = 7,
   ) {}
 
-  process(
+  async process(
     event: PaymentWebhookEvent,
     rawPayload: string,
     signatureTimestamp: number | null,
-  ): PaymentWebhookResult {
+  ): Promise<PaymentWebhookResult> {
     validateEvent(event);
-    if (!this.payments.receiveWebhook(PROVIDER, event, rawPayload, signatureTimestamp)) {
+    if (!await this.payments.receiveWebhook(PROVIDER, event, rawPayload, signatureTimestamp)) {
       return { eventId: event.id, status: 'duplicate', workspaceId: null };
     }
 
     try {
-      const workspaceId = this.dispatch(event);
+      const workspaceId = await this.dispatch(event);
       const status = workspaceId === null ? 'ignored' : 'processed';
-      this.payments.finishWebhook(PROVIDER, event.id, status, workspaceId);
+      await this.payments.finishWebhook(PROVIDER, event.id, status, workspaceId);
       return { eventId: event.id, status, workspaceId };
     } catch (error) {
-      this.payments.finishWebhook(
+      await this.payments.finishWebhook(
         PROVIDER,
         event.id,
         'failed',
@@ -43,7 +43,7 @@ export class PaymentWebhookProcessor {
     }
   }
 
-  private dispatch(event: PaymentWebhookEvent): number | null {
+  private async dispatch(event: PaymentWebhookEvent): Promise<number | null> {
     switch (event.type) {
       case 'checkout.session.completed':
         return this.checkoutCompleted(event);
@@ -65,13 +65,13 @@ export class PaymentWebhookProcessor {
     }
   }
 
-  private checkoutCompleted(event: PaymentWebhookEvent): number | null {
+  private async checkoutCompleted(event: PaymentWebhookEvent): Promise<number | null> {
     const object = event.data.object;
-    const workspaceId = this.workspaceId(object);
+    const workspaceId = await this.workspaceId(object);
     if (workspaceId === null) return null;
     const customerRef = stringValue(object.customer);
     if (customerRef) {
-      this.payments.upsertCustomer({
+      await this.payments.upsertCustomer({
         workspaceId,
         provider: PROVIDER,
         providerCustomerRef: customerRef,
@@ -79,32 +79,32 @@ export class PaymentWebhookProcessor {
       });
     }
     const sessionRef = requiredString(object.id, 'checkout session id');
-    this.payments.completeCheckout(PROVIDER, sessionRef);
+    await this.payments.completeCheckout(PROVIDER, sessionRef);
     return workspaceId;
   }
 
-  private subscriptionChanged(event: PaymentWebhookEvent): number | null {
+  private async subscriptionChanged(event: PaymentWebhookEvent): Promise<number | null> {
     const object = event.data.object;
     const customerRef = stringValue(object.customer);
     const subscriptionRef = requiredString(object.id, 'subscription id');
-    const workspaceId = this.workspaceId(object, customerRef, subscriptionRef);
+    const workspaceId = await this.workspaceId(object, customerRef, subscriptionRef);
     if (workspaceId === null) return null;
     const priceRef = nestedString(object, 'items', 'data', 0, 'price', 'id');
-    const planKey = this.planKey(object, priceRef, workspaceId);
+    const planKey = await this.planKey(object, priceRef, workspaceId);
     const providerState = event.type === 'customer.subscription.deleted'
       ? 'canceled'
       : stringValue(object.status);
     const state = mapSubscriptionState(providerState, Boolean(object.cancel_at_period_end));
     const period = subscriptionPeriod(object);
     if (customerRef) {
-      this.payments.upsertCustomer({
+      await this.payments.upsertCustomer({
         workspaceId,
         provider: PROVIDER,
         providerCustomerRef: customerRef,
         email: '',
       });
     }
-    this.payments.applySubscriptionState({
+    await this.payments.applySubscriptionState({
       workspaceId,
       provider: PROVIDER,
       eventRef: event.id,
@@ -124,15 +124,15 @@ export class PaymentWebhookProcessor {
     return workspaceId;
   }
 
-  private invoiceChanged(event: PaymentWebhookEvent): number | null {
+  private async invoiceChanged(event: PaymentWebhookEvent): Promise<number | null> {
     const object = event.data.object;
     const customerRef = stringValue(object.customer);
     const subscriptionRef = invoiceSubscriptionRef(object);
-    const workspaceId = this.workspaceId(object, customerRef, subscriptionRef);
+    const workspaceId = await this.workspaceId(object, customerRef, subscriptionRef);
     if (workspaceId === null) return null;
     const period = invoicePeriod(object);
     const paid = event.type === 'invoice.paid' || Boolean(object.paid);
-    this.payments.upsertInvoice({
+    await this.payments.upsertInvoice({
       workspaceId,
       provider: PROVIDER,
       invoiceRef: requiredString(object.id, 'invoice id'),
@@ -151,14 +151,14 @@ export class PaymentWebhookProcessor {
       paidAt: unixTimestamp(nestedNumber(object, 'status_transitions', 'paid_at')),
     });
 
-    const subscription = this.payments.subscription(workspaceId);
+    const subscription = await this.payments.subscription(workspaceId);
     const invoicePriceRef = nestedString(object, 'lines', 'data', 0, 'price', 'id')
       || nestedString(object, 'lines', 'data', 0, 'pricing', 'price_details', 'price');
     const invoicePlanKey = invoicePriceRef
-      ? this.payments.planForPrice(PROVIDER, invoicePriceRef) ?? subscription.planKey
+      ? await this.payments.planForPrice(PROVIDER, invoicePriceRef) ?? subscription.planKey
       : subscription.planKey;
     if (event.type === 'invoice.payment_failed') {
-      this.payments.applySubscriptionState({
+      await this.payments.applySubscriptionState({
         workspaceId,
         provider: PROVIDER,
         eventRef: event.id,
@@ -173,7 +173,7 @@ export class PaymentWebhookProcessor {
     }
     if (!paid) return workspaceId;
 
-    const applied = this.payments.applySubscriptionState({
+    await this.payments.applySubscriptionState({
       workspaceId,
       provider: PROVIDER,
       eventRef: event.id,
@@ -186,35 +186,34 @@ export class PaymentWebhookProcessor {
       periodEndsAt: unixTimestamp(period.end),
       cancelAtPeriodEnd: subscription.cancelAtPeriodEnd,
     });
-    if (applied) {
-      const plan = this.billing.listPlans().find((candidate) => candidate.key === invoicePlanKey);
-      if (plan && plan.monthlyCreditGrant > 0) {
-        const invoiceRef = requiredString(object.id, 'invoice id');
-        this.billing.grantCredits({
-          workspaceId,
-          amount: plan.monthlyCreditGrant,
-          idempotencyKey: `invoice:${invoiceRef}`,
-          sourceType: 'invoice',
-          sourceRef: invoiceRef,
-        });
-      }
+    const plan = (await this.billing.listPlans())
+      .find((candidate) => candidate.key === invoicePlanKey);
+    if (plan && plan.monthlyCreditGrant > 0) {
+      const invoiceRef = requiredString(object.id, 'invoice id');
+      await this.billing.grantCredits({
+        workspaceId,
+        amount: plan.monthlyCreditGrant,
+        idempotencyKey: `invoice:${invoiceRef}`,
+        sourceType: 'invoice',
+        sourceRef: invoiceRef,
+      });
     }
     return workspaceId;
   }
 
-  private chargeRefunded(event: PaymentWebhookEvent): number | null {
+  private async chargeRefunded(event: PaymentWebhookEvent): Promise<number | null> {
     const object = event.data.object;
-    const workspaceId = this.workspaceId(object, stringValue(object.customer));
+    const workspaceId = await this.workspaceId(object, stringValue(object.customer));
     if (workspaceId === null) return null;
     const invoiceRef = stringValue(object.invoice);
     const refunds = nestedArray(object, 'refunds', 'data');
     for (const refund of refunds) {
-      this.storeRefund(workspaceId, refund, invoiceRef);
+      await this.storeRefund(workspaceId, refund, invoiceRef);
     }
     const amount = numberValue(object.amount);
     const refunded = numberValue(object.amount_refunded);
     if (invoiceRef) {
-      this.payments.recordInvoiceRefund({
+      await this.payments.recordInvoiceRefund({
         workspaceId,
         provider: PROVIDER,
         invoiceRef,
@@ -222,13 +221,13 @@ export class PaymentWebhookProcessor {
         amountRefundedMinor: refunded,
       });
     }
-    const subscription = this.payments.subscription(workspaceId);
+    const subscription = await this.payments.subscription(workspaceId);
     if (
       refunded >= amount
       && amount > 0
       && ['canceled', 'cancel_at_period_end'].includes(subscription.state)
     ) {
-      this.payments.applySubscriptionState({
+      await this.payments.applySubscriptionState({
         workspaceId,
         provider: PROVIDER,
         eventRef: event.id,
@@ -240,20 +239,20 @@ export class PaymentWebhookProcessor {
     return workspaceId;
   }
 
-  private refundChanged(event: PaymentWebhookEvent): number | null {
+  private async refundChanged(event: PaymentWebhookEvent): Promise<number | null> {
     const object = event.data.object;
-    const workspaceId = this.workspaceId(object);
+    const workspaceId = await this.workspaceId(object);
     if (workspaceId === null) return null;
-    this.storeRefund(workspaceId, object, stringValue(object.invoice));
+    await this.storeRefund(workspaceId, object, stringValue(object.invoice));
     return workspaceId;
   }
 
-  private storeRefund(
+  private async storeRefund(
     workspaceId: number,
     refund: Record<string, unknown>,
     invoiceRef: string,
-  ): void {
-    this.payments.upsertRefund({
+  ): Promise<void> {
+    await this.payments.upsertRefund({
       workspaceId,
       provider: PROVIDER,
       refundRef: requiredString(refund.id, 'refund id'),
@@ -267,21 +266,28 @@ export class PaymentWebhookProcessor {
     });
   }
 
-  private workspaceId(
+  private async workspaceId(
     object: Record<string, unknown>,
     customerRef = '',
     subscriptionRef = '',
-  ): number | null {
+  ): Promise<number | null> {
     const metadataId = Number(nestedString(object, 'metadata', 'workspace_id'));
     if (Number.isSafeInteger(metadataId) && metadataId > 0) return metadataId;
     return this.payments.workspaceForProviderObject(PROVIDER, customerRef, subscriptionRef);
   }
 
-  private planKey(object: Record<string, unknown>, priceRef: string, workspaceId: number): string {
+  private async planKey(
+    object: Record<string, unknown>,
+    priceRef: string,
+    workspaceId: number,
+  ): Promise<string> {
     const metadataPlan = nestedString(object, 'metadata', 'plan_key');
-    const mappedPlan = priceRef ? this.payments.planForPrice(PROVIDER, priceRef) : null;
-    const planKey = mappedPlan || metadataPlan || this.payments.subscription(workspaceId).planKey;
-    if (!this.billing.listPlans().some((plan) => plan.key === planKey)) {
+    const mappedPlan = priceRef ? await this.payments.planForPrice(PROVIDER, priceRef) : null;
+    const subscription = mappedPlan || metadataPlan
+      ? null
+      : await this.payments.subscription(workspaceId);
+    const planKey = mappedPlan || metadataPlan || subscription?.planKey || '';
+    if (!(await this.billing.listPlans()).some((plan) => plan.key === planKey)) {
       throw new PaymentError('PAYMENT_PLAN_UNKNOWN', 'payment event references an unknown plan');
     }
     return planKey;

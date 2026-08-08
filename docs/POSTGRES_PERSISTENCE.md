@@ -14,9 +14,11 @@ the `pg` connection pool, positional parameters, transaction-scoped clients,
 rollback, schema introspection, and explicit pool shutdown. Identity, Workspace,
 Session, Agent, Agent version, Run, StreamEvent, Document, RAG index, Conversation,
 ProviderConfig, Job, CapabilitySettings, ToolAudit, DocumentUploadSecurity,
-UsageRating, CreditLedger, UsageExportOutbox, BillingPlan, Entitlement, and Trial
-repositories now use this boundary. Async usage rating and Credits serialize
-Workspace mutations in transactions, preserve idempotent immutable evidence,
+UsageRating, CreditLedger, UsageExportOutbox, BillingPlan, Entitlement, Trial,
+and PaymentLifecycle repositories now use this boundary. The async Billing facade
+keeps Plan, Trial, Entitlement, Credits, subscriptions, invoices, refunds, and
+Webhook evidence in the same runtime database. Async usage rating and Credits
+serialize Workspace mutations in transactions, preserve idempotent immutable evidence,
 and enforce cost or balance limits before insertion. Export workers atomically claim rows with
 PostgreSQL `SKIP LOCKED`, retain bounded retry evidence, and avoid duplicate
 delivery across workers. Application composition selects these repositories

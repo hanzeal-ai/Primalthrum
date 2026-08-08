@@ -30,9 +30,9 @@ afterEach(() => {
   rmSync(rootDir, { recursive: true, force: true });
 });
 
-test('signed-provider events drive an idempotent subscription and credit lifecycle', () => {
+test('signed-provider events drive an idempotent subscription and credit lifecycle', async () => {
   const created = subscriptionEvent('evt_sub_created', 100, 'active');
-  assert.deepEqual(processor.process(created, JSON.stringify(created), 100), {
+  assert.deepEqual(await processor.process(created, JSON.stringify(created), 100), {
     eventId: 'evt_sub_created',
     status: 'processed',
     workspaceId: 1,
@@ -41,13 +41,13 @@ test('signed-provider events drive an idempotent subscription and credit lifecyc
   assert.equal(payments.subscription(1).providerSubscriptionRef, 'sub_123');
 
   const invoicePaid = invoiceEvent('evt_invoice_paid', 200, 'invoice.paid', 'in_001', true);
-  processor.process(invoicePaid, JSON.stringify(invoicePaid), 200);
+  await processor.process(invoicePaid, JSON.stringify(invoicePaid), 200);
   assert.equal(payments.subscription(1).state, 'active');
   assert.equal(billing.creditAccount(1).availableCredits, 26_000);
   assert.equal(payments.listInvoices(1)[0]?.providerInvoiceRef, 'in_001');
 
   assert.equal(
-    processor.process(invoicePaid, JSON.stringify(invoicePaid), 200).status,
+    (await processor.process(invoicePaid, JSON.stringify(invoicePaid), 200)).status,
     'duplicate',
   );
   assert.equal(billing.creditAccount(1).availableCredits, 26_000);
@@ -59,7 +59,7 @@ test('signed-provider events drive an idempotent subscription and credit lifecyc
     'in_001',
     true,
   );
-  processor.process(sameInvoiceUpdated, JSON.stringify(sameInvoiceUpdated), 225);
+  await processor.process(sameInvoiceUpdated, JSON.stringify(sameInvoiceUpdated), 225);
   assert.equal(billing.creditAccount(1).availableCredits, 26_000);
 
   const staleFailure = invoiceEvent(
@@ -69,7 +69,7 @@ test('signed-provider events drive an idempotent subscription and credit lifecyc
     'in_001',
     false,
   );
-  processor.process(staleFailure, JSON.stringify(staleFailure), 150);
+  await processor.process(staleFailure, JSON.stringify(staleFailure), 150);
   assert.equal(payments.subscription(1).state, 'active');
 
   const currentFailure = invoiceEvent(
@@ -79,14 +79,14 @@ test('signed-provider events drive an idempotent subscription and credit lifecyc
     'in_002',
     false,
   );
-  processor.process(currentFailure, JSON.stringify(currentFailure), 300);
+  await processor.process(currentFailure, JSON.stringify(currentFailure), 300);
   assert.equal(payments.subscription(1).state, 'past_due');
   assert.equal(payments.subscription(1).graceEndsAt, '1970-01-08T00:05:00.000Z');
   assert.equal(billing.entitlementSnapshot(1).subscriptionState, 'restricted');
   assert.equal(billing.entitlementSnapshot(1).planKey, 'free');
 
   const renewal = invoiceEvent('evt_invoice_renewal', 400, 'invoice.paid', 'in_002', true);
-  processor.process(renewal, JSON.stringify(renewal), 400);
+  await processor.process(renewal, JSON.stringify(renewal), 400);
   assert.equal(payments.subscription(1).state, 'active');
   assert.equal(billing.creditAccount(1).availableCredits, 51_000);
 
@@ -103,7 +103,7 @@ test('signed-provider events drive an idempotent subscription and credit lifecyc
   ]);
 });
 
-test('checkout customer mapping supports cancellation and full refund records', () => {
+test('checkout customer mapping supports cancellation and full refund records', async () => {
   db.run(`
     INSERT INTO users (id, workspace_id, email, password_hash, role)
     VALUES (10, 1, 'owner@example.com', 'hash', 'admin');
@@ -123,22 +123,22 @@ test('checkout customer mapping supports cancellation and full refund records', 
     metadata: { workspace_id: '1', plan_key: 'pro' },
     customer_details: { email: 'owner@example.com' },
   });
-  processor.process(checkout, JSON.stringify(checkout), 100);
+  await processor.process(checkout, JSON.stringify(checkout), 100);
   assert.equal(payments.checkoutByKey(1, 'stripe', 'checkout-1')?.status, 'complete');
   assert.equal(payments.customer(1, 'stripe')?.providerCustomerRef, 'cus_123');
 
-  processor.process(
+  await processor.process(
     subscriptionEvent('evt_sub_created', 200, 'active'),
     '{}',
     200,
   );
   const cancelScheduled = subscriptionEvent('evt_sub_cancel_scheduled', 300, 'active', true);
-  processor.process(cancelScheduled, JSON.stringify(cancelScheduled), 300);
+  await processor.process(cancelScheduled, JSON.stringify(cancelScheduled), 300);
   assert.equal(payments.subscription(1).state, 'cancel_at_period_end');
 
   const canceled = subscriptionEvent('evt_sub_deleted', 400, 'canceled');
   canceled.type = 'customer.subscription.deleted';
-  processor.process(canceled, JSON.stringify(canceled), 400);
+  await processor.process(canceled, JSON.stringify(canceled), 400);
   assert.equal(payments.subscription(1).state, 'canceled');
   assert.equal(billing.entitlementSnapshot(1).planKey, 'free');
 
@@ -159,7 +159,7 @@ test('checkout customer mapping supports cancellation and full refund records', 
       }],
     },
   });
-  processor.process(refund, JSON.stringify(refund), 500);
+  await processor.process(refund, JSON.stringify(refund), 500);
   assert.equal(payments.subscription(1).state, 'refunded');
   assert.equal(
     db.query<{ status: string }>(`SELECT status FROM billing_refunds WHERE provider_refund_ref = 're_123';`)[0]?.status,
@@ -167,9 +167,12 @@ test('checkout customer mapping supports cancellation and full refund records', 
   );
 });
 
-test('unsupported events are persisted as ignored', () => {
+test('unsupported events are persisted as ignored', async () => {
   const unsupported = event('evt_unknown', 'customer.created', 100, { id: 'cus_123' });
-  assert.equal(processor.process(unsupported, JSON.stringify(unsupported), 100).status, 'ignored');
+  assert.equal(
+    (await processor.process(unsupported, JSON.stringify(unsupported), 100)).status,
+    'ignored',
+  );
   assert.equal(
     db.query<{ status: string }>(`SELECT status FROM payment_webhook_events WHERE provider_event_ref = 'evt_unknown';`)[0]?.status,
     'ignored',

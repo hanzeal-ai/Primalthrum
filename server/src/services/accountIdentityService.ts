@@ -1,4 +1,4 @@
-import { BillingRepository } from './billingRepository';
+import { type BillingStore } from './billingStore';
 import { AccountEmailOutboxRepository } from './accountEmailOutboxRepository';
 import { AccountOnboardingRepository } from './accountOnboardingRepository';
 import { AccountTokenRepository } from './accountTokenRepository';
@@ -13,7 +13,7 @@ export class AccountIdentityService {
     private readonly tokens: AccountTokenRepository,
     private readonly emails: AccountEmailOutboxRepository,
     private readonly onboarding: AccountOnboardingRepository,
-    private readonly billing: BillingRepository,
+    private readonly billing: BillingStore,
     private readonly publicAppUrl: string,
     private readonly now: () => Date = () => new Date(),
   ) {}
@@ -42,10 +42,10 @@ export class AccountIdentityService {
     const verifiedAt = this.now().toISOString();
     await this.users.markEmailVerified(consumed.userId, verifiedAt);
     const trial = onboarding.selectedPlanKey === 'pro'
-      ? this.billing.activateTrial(onboarding.workspaceId, consumed.userId, 'pro')
+      ? await this.billing.activateTrial(onboarding.workspaceId, consumed.userId, 'pro')
       : null;
-    const entitlementSnapshot = this.billing.entitlementSnapshot(onboarding.workspaceId);
-    const creditAccount = this.billing.creditAccount(onboarding.workspaceId);
+    const entitlementSnapshot = await this.billing.entitlementSnapshot(onboarding.workspaceId);
+    const creditAccount = await this.billing.creditAccount(onboarding.workspaceId);
     this.onboarding.activate(onboarding.workspaceId, verifiedAt);
     return { onboarding, trial, entitlementSnapshot, creditAccount };
   }

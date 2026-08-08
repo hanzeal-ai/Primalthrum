@@ -2161,8 +2161,10 @@ complete. Follow the same dependency and verification protocol used above.
   async Plan and Entitlement repositories now preserve catalog order, active
   subscription rules, grant priority, Trial expiry, grace restriction, and tenant
   isolation. Trial activation now atomically enforces one use per user and
-  Workspace while applying Credits and subscription state. Payment lifecycle,
-  remaining security, compliance, and Operator repositories plus production data
+  Workspace while applying Credits and subscription state. Payment prices,
+  customers, Checkout, subscription transitions, invoices, refunds, and retryable
+  Webhook evidence now use the async runtime database. Remaining security,
+  compliance, Operator repositories, payment reconciliation, and production data
   transfer remain open before runtime cutover.
 
 ### P23-01 Full Commercial End-To-End Suite

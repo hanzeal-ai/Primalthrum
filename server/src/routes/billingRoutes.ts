@@ -2,10 +2,11 @@ import Router from '@koa/router';
 import type Koa from 'koa';
 
 import { sendApiError } from '../services/apiErrors';
-import { BillingError, BillingRepository } from '../services/billingRepository';
+import { BillingError } from '../services/billingRepository';
+import { type BillingStore } from '../services/billingStore';
 import { normalizeBillingKey } from '../services/billingValidation';
 import { type StructuredLogger } from '../services/logger';
-import { PaymentLifecycleRepository } from '../services/paymentLifecycleRepository';
+import { type PaymentLifecycleStore } from '../services/paymentLifecycleStore';
 import { PaymentProviderError, type PaymentProviderAdapter } from '../services/paymentProvider';
 import { PaymentError, type PaymentWebhookEvent } from '../services/paymentTypes';
 import { PaymentWebhookProcessor } from '../services/paymentWebhookProcessor';
@@ -15,12 +16,13 @@ import { type UsageRatingStore } from '../services/usageRatingStore';
 
 interface BillingRouteDependencies {
   authorize: (ctx: Koa.Context, permission: WorkspacePermission) => boolean;
-  billing: BillingRepository;
+  billing: BillingStore;
   currentUserId: (ctx: Koa.Context) => number;
   currentWorkspaceId: (ctx: Koa.Context) => number;
   logger: StructuredLogger;
   paymentAdapter?: PaymentProviderAdapter;
-  payments: PaymentLifecycleRepository;
+  payments: PaymentLifecycleStore;
+  paymentsReady?: Promise<unknown>;
   publicAppUrl: string;
   stripeWebhookSecret?: string;
   webhooks: PaymentWebhookProcessor;
@@ -44,12 +46,13 @@ export function registerBillingRoutes(
     webhooks,
     usage,
   } = dependencies;
+  const paymentsReady = dependencies.paymentsReady ?? Promise.resolve();
 
-  router.get('/api/public/plans', (ctx) => {
-    ctx.body = billing.listPlans();
+  router.get('/api/public/plans', async (ctx) => {
+    ctx.body = await billing.listPlans();
   });
 
-  router.post('/api/webhooks/stripe', (ctx) => {
+  router.post('/api/webhooks/stripe', async (ctx) => {
     const rawBody = ctx.request.rawBody ?? '';
     try {
       if (!stripeWebhookSecret) {
@@ -66,7 +69,8 @@ export function registerBillingRoutes(
         stripeWebhookSecret,
       );
       const event = JSON.parse(rawBody) as PaymentWebhookEvent;
-      ctx.body = webhooks.process(event, rawBody, signatureTimestamp);
+      await paymentsReady;
+      ctx.body = await webhooks.process(event, rawBody, signatureTimestamp);
     } catch (error) {
       const paymentError = error instanceof PaymentError ? error : null;
       const invalidPayload = error instanceof SyntaxError
@@ -83,20 +87,22 @@ export function registerBillingRoutes(
     }
   });
 
-  router.get('/api/billing/summary', (ctx) => {
+  router.get('/api/billing/summary', async (ctx) => {
     if (!authorize(ctx, 'billing.read')) return;
     const workspaceId = currentWorkspaceId(ctx);
+    await paymentsReady;
     ctx.body = {
-      entitlementSnapshot: billing.entitlementSnapshot(workspaceId),
-      creditAccount: billing.creditAccount(workspaceId),
-      subscription: payments.subscription(workspaceId),
-      invoices: payments.listInvoices(workspaceId),
+      entitlementSnapshot: await billing.entitlementSnapshot(workspaceId),
+      creditAccount: await billing.creditAccount(workspaceId),
+      subscription: await payments.subscription(workspaceId),
+      invoices: await payments.listInvoices(workspaceId),
     };
   });
 
-  router.get('/api/billing/invoices', (ctx) => {
+  router.get('/api/billing/invoices', async (ctx) => {
     if (!authorize(ctx, 'billing.read')) return;
-    ctx.body = payments.listInvoices(currentWorkspaceId(ctx));
+    await paymentsReady;
+    ctx.body = await payments.listInvoices(currentWorkspaceId(ctx));
   });
 
   router.get('/api/billing/usage', async (ctx) => {
@@ -147,13 +153,14 @@ export function registerBillingRoutes(
     if (!authorize(ctx, 'billing.manage')) return;
     if (!paymentAdapter) return providerUnavailable(ctx, logger);
     try {
+      await paymentsReady;
       const workspaceId = currentWorkspaceId(ctx);
       const userId = currentUserId(ctx);
       const body = ctx.request.body as { planKey?: unknown };
       const planKey = typeof body.planKey === 'string' ? body.planKey.trim() : '';
-      const plan = billing.listPlans().find((candidate) => candidate.key === planKey);
+      const plan = (await billing.listPlans()).find((candidate) => candidate.key === planKey);
       if (!plan || plan.monthlyPriceMinor <= 0) throw new Error('a paid plan is required');
-      const price = payments.priceForPlan(paymentAdapter.name, planKey);
+      const price = await payments.priceForPlan(paymentAdapter.name, planKey);
       if (!price) {
         sendApiError(ctx, logger, {
           status: 409,
@@ -163,20 +170,24 @@ export function registerBillingRoutes(
         return;
       }
       const idempotencyKey = requestIdempotencyKey(ctx);
-      const existing = payments.checkoutByKey(workspaceId, paymentAdapter.name, idempotencyKey);
+      const existing = await payments.checkoutByKey(
+        workspaceId,
+        paymentAdapter.name,
+        idempotencyKey,
+      );
       if (existing) {
         ctx.body = existing;
         return;
       }
       const email = String(ctx.state.authSession?.user.email ?? '');
-      let customer = payments.customer(workspaceId, paymentAdapter.name);
+      let customer = await payments.customer(workspaceId, paymentAdapter.name);
       if (!customer) {
         const created = await paymentAdapter.createCustomer({
           workspaceId,
           email,
           idempotencyKey: `${idempotencyKey}:customer`,
         });
-        customer = payments.upsertCustomer({
+        customer = await payments.upsertCustomer({
           workspaceId,
           provider: paymentAdapter.name,
           providerCustomerRef: created.id,
@@ -193,7 +204,7 @@ export function registerBillingRoutes(
         idempotencyKey,
       });
       ctx.status = 201;
-      ctx.body = payments.recordCheckout({
+      ctx.body = await payments.recordCheckout({
         workspaceId,
         provider: paymentAdapter.name,
         idempotencyKey,
@@ -212,7 +223,8 @@ export function registerBillingRoutes(
     if (!authorize(ctx, 'billing.manage')) return;
     if (!paymentAdapter) return providerUnavailable(ctx, logger);
     try {
-      const customer = payments.customer(currentWorkspaceId(ctx), paymentAdapter.name);
+      await paymentsReady;
+      const customer = await payments.customer(currentWorkspaceId(ctx), paymentAdapter.name);
       if (!customer) throw new Error('payment customer does not exist');
       ctx.body = await paymentAdapter.createPortalSession({
         customerRef: customer.providerCustomerRef,
@@ -233,12 +245,13 @@ export function registerBillingRoutes(
     if (!authorize(ctx, 'billing.manage')) return;
     if (!paymentAdapter) return providerUnavailable(ctx, logger);
     try {
+      await paymentsReady;
       const workspaceId = currentWorkspaceId(ctx);
       const body = ctx.request.body as { planKey?: unknown };
       const planKey = typeof body.planKey === 'string' ? body.planKey.trim() : '';
-      const price = payments.priceForPlan(paymentAdapter.name, planKey);
+      const price = await payments.priceForPlan(paymentAdapter.name, planKey);
       if (!price) throw new Error('target plan price is not configured');
-      const subscription = payments.subscription(workspaceId);
+      const subscription = await payments.subscription(workspaceId);
       if (!subscription.providerSubscriptionRef || !subscription.providerSubscriptionItemRef) {
         throw new Error('active provider subscription is required');
       }
@@ -248,9 +261,9 @@ export function registerBillingRoutes(
         priceRef: price.providerPriceRef,
         idempotencyKey: requestIdempotencyKey(ctx),
       });
-      payments.markPendingPlan(workspaceId, planKey);
+      await payments.markPendingPlan(workspaceId, planKey);
       ctx.status = 202;
-      ctx.body = payments.subscription(workspaceId);
+      ctx.body = await payments.subscription(workspaceId);
     } catch (error) {
       paymentMutationError(
         ctx,
@@ -266,7 +279,8 @@ export function registerBillingRoutes(
     if (!authorize(ctx, 'billing.manage')) return;
     if (!paymentAdapter) return providerUnavailable(ctx, logger);
     try {
-      const subscription = payments.subscription(currentWorkspaceId(ctx));
+      await paymentsReady;
+      const subscription = await payments.subscription(currentWorkspaceId(ctx));
       if (!subscription.providerSubscriptionRef) {
         throw new Error('active provider subscription is required');
       }
@@ -287,17 +301,17 @@ export function registerBillingRoutes(
     }
   });
 
-  router.get('/api/billing/entitlements', (ctx) => {
+  router.get('/api/billing/entitlements', async (ctx) => {
     if (!authorize(ctx, 'billing.read')) return;
-    ctx.body = billing.entitlementSnapshot(currentWorkspaceId(ctx));
+    ctx.body = await billing.entitlementSnapshot(currentWorkspaceId(ctx));
   });
 
-  router.post('/api/billing/trial', (ctx) => {
+  router.post('/api/billing/trial', async (ctx) => {
     if (!authorize(ctx, 'billing.manage')) return;
     try {
       const body = ctx.request.body as { planKey?: unknown };
       const planKey = typeof body.planKey === 'string' ? body.planKey : 'pro';
-      const trial = billing.activateTrial(
+      const trial = await billing.activateTrial(
         currentWorkspaceId(ctx),
         currentUserId(ctx),
         planKey,
@@ -305,8 +319,8 @@ export function registerBillingRoutes(
       ctx.status = 201;
       ctx.body = {
         trial,
-        entitlementSnapshot: billing.entitlementSnapshot(currentWorkspaceId(ctx)),
-        creditAccount: billing.creditAccount(currentWorkspaceId(ctx)),
+        entitlementSnapshot: await billing.entitlementSnapshot(currentWorkspaceId(ctx)),
+        creditAccount: await billing.creditAccount(currentWorkspaceId(ctx)),
       };
     } catch (error) {
       const trialErrorCode = error instanceof BillingError

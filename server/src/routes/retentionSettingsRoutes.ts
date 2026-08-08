@@ -1,7 +1,8 @@
 import Router from '@koa/router';
 import type Koa from 'koa';
 
-import { BillingError, BillingRepository } from '../services/billingRepository';
+import { BillingError } from '../services/billingRepository';
+import { type BillingStore } from '../services/billingStore';
 import { sendApiError } from '../services/apiErrors';
 import { type StructuredLogger } from '../services/logger';
 import { verifyPassword } from '../services/passwordHash';
@@ -15,7 +16,7 @@ import {
 
 interface RetentionSettingsRouteDependencies {
   authorize: (ctx: Koa.Context, permission: WorkspacePermission) => boolean;
-  billing: BillingRepository;
+  billing: BillingStore;
   currentUserId: (ctx: Koa.Context) => number;
   currentWorkspaceId: (ctx: Koa.Context) => number;
   logger: StructuredLogger;
@@ -41,15 +42,15 @@ export function registerRetentionSettingsRoutes(
     users,
   } = dependencies;
 
-  router.get('/api/settings/retention', (ctx) => {
+  router.get('/api/settings/retention', async (ctx) => {
     if (!authorize(ctx, 'workspace.read')) return;
-    ctx.body = retentionState(ctx, dependencies);
+    ctx.body = await retentionState(ctx, dependencies);
   });
 
   router.put('/api/settings/retention', async (ctx) => {
     if (!authorize(ctx, 'retention.manage')) return;
     const workspaceId = currentWorkspaceId(ctx);
-    if (!assertRetentionEntitled(ctx, logger, billing, workspaceId)) return;
+    if (!await assertRetentionEntitled(ctx, logger, billing, workspaceId)) return;
     const body = ctx.request.body as Record<string, unknown>;
     if (!await reauthenticate(ctx, logger, users, currentUserId(ctx), body.password)) return;
     try {
@@ -61,7 +62,7 @@ export function registerRetentionSettingsRoutes(
         actorUserId: currentUserId(ctx),
       });
       schedule(workspaceId);
-      ctx.body = retentionState(ctx, dependencies);
+      ctx.body = await retentionState(ctx, dependencies);
     } catch (error) {
       sendApiError(ctx, logger, {
         status: 400,
@@ -74,7 +75,7 @@ export function registerRetentionSettingsRoutes(
   router.post('/api/settings/retention/enforce', async (ctx) => {
     if (!authorize(ctx, 'retention.manage')) return;
     const workspaceId = currentWorkspaceId(ctx);
-    if (!assertRetentionEntitled(ctx, logger, billing, workspaceId)) return;
+    if (!await assertRetentionEntitled(ctx, logger, billing, workspaceId)) return;
     const body = ctx.request.body as Record<string, unknown>;
     if (!await reauthenticate(ctx, logger, users, currentUserId(ctx), body.password)) return;
     try {
@@ -89,13 +90,12 @@ export function registerRetentionSettingsRoutes(
   });
 }
 
-function retentionState(
+async function retentionState(
   ctx: Koa.Context,
   dependencies: RetentionSettingsRouteDependencies,
-): Record<string, unknown> {
+): Promise<Record<string, unknown>> {
   const workspaceId = dependencies.currentWorkspaceId(ctx);
-  const entitlement = dependencies.billing
-    .entitlementSnapshot(workspaceId)
+  const entitlement = (await dependencies.billing.entitlementSnapshot(workspaceId))
     .entitlements['retention.controls'];
   const role = String(ctx.state.authSession?.user.role ?? '');
   return {
@@ -108,14 +108,14 @@ function retentionState(
   };
 }
 
-function assertRetentionEntitled(
+async function assertRetentionEntitled(
   ctx: Koa.Context,
   logger: StructuredLogger,
-  billing: BillingRepository,
+  billing: BillingStore,
   workspaceId: number,
-): boolean {
+): Promise<boolean> {
   try {
-    billing.assertEntitled(workspaceId, 'retention.controls');
+    await billing.assertEntitled(workspaceId, 'retention.controls');
     return true;
   } catch (error) {
     const code = error instanceof BillingError

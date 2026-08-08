@@ -29,6 +29,13 @@ Trial activation has a parameterized async implementation with one transaction
 for the grant, credit top-up, and subscription transition. Database uniqueness
 enforces one Trial per user and one per Workspace, including concurrent requests.
 
+Payment prices, customers, Checkout sessions, subscriptions, invoices, refunds,
+and Webhook evidence share a parameterized async store for SQLite and PostgreSQL.
+Webhook claims reject concurrent duplicates, allow failed or expired claims to be
+retried, and preserve provider event ordering before granting invoice Credits.
+The application billing facade selects Plan, Trial, Entitlement, Credits, and
+payment repositories from the same runtime database.
+
 ## Ledger Invariants
 
 1. Every balance change appends one idempotent `credit_ledger_entries` row.
