@@ -55,7 +55,7 @@ export function registerSpeechRoutes(
       capabilities.assertEnabled(
         await capabilities.snapshot(workspaceId, [`stt:${provider.provider}`]),
       );
-      operation = metering.begin({
+      operation = await metering.begin({
         workspaceId,
         idempotencyKey: requestIdempotencyKey(ctx),
         meter: 'speech.transcription_seconds',
@@ -66,10 +66,10 @@ export function registerSpeechRoutes(
       });
       const result = await speech.transcribe(provider, audio);
       providerConsumed = true;
-      metering.complete(operation, { sizeBytes: audio.sizeBytes });
+      await metering.complete(operation, { sizeBytes: audio.sizeBytes });
       ctx.body = result;
     } catch (error) {
-      if (operation && !providerConsumed) safeRelease(metering, operation, logger);
+      if (operation && !providerConsumed) await safeRelease(metering, operation, logger);
       speechError(ctx, logger, error, 'speech transcription failed');
     }
   });
@@ -87,7 +87,7 @@ export function registerSpeechRoutes(
         await capabilities.snapshot(workspaceId, [`tts:${provider.provider}`]),
       );
       const text = parseSpeechText(body.text);
-      operation = metering.begin({
+      operation = await metering.begin({
         workspaceId,
         idempotencyKey: requestIdempotencyKey(ctx),
         meter: 'speech.synthesis_characters',
@@ -102,10 +102,10 @@ export function registerSpeechRoutes(
         typeof body.voice === 'string' && body.voice.trim() ? body.voice.trim() : 'alloy',
       );
       providerConsumed = true;
-      metering.complete(operation);
+      await metering.complete(operation);
       ctx.body = result;
     } catch (error) {
-      if (operation && !providerConsumed) safeRelease(metering, operation, logger);
+      if (operation && !providerConsumed) await safeRelease(metering, operation, logger);
       speechError(ctx, logger, error, 'speech synthesis failed');
     }
   });
@@ -128,13 +128,13 @@ function requestIdempotencyKey(ctx: Koa.Context): string {
   return key;
 }
 
-function safeRelease(
+async function safeRelease(
   metering: MeteredOperationService,
   operation: MeteredOperation,
   logger: StructuredLogger,
-): void {
+): Promise<void> {
   try {
-    metering.release(operation);
+    await metering.release(operation);
   } catch (error) {
     logger.log({
       level: 'warn',

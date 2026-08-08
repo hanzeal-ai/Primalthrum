@@ -1,26 +1,26 @@
-import { BillingRepository } from './billingRepository';
+import { type CreditLedgerStore } from './creditLedgerStore';
 import { type RuntimeModelEndpoint } from './runtimeProviderResolver';
-import { UsageRatingRepository } from './usageRatingRepository';
+import { type UsageRatingStore } from './usageRatingStore';
 import type { CreditReservationRecord, UsageEventRecord } from './billingTypes';
 
 export class RunUsageService {
   constructor(
-    private readonly ratings: UsageRatingRepository,
-    private readonly billing: BillingRepository,
+    private readonly ratings: UsageRatingStore,
+    private readonly credits: CreditLedgerStore,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
-  reserve(input: {
+  async reserve(input: {
     runId: number;
     workspaceId: number;
     prompt: string;
     llm: RuntimeModelEndpoint;
     channel: 'hosted' | 'api';
-  }): CreditReservationRecord {
+  }): Promise<CreditReservationRecord> {
     const occurredAt = this.now().toISOString();
     const inputTokens = estimateTokens(input.prompt);
     const outputTokens = input.llm.max_tokens ?? 1024;
-    const quotes = [
+    const quotes = await Promise.all([
       this.ratings.quote({
         meter: input.channel === 'hosted' ? 'hosted.runs' : 'api.runs',
         quantity: 1,
@@ -40,9 +40,9 @@ export class RunUsageService {
         model: input.llm.model,
         occurredAt,
       }),
-    ];
-    this.ratings.assertProjected(input.workspaceId, quotes, occurredAt);
-    return this.billing.reserveCredits({
+    ]);
+    await this.ratings.assertProjected(input.workspaceId, quotes, occurredAt);
+    return this.credits.reserve({
       workspaceId: input.workspaceId,
       idempotencyKey: reservationKey(input.runId),
       meter: 'run.total',
@@ -54,8 +54,8 @@ export class RunUsageService {
     runId: number;
     workspaceId: number;
     channel: 'hosted' | 'api';
-  }): void {
-    this.record(input, {
+  }): Promise<void> {
+    return this.record(input, {
       suffix: input.channel,
       meter: input.channel === 'hosted' ? 'hosted.runs' : 'api.runs',
       quantity: 1,
@@ -69,15 +69,26 @@ export class RunUsageService {
     model: string;
     inputTokens: number;
     outputTokens: number;
-  }): void {
-    this.record(input, {
+  }): Promise<void> {
+    return this.recordLlmMeters(input);
+  }
+
+  private async recordLlmMeters(input: {
+    runId: number;
+    workspaceId: number;
+    provider: string;
+    model: string;
+    inputTokens: number;
+    outputTokens: number;
+  }): Promise<void> {
+    await this.record(input, {
       suffix: 'llm-input',
       meter: 'llm.input_tokens',
       quantity: input.inputTokens,
       provider: input.provider,
       model: input.model,
     });
-    this.record(input, {
+    await this.record(input, {
       suffix: 'llm-output',
       meter: 'llm.output_tokens',
       quantity: input.outputTokens,
@@ -93,8 +104,8 @@ export class RunUsageService {
     model: string;
     tokenCount: number;
     purpose: string;
-  }): void {
-    this.record(input, {
+  }): Promise<void> {
+    return this.record(input, {
       suffix: `embedding-${input.purpose}`,
       meter: 'embedding.tokens',
       quantity: input.tokenCount,
@@ -108,8 +119,8 @@ export class RunUsageService {
     workspaceId: number;
     eventId: number;
     tool: string;
-  }): void {
-    this.record(input, {
+  }): Promise<void> {
+    return this.record(input, {
       suffix: `tool-${input.eventId}`,
       meter: 'tool.calls',
       quantity: 1,
@@ -121,8 +132,8 @@ export class RunUsageService {
     runId: number;
     workspaceId: number;
     matchCount: number;
-  }): void {
-    this.record(input, {
+  }): Promise<void> {
+    return this.record(input, {
       suffix: 'rag-retrieval',
       meter: 'rag.retrievals',
       quantity: 1,
@@ -130,12 +141,15 @@ export class RunUsageService {
     });
   }
 
-  settle(runId: number, workspaceId: number): UsageEventRecord | CreditReservationRecord {
-    const totals = this.ratings.totalsForResource(workspaceId, 'run', String(runId));
+  async settle(
+    runId: number,
+    workspaceId: number,
+  ): Promise<UsageEventRecord | CreditReservationRecord> {
+    const totals = await this.ratings.totalsForResource(workspaceId, 'run', String(runId));
     if (totals.eventCount === 0) {
-      return this.billing.releaseReservation(workspaceId, reservationKey(runId));
+      return this.credits.release(workspaceId, reservationKey(runId));
     }
-    return this.billing.settleReservation({
+    return this.credits.settle({
       workspaceId,
       reservationKey: reservationKey(runId),
       usageIdempotencyKey: `run:${runId}:settlement`,
@@ -160,8 +174,8 @@ export class RunUsageService {
       model?: string;
       metadata?: Record<string, unknown>;
     },
-  ): void {
-    this.ratings.rate({
+  ): Promise<void> {
+    return Promise.resolve(this.ratings.rate({
       workspaceId: resource.workspaceId,
       idempotencyKey: `run:${resource.runId}:${usage.suffix}`,
       meter: usage.meter,
@@ -172,7 +186,7 @@ export class RunUsageService {
       resourceId: String(resource.runId),
       metadata: usage.metadata,
       enforceBudget: false,
-    });
+    })).then(() => undefined);
   }
 }
 

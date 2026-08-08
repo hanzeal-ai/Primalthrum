@@ -6,7 +6,7 @@ import { afterEach, beforeEach, test } from 'node:test';
 
 import { SqliteDatabase } from '../src/db/sqlite';
 import { createSqliteDatabase } from '../src/db/databaseFactory';
-import { BillingRepository } from '../src/services/billingRepository';
+import { CreditLedgerRepository } from '../src/services/creditLedgerRepository';
 import { RunUsageService } from '../src/services/runUsageService';
 import { UsageRatingRepository } from '../src/services/usageRatingRepository';
 import { UsageRatingError } from '../src/services/usageRatingTypes';
@@ -15,24 +15,24 @@ const NOW = new Date('2026-08-15T12:00:00.000Z');
 
 let rootDir = '';
 let db: SqliteDatabase;
-let billing: BillingRepository;
+let credits: CreditLedgerRepository;
 let ratings: UsageRatingRepository;
 let usage: RunUsageService;
 
 beforeEach(() => {
   rootDir = mkdtempSync(join(tmpdir(), 'primalthrum-run-usage-'));
   db = createSqliteDatabase(join(rootDir, 'platform.sqlite'));
-  billing = new BillingRepository(db, () => NOW);
+  credits = new CreditLedgerRepository(db, () => NOW);
   ratings = new UsageRatingRepository(db, () => NOW);
-  usage = new RunUsageService(ratings, billing, () => NOW);
+  usage = new RunUsageService(ratings, credits, () => NOW);
 });
 
 afterEach(() => {
   rmSync(rootDir, { recursive: true, force: true });
 });
 
-test('run usage reserves an estimate and settles the sum of rated evidence', () => {
-  const reservation = usage.reserve({
+test('run usage reserves an estimate and settles the sum of rated evidence', async () => {
+  const reservation = await usage.reserve({
     runId: 7,
     workspaceId: 1,
     prompt: 'Build a support agent',
@@ -42,9 +42,9 @@ test('run usage reserves an estimate and settles the sum of rated evidence', () 
   assert.equal(reservation.state, 'reserved');
   assert.equal(reservation.reservedCredits, 80);
 
-  usage.recordRun({ runId: 7, workspaceId: 1, channel: 'api' });
-  usage.recordRun({ runId: 7, workspaceId: 1, channel: 'api' });
-  usage.recordLlmUsage({
+  await usage.recordRun({ runId: 7, workspaceId: 1, channel: 'api' });
+  await usage.recordRun({ runId: 7, workspaceId: 1, channel: 'api' });
+  await usage.recordLlmUsage({
     runId: 7,
     workspaceId: 1,
     provider: 'openai',
@@ -52,20 +52,20 @@ test('run usage reserves an estimate and settles the sum of rated evidence', () 
     inputTokens: 200,
     outputTokens: 500,
   });
-  usage.recordToolCall({
+  await usage.recordToolCall({
     runId: 7,
     workspaceId: 1,
     eventId: 99,
     tool: 'file_reader',
   });
-  const settlement = usage.settle(7, 1);
+  const settlement = await usage.settle(7, 1);
   assert.equal('creditsCharged' in settlement ? settlement.creditsCharged : -1, 55);
-  assert.deepEqual(billing.creditAccount(1), {
+  assert.deepEqual(credits.account(1), {
     workspaceId: 1,
     availableCredits: 945,
     reservedCredits: 0,
     spentCredits: 55,
-    updatedAt: billing.creditAccount(1).updatedAt,
+    updatedAt: credits.account(1).updatedAt,
   });
   assert.deepEqual(ratings.totalsForResource(1, 'run', '7'), {
     eventCount: 4,
@@ -73,31 +73,31 @@ test('run usage reserves an estimate and settles the sum of rated evidence', () 
     credits: 55,
     providerCostMicros: 7500,
   });
-  assert.equal(usage.settle(7, 1).id, settlement.id);
+  assert.equal((await usage.settle(7, 1)).id, settlement.id);
 });
 
-test('failed run without consumed resources releases the full reservation', () => {
-  usage.reserve({
+test('failed run without consumed resources releases the full reservation', async () => {
+  await usage.reserve({
     runId: 8,
     workspaceId: 1,
     prompt: 'Fail before provider execution',
     llm: { provider: 'mock', model: 'mock-chat' },
     channel: 'hosted',
   });
-  const released = usage.settle(8, 1);
+  const released = await usage.settle(8, 1);
   assert.equal('state' in released ? released.state : '', 'released');
-  assert.equal(billing.creditAccount(1).availableCredits, 1000);
-  assert.equal(billing.creditAccount(1).reservedCredits, 0);
+  assert.equal(credits.account(1).availableCredits, 1000);
+  assert.equal(credits.account(1).reservedCredits, 0);
 });
 
-test('projected provider cost is rejected before a reservation is created', () => {
+test('projected provider cost is rejected before a reservation is created', async () => {
   ratings.setControls({
     workspaceId: 1,
     monthlyProviderCostMicrosLimit: 1000,
     hardLimit: true,
   });
-  assert.throws(
-    () => usage.reserve({
+  await assert.rejects(
+    usage.reserve({
       runId: 9,
       workspaceId: 1,
       prompt: 'Expensive run',

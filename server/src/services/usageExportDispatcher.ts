@@ -1,5 +1,5 @@
 import { type StructuredLogger } from './logger';
-import { UsageExportOutboxRepository } from './usageExportOutboxRepository';
+import { type UsageExportOutboxStore } from './usageExportOutboxStore';
 import { type UsageMeterExporter } from './usageMeterExporter';
 
 export class UsageExportDispatcher {
@@ -7,7 +7,7 @@ export class UsageExportDispatcher {
   private retryTimer: ReturnType<typeof setTimeout> | null = null;
 
   constructor(
-    private readonly outbox: UsageExportOutboxRepository,
+    private readonly outbox: UsageExportOutboxStore,
     private readonly exporter: UsageMeterExporter,
     private readonly logger: StructuredLogger,
     private readonly batchSize = 50,
@@ -32,10 +32,10 @@ export class UsageExportDispatcher {
     let hasMore = false;
     const task = this.processBatch()
       .then((batchFilled) => { hasMore = batchFilled; })
-      .finally(() => {
+      .finally(async () => {
         if (this.activeDrain === task) this.activeDrain = null;
         if (hasMore) queueMicrotask(() => this.kick());
-        else this.scheduleNextAttempt();
+        else await this.scheduleNextAttempt();
       });
     this.activeDrain = task;
     return task;
@@ -43,14 +43,14 @@ export class UsageExportDispatcher {
 
   private async processBatch(): Promise<boolean> {
     for (let index = 0; index < this.batchSize; index += 1) {
-      const item = this.outbox.claimNext(this.exporter.destination);
+      const item = await this.outbox.claimNext(this.exporter.destination);
       if (!item) return false;
       try {
         await this.exporter.send(item.payload);
-        this.outbox.markDelivered(item.id);
+        await this.outbox.markDelivered(item.id);
       } catch (error) {
         const message = error instanceof Error ? error.message : 'usage meter export failed';
-        this.outbox.markFailed(item.id, item.attempts, message);
+        await this.outbox.markFailed(item.id, item.attempts, message);
         this.logger.log({
           level: 'warn',
           code: 'USAGE_METER_EXPORT_FAILED',
@@ -62,8 +62,8 @@ export class UsageExportDispatcher {
     return true;
   }
 
-  private scheduleNextAttempt(): void {
-    const delayMs = this.outbox.nextAttemptDelayMs(this.exporter.destination);
+  private async scheduleNextAttempt(): Promise<void> {
+    const delayMs = await this.outbox.nextAttemptDelayMs(this.exporter.destination);
     if (delayMs === null || this.retryTimer) return;
     this.retryTimer = setTimeout(() => {
       this.retryTimer = null;

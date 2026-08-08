@@ -1,8 +1,8 @@
 import { createHash } from 'node:crypto';
 
-import { BillingRepository } from './billingRepository';
+import { type CreditLedgerStore } from './creditLedgerStore';
 import type { CreditReservationRecord, UsageEventRecord } from './billingTypes';
-import { UsageRatingRepository } from './usageRatingRepository';
+import { type UsageRatingStore } from './usageRatingStore';
 
 export interface MeteredOperation {
   workspaceId: number;
@@ -17,12 +17,12 @@ export interface MeteredOperation {
 
 export class MeteredOperationService {
   constructor(
-    private readonly ratings: UsageRatingRepository,
-    private readonly billing: BillingRepository,
+    private readonly ratings: UsageRatingStore,
+    private readonly credits: CreditLedgerStore,
     private readonly now: () => Date = () => new Date(),
   ) {}
 
-  begin(input: {
+  async begin(input: {
     workspaceId: number;
     idempotencyKey: string;
     meter: string;
@@ -30,18 +30,18 @@ export class MeteredOperationService {
     provider?: string;
     model?: string;
     resourceType: string;
-  }): MeteredOperation {
+  }): Promise<MeteredOperation> {
     const occurredAt = this.now().toISOString();
-    const quote = this.ratings.quote({
+    const quote = await this.ratings.quote({
       meter: input.meter,
       quantity: input.quantity,
       provider: input.provider,
       model: input.model,
       occurredAt,
     });
-    this.ratings.assertProjected(input.workspaceId, [quote], occurredAt);
+    await this.ratings.assertProjected(input.workspaceId, [quote], occurredAt);
     const reference = operationReference(input.workspaceId, input.idempotencyKey);
-    this.billing.reserveCredits({
+    await this.credits.reserve({
       workspaceId: input.workspaceId,
       idempotencyKey: `operation:${reference}`,
       meter: input.meter,
@@ -59,12 +59,12 @@ export class MeteredOperationService {
     };
   }
 
-  complete(
+  async complete(
     operation: MeteredOperation,
     metadata: Record<string, unknown> = {},
     actualQuantity = operation.quantity,
-  ): UsageEventRecord {
-    const rated = this.ratings.rate({
+  ): Promise<UsageEventRecord> {
+    const rated = await this.ratings.rate({
       workspaceId: operation.workspaceId,
       idempotencyKey: `operation:${operation.reference}:rated`,
       meter: operation.meter,
@@ -76,7 +76,7 @@ export class MeteredOperationService {
       metadata,
       enforceBudget: false,
     });
-    return this.billing.settleReservation({
+    return this.credits.settle({
       workspaceId: operation.workspaceId,
       reservationKey: `operation:${operation.reference}`,
       usageIdempotencyKey: `operation:${operation.reference}:settled`,
@@ -88,11 +88,11 @@ export class MeteredOperationService {
     });
   }
 
-  release(operation: MeteredOperation): CreditReservationRecord {
-    return this.billing.releaseReservation(
+  release(operation: MeteredOperation): Promise<CreditReservationRecord> {
+    return Promise.resolve(this.credits.release(
       operation.workspaceId,
       `operation:${operation.reference}`,
-    );
+    ));
   }
 }
 

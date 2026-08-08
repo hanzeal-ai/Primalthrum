@@ -2154,9 +2154,12 @@ complete. Follow the same dependency and verification protocol used above.
   threshold-alert, tenant-isolation, and immutable-evidence verification. The
   Credits ledger now has the same async database coverage for one-time baseline
   grants, concurrent reservations, settlement, release, refund, tenant isolation,
-  and immutable balance evidence; remaining commercial, security, compliance,
-  and Operator repositories plus production data transfer remain open before
-  runtime cutover.
+  and immutable balance evidence. Usage export now adds async SQLite/PostgreSQL
+  lease recovery, `SKIP LOCKED` multi-worker claims, retry evidence, and exactly
+  one delivery verification. Application runtime composition awaits the async
+  rating/Credits/outbox chain for Runs, speech, uploads, Embeddings, and RAG;
+  remaining commercial, security, compliance, and Operator repositories plus
+  production data transfer remain open before runtime cutover.
 
 ### P23-01 Full Commercial End-To-End Suite
 

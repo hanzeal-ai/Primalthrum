@@ -67,6 +67,12 @@ configured, a background dispatcher posts pending events to that endpoint. The
 request uses `primalthrum-usage-<event-id>` as its stable `Idempotency-Key` and
 optionally sends `USAGE_METER_EXPORT_TOKEN` as a Bearer token.
 
+The outbox has parameterized async SQLite and PostgreSQL implementations.
+PostgreSQL workers use transactional `FOR UPDATE SKIP LOCKED` claims; expired
+delivery leases are recovered, and competing dispatchers cannot send the same
+event twice. Runtime Run, speech, upload, embedding, and RAG metering now await
+rating, reservation, settlement, release, and export persistence.
+
 External delivery does not participate in the customer request transaction.
 Failures retain the event, error, attempt count, and exponentially delayed next
 attempt; an unreferenced timer wakes the dispatcher when it becomes due. A

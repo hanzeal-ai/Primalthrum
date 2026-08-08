@@ -11,7 +11,7 @@ import { PaymentError, type PaymentWebhookEvent } from '../services/paymentTypes
 import { PaymentWebhookProcessor } from '../services/paymentWebhookProcessor';
 import { verifyStripeWebhookSignature } from '../services/stripeWebhookSignature';
 import { type WorkspacePermission } from '../services/workspaceAuthorization';
-import { UsageRatingRepository } from '../services/usageRatingRepository';
+import { type UsageRatingStore } from '../services/usageRatingStore';
 
 interface BillingRouteDependencies {
   authorize: (ctx: Koa.Context, permission: WorkspacePermission) => boolean;
@@ -24,7 +24,7 @@ interface BillingRouteDependencies {
   publicAppUrl: string;
   stripeWebhookSecret?: string;
   webhooks: PaymentWebhookProcessor;
-  usage: UsageRatingRepository;
+  usage: UsageRatingStore;
 }
 
 export function registerBillingRoutes(
@@ -99,24 +99,24 @@ export function registerBillingRoutes(
     ctx.body = payments.listInvoices(currentWorkspaceId(ctx));
   });
 
-  router.get('/api/billing/usage', (ctx) => {
+  router.get('/api/billing/usage', async (ctx) => {
     if (!authorize(ctx, 'billing.read')) return;
-    ctx.body = usage.summary(currentWorkspaceId(ctx));
+    ctx.body = await usage.summary(currentWorkspaceId(ctx));
   });
 
-  router.get('/api/billing/cost-controls', (ctx) => {
+  router.get('/api/billing/cost-controls', async (ctx) => {
     if (!authorize(ctx, 'billing.read')) return;
-    ctx.body = usage.controls(currentWorkspaceId(ctx));
+    ctx.body = await usage.controls(currentWorkspaceId(ctx));
   });
 
-  router.put('/api/billing/cost-controls', (ctx) => {
+  router.put('/api/billing/cost-controls', async (ctx) => {
     if (!authorize(ctx, 'billing.manage')) return;
     try {
       const body = ctx.request.body as Record<string, unknown>;
-      const current = usage.controls(currentWorkspaceId(ctx));
+      const current = await usage.controls(currentWorkspaceId(ctx));
       const creditLimit = optionalLimit(body.monthlyCreditLimit);
       const providerCostLimit = optionalLimit(body.monthlyProviderCostMicrosLimit);
-      ctx.body = usage.setControls({
+      ctx.body = await usage.setControls({
         workspaceId: currentWorkspaceId(ctx),
         monthlyCreditLimit: creditLimit === undefined ? current.monthlyCreditLimit : creditLimit,
         monthlyProviderCostMicrosLimit: providerCostLimit === undefined
@@ -138,9 +138,9 @@ export function registerBillingRoutes(
     }
   });
 
-  router.get('/api/billing/cost-alerts', (ctx) => {
+  router.get('/api/billing/cost-alerts', async (ctx) => {
     if (!authorize(ctx, 'billing.read')) return;
-    ctx.body = usage.listAlerts(currentWorkspaceId(ctx));
+    ctx.body = await usage.listAlerts(currentWorkspaceId(ctx));
   });
 
   router.post('/api/billing/checkout', async (ctx) => {

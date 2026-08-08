@@ -138,6 +138,8 @@ import { PaymentWebhookProcessor } from './services/paymentWebhookProcessor';
 import { registerBillingRoutes } from './routes/billingRoutes';
 import { registerSpeechRoutes } from './routes/speechRoutes';
 import { UsageRatingRepository } from './services/usageRatingRepository';
+import { AsyncUsageRatingRepository } from './services/asyncUsageRatingRepository';
+import { type UsageRatingStore } from './services/usageRatingStore';
 import { RunUsageService } from './services/runUsageService';
 import { UsageRatingError } from './services/usageRatingTypes';
 import {
@@ -145,8 +147,13 @@ import {
   type MeteredOperation,
 } from './services/meteredOperationService';
 import { UsageExportOutboxRepository } from './services/usageExportOutboxRepository';
+import { AsyncUsageExportOutboxRepository } from './services/asyncUsageExportOutboxRepository';
+import { type UsageExportOutboxStore } from './services/usageExportOutboxStore';
 import { UsageExportDispatcher } from './services/usageExportDispatcher';
 import { type UsageMeterExporter } from './services/usageMeterExporter';
+import { AsyncCreditLedgerRepository } from './services/asyncCreditLedgerRepository';
+import { CreditLedgerRepository } from './services/creditLedgerRepository';
+import { type CreditLedgerStore } from './services/creditLedgerStore';
 import { AccountTokenRepository } from './services/accountTokenRepository';
 import { AccountOnboardingRepository } from './services/accountOnboardingRepository';
 import { AccountEmailOutboxRepository } from './services/accountEmailOutboxRepository';
@@ -412,13 +419,20 @@ export function createApp(options: AppOptions = {}): Koa {
     billingRepository,
   );
   const paymentAdapter = options.paymentAdapter;
-  const usageExportOutboxRepository = new UsageExportOutboxRepository(db);
+  const usageExportOutboxRepository: UsageExportOutboxStore = runtimeDatabase
+    ? new AsyncUsageExportOutboxRepository(runtimeDatabase)
+    : new UsageExportOutboxRepository(db);
   let usageExportDispatcher: UsageExportDispatcher | undefined;
-  const usageRatingRepository = new UsageRatingRepository(
-    db,
-    undefined,
-    () => usageExportDispatcher?.kick(),
-  );
+  const usageRatingRepository: UsageRatingStore = runtimeDatabase
+    ? new AsyncUsageRatingRepository(
+        runtimeDatabase,
+        undefined,
+        () => usageExportDispatcher?.kick(),
+      )
+    : new UsageRatingRepository(db, undefined, () => usageExportDispatcher?.kick());
+  const runtimeCreditLedger: CreditLedgerStore = runtimeDatabase
+    ? new AsyncCreditLedgerRepository(runtimeDatabase)
+    : new CreditLedgerRepository(db, () => new Date());
   if (options.usageMeterExporter) {
     usageExportDispatcher = new UsageExportDispatcher(
       usageExportOutboxRepository,
@@ -427,10 +441,10 @@ export function createApp(options: AppOptions = {}): Koa {
     );
     usageExportDispatcher.kick();
   }
-  const runUsageService = new RunUsageService(usageRatingRepository, billingRepository);
+  const runUsageService = new RunUsageService(usageRatingRepository, runtimeCreditLedger);
   const meteredOperationService = new MeteredOperationService(
     usageRatingRepository,
-    billingRepository,
+    runtimeCreditLedger,
   );
   const publicAppUrl = (options.publicAppUrl ?? DEFAULT_PUBLIC_APP_URL).replace(/\/$/, '');
   let accountEmailDispatcher: AccountEmailDispatcher | undefined;
@@ -507,7 +521,7 @@ export function createApp(options: AppOptions = {}): Koa {
           chunks.reduce((sum, chunk) => sum + Math.ceil(chunk.text.length / 4), 0),
         );
         if (resolvedEmbedding) {
-          embeddingOperation = meteredOperationService.begin({
+          embeddingOperation = await meteredOperationService.begin({
             workspaceId: agent.workspaceId,
             idempotencyKey: `document:${documentId}:embedding:${existing.hash}`,
             meter: 'embedding.tokens',
@@ -521,7 +535,7 @@ export function createApp(options: AppOptions = {}): Koa {
           ? await embeddingClient.embed(resolvedEmbedding, chunks.map((chunk) => chunk.text))
           : null;
         if (embeddingOperation && embeddingBatch) {
-          meteredOperationService.complete(
+          await meteredOperationService.complete(
             embeddingOperation,
             { agentId, documentId, chunkCount: chunks.length },
             embeddingBatch.inputTokens ?? estimatedEmbeddingTokens,
@@ -529,7 +543,7 @@ export function createApp(options: AppOptions = {}): Koa {
           embeddingCompleted = true;
         }
         if (ragEnabled) {
-          ragStorageOperation = meteredOperationService.begin({
+          ragStorageOperation = await meteredOperationService.begin({
             workspaceId: agent.workspaceId,
             idempotencyKey: `document:${documentId}:rag-storage:${existing.hash}`,
             meter: 'rag.storage_bytes',
@@ -544,7 +558,7 @@ export function createApp(options: AppOptions = {}): Koa {
           vectorStore: ragEnabled ? agent.config.ragProvider : '',
         });
         if (ragStorageOperation) {
-          meteredOperationService.complete(ragStorageOperation, {
+          await meteredOperationService.complete(ragStorageOperation, {
             agentId,
             documentId,
             vectorStore: agent.config.ragProvider,
@@ -562,10 +576,10 @@ export function createApp(options: AppOptions = {}): Koa {
         };
       } catch (error) {
         if (embeddingOperation && !embeddingCompleted) {
-          releaseMeteredOperation(embeddingOperation);
+          await releaseMeteredOperation(embeddingOperation);
         }
         if (ragStorageOperation && !ragStorageCompleted) {
-          releaseMeteredOperation(ragStorageOperation);
+          await releaseMeteredOperation(ragStorageOperation);
         }
         await documentRepository.markStatus(agentId, documentId, 'failed');
         throw error;
@@ -649,9 +663,9 @@ export function createApp(options: AppOptions = {}): Koa {
     return Number(ctx.state.authSession?.user.id);
   }
 
-  function releaseMeteredOperation(operation: MeteredOperation): void {
+  async function releaseMeteredOperation(operation: MeteredOperation): Promise<void> {
     try {
-      meteredOperationService.release(operation);
+      await meteredOperationService.release(operation);
     } catch (error) {
       logger.log({
         level: 'warn',
@@ -667,7 +681,7 @@ export function createApp(options: AppOptions = {}): Koa {
     agentId: number,
     upload: ParsedDocumentUpload,
   ) {
-    const operation = meteredOperationService.begin({
+    const operation = await meteredOperationService.begin({
       workspaceId: currentWorkspaceId(ctx),
       idempotencyKey: normalizeIdempotencyKey(
         ctx.get('idempotency-key') || randomUUID(),
@@ -690,7 +704,7 @@ export function createApp(options: AppOptions = {}): Koa {
       storageRef = stored.storageRef;
       const result = await documentRepository.attachStorageRef(agentId, document.id, storageRef)
         ?? document;
-      meteredOperationService.complete(operation, { documentId: document.id });
+      await meteredOperationService.complete(operation, { documentId: document.id });
       return result;
     } catch (error) {
       if (storageRef) {
@@ -708,7 +722,7 @@ export function createApp(options: AppOptions = {}): Koa {
         }
       }
       if (document) await documentRepository.deleteByAgentDocument(agentId, document.id);
-      releaseMeteredOperation(operation);
+      await releaseMeteredOperation(operation);
       throw error;
     }
   }
@@ -2147,7 +2161,7 @@ export function createApp(options: AppOptions = {}): Koa {
       let conversationId: number | null = null;
       if (streamRequest.runId) {
         try {
-          runUsageService.reserve({
+          await runUsageService.reserve({
             runId: streamRequest.runId,
             workspaceId,
             prompt: streamRequest.payload.goal,
@@ -2206,7 +2220,7 @@ export function createApp(options: AppOptions = {}): Koa {
               )
             : null;
           if (queryEmbedding) {
-            runUsageService.recordEmbedding({
+            await runUsageService.recordEmbedding({
               runId: streamRequest.runId,
               workspaceId,
               provider: streamRequest.payload.embedding.provider,
@@ -2228,7 +2242,7 @@ export function createApp(options: AppOptions = {}): Koa {
               )
             : [];
           if (queryEmbedding) {
-            runUsageService.recordRetrieval({
+            await runUsageService.recordRetrieval({
               runId: streamRequest.runId,
               workspaceId,
               matchCount: matches.length,
@@ -2289,7 +2303,7 @@ export function createApp(options: AppOptions = {}): Koa {
       }
 
       if (currentRunId) {
-        runUsageService.recordRun({
+        await runUsageService.recordRun({
           runId: currentRunId,
           workspaceId,
           channel: publicAgentId ? 'hosted' : 'api',
@@ -2307,7 +2321,7 @@ export function createApp(options: AppOptions = {}): Koa {
             if (event.eventType === 'agent.error') sawAgentError = true;
             await toolAuditRepository.recordStreamEvent(created);
             if (event.eventType === 'agent.usage.reported') {
-              runUsageService.recordLlmUsage({
+              await runUsageService.recordLlmUsage({
                 runId: streamRequest.runId as number,
                 workspaceId,
                 provider: String(event.payload.provider ?? ''),
@@ -2317,7 +2331,7 @@ export function createApp(options: AppOptions = {}): Koa {
               });
             }
             if (event.eventType === 'agent.tool.called') {
-              runUsageService.recordToolCall({
+              await runUsageService.recordToolCall({
                 runId: streamRequest.runId as number,
                 workspaceId,
                 eventId: created.id,
@@ -2394,7 +2408,7 @@ export function createApp(options: AppOptions = {}): Koa {
       }
       if (currentRunId && usageReserved) {
         try {
-          runUsageService.settle(currentRunId, workspaceId);
+          await runUsageService.settle(currentRunId, workspaceId);
         } catch (error) {
           logger.log({
             level: 'error',
