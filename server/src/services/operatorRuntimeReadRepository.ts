@@ -1,5 +1,6 @@
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
+import { type OperatorRuntimeReadStore } from './operatorRuntimeReadStore';
 
 export interface OperatorAgentSummary {
   id: number;
@@ -60,7 +61,7 @@ interface JobRow {
   updated_at: string;
 }
 
-export class OperatorRuntimeReadRepository {
+export class OperatorRuntimeReadRepository implements OperatorRuntimeReadStore {
   constructor(private readonly db: DatabaseAdapter) {
   }
 

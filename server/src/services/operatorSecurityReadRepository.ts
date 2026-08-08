@@ -1,4 +1,5 @@
 import { type DatabaseAdapter } from '../db/adapter';
+import { type OperatorSecurityReadStore } from './operatorSecurityReadStore';
 
 export interface OperatorAbuseEventSummary {
   id: number;
@@ -20,7 +21,7 @@ interface AbuseEventRow {
   created_at: string;
 }
 
-export class OperatorSecurityReadRepository {
+export class OperatorSecurityReadRepository implements OperatorSecurityReadStore {
   constructor(private readonly db: DatabaseAdapter) {
   }
 

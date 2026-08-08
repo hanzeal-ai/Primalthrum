@@ -1,5 +1,6 @@
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
+import { type OperatorCustomerReadStore } from './operatorCustomerReadStore';
 
 export interface OperatorCustomerUserSummary {
   userId: number;
@@ -26,7 +27,7 @@ interface CustomerUserRow {
   created_at: string;
 }
 
-export class OperatorCustomerReadRepository {
+export class OperatorCustomerReadRepository implements OperatorCustomerReadStore {
   constructor(private readonly db: DatabaseAdapter) {
   }
 

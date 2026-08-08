@@ -2199,8 +2199,10 @@ complete. Follow the same dependency and verification protocol used above.
   those shared contracts. PostgreSQL verifies one-time bootstrap, session revocation,
   password rotation, metadata sanitization, and immutable evidence. Support Access
   Grants now serialize active-grant creation with Workspace and assignee locks and
-  preserve scoped revocation evidence. Global composition waits for read, Flag, and
-  incident repositories so no Operator flow spans stores.
+  preserve scoped revocation evidence. Customer-account, Agent/Job, and abuse-event
+  Operator reads now use parameterized async repositories while retaining Workspace
+  filters and minimized fields. Global composition waits for overview, billing, Flag,
+  and incident repositories so no Operator flow spans stores.
 
 ### P23-01 Full Commercial End-To-End Suite
 

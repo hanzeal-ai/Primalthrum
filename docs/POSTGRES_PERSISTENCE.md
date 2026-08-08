@@ -51,9 +51,11 @@ all Operator route groups await the shared identity/audit contracts. PostgreSQL 
 verifies one-time bootstrap enforcement, session revocation, password rotation, audit
 sanitization, and database-level immutability. Support Access Grants now have an async
 repository that locks the Workspace and assignee before enforcing one active grant,
-and persists scoped creation and revocation evidence. Application composition remains
-on the synchronous fallback until the remaining Operator read, Flag, and incident
-repositories share the asynchronous database boundary.
+and persists scoped creation and revocation evidence. Customer-account, Agent/Job, and
+abuse-event Operator reads now also have parameterized async repositories with explicit
+Workspace filters and minimized response contracts. Application composition remains on
+the synchronous fallback until overview, billing, Flag, and incident repositories share
+the asynchronous database boundary.
 The application-level PostgreSQL smoke completes registration and email verification
 over HTTP and asserts that no account lifecycle records leak into local SQLite. PostgreSQL
 must not be selected as the sole application database until the remaining

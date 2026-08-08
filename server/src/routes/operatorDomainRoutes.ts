@@ -2,9 +2,9 @@ import Router from '@koa/router';
 import type Koa from 'koa';
 
 import { OperatorBillingReadRepository } from '../services/operatorBillingReadRepository';
-import { OperatorCustomerReadRepository } from '../services/operatorCustomerReadRepository';
-import { OperatorRuntimeReadRepository } from '../services/operatorRuntimeReadRepository';
-import { OperatorSecurityReadRepository } from '../services/operatorSecurityReadRepository';
+import { type OperatorCustomerReadStore } from '../services/operatorCustomerReadStore';
+import { type OperatorRuntimeReadStore } from '../services/operatorRuntimeReadStore';
+import { type OperatorSecurityReadStore } from '../services/operatorSecurityReadStore';
 import {
   operatorError,
   requireOperator,
@@ -13,9 +13,9 @@ import {
 
 interface OperatorDomainRouteOptions extends OperatorRouteSecurityOptions {
   billingReads: OperatorBillingReadRepository;
-  customerReads: OperatorCustomerReadRepository;
-  runtimeReads: OperatorRuntimeReadRepository;
-  securityReads: OperatorSecurityReadRepository;
+  customerReads: OperatorCustomerReadStore;
+  runtimeReads: OperatorRuntimeReadStore;
+  securityReads: OperatorSecurityReadStore;
 }
 
 export function registerOperatorDomainRoutes(
