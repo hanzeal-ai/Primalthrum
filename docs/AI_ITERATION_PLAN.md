@@ -2184,7 +2184,10 @@ complete. Follow the same dependency and verification protocol used above.
   Privacy consent and product analytics now share the async runtime database;
   PostgreSQL transactions serialize each pseudonymous subject, preserve global
   event idempotency, reject stale grants after withdrawal, and leave no evidence
-  in fallback SQLite.
+  in fallback SQLite. Workspace Retention policies and enforcement now also use
+  the async runtime database; PostgreSQL atomically applies legal-hold checks,
+  audit archival, metadata deletion, durable file deletion, and future scheduling
+  without leaking compliance evidence into fallback SQLite.
 
 ### P23-01 Full Commercial End-To-End Suite
 

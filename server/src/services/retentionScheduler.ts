@@ -1,5 +1,5 @@
 import { type JobStore } from './jobStore';
-import { RetentionPolicyRepository } from './retentionPolicyRepository';
+import { type RetentionPolicyStore } from './retentionPolicyStore';
 
 const DEFAULT_INTERVAL_MS = 60 * 60_000;
 
@@ -8,7 +8,7 @@ export class RetentionScheduler {
   private ticking = false;
 
   constructor(
-    private readonly policies: RetentionPolicyRepository,
+    private readonly policies: RetentionPolicyStore,
     private readonly jobs: JobStore,
     private readonly kick: () => void,
     private readonly intervalMs = DEFAULT_INTERVAL_MS,
@@ -43,7 +43,7 @@ export class RetentionScheduler {
     if (this.ticking) return;
     this.ticking = true;
     try {
-      for (const workspaceId of this.policies.dueWorkspaceIds()) {
+      for (const workspaceId of await this.policies.dueWorkspaceIds()) {
         await this.trigger(workspaceId);
       }
     } finally {

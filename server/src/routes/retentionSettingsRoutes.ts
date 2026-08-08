@@ -6,8 +6,9 @@ import { type BillingStore } from '../services/billingStore';
 import { sendApiError } from '../services/apiErrors';
 import { type StructuredLogger } from '../services/logger';
 import { verifyPassword } from '../services/passwordHash';
-import { RetentionPolicyRepository } from '../services/retentionPolicyRepository';
 import { RetentionService } from '../services/retentionService';
+import { type RetentionPolicyStore } from '../services/retentionPolicyStore';
+import { type Awaitable } from '../services/storeTypes';
 import { type UserStore } from '../services/userStore';
 import {
   hasWorkspacePermission,
@@ -20,9 +21,9 @@ interface RetentionSettingsRouteDependencies {
   currentUserId: (ctx: Koa.Context) => number;
   currentWorkspaceId: (ctx: Koa.Context) => number;
   logger: StructuredLogger;
-  policies: RetentionPolicyRepository;
+  policies: RetentionPolicyStore;
   retention: RetentionService;
-  schedule: (workspaceId: number) => void;
+  schedule: (workspaceId: number) => Awaitable<void>;
   users: UserStore;
 }
 
@@ -54,14 +55,14 @@ export function registerRetentionSettingsRoutes(
     const body = ctx.request.body as Record<string, unknown>;
     if (!await reauthenticate(ctx, logger, users, currentUserId(ctx), body.password)) return;
     try {
-      policies.update({
+      await policies.update({
         workspaceId,
         conversationDays: body.conversationDays,
         runDays: body.runDays,
         documentDays: body.documentDays,
         actorUserId: currentUserId(ctx),
       });
-      schedule(workspaceId);
+      await schedule(workspaceId);
       ctx.body = await retentionState(ctx, dependencies);
     } catch (error) {
       sendApiError(ctx, logger, {
@@ -99,12 +100,12 @@ async function retentionState(
     .entitlements['retention.controls'];
   const role = String(ctx.state.authSession?.user.role ?? '');
   return {
-    policy: dependencies.policies.get(workspaceId),
-    preview: dependencies.policies.preview(workspaceId),
-    events: dependencies.policies.listEvents(workspaceId),
+    policy: await dependencies.policies.get(workspaceId),
+    preview: await dependencies.policies.preview(workspaceId),
+    events: await dependencies.policies.listEvents(workspaceId),
     customRetentionEnabled: Boolean(entitlement?.enabled),
     canManage: hasWorkspacePermission(role, 'retention.manage'),
-    legalHoldActive: dependencies.policies.hasActiveLegalHold(workspaceId),
+    legalHoldActive: await dependencies.policies.hasActiveLegalHold(workspaceId),
   };
 }
 

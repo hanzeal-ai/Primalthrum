@@ -34,6 +34,10 @@ the async runtime database, including atomic cross-instance window increments.
 Privacy Consent Receipts and Product Analytics events also use the async runtime
 database, with per-subject transaction ordering, shared event idempotency, and
 immediate rejection of stale grants after withdrawal.
+Workspace Retention policies, immutable enforcement evidence, Tool audit archives,
+and durable physical-file deletion queues use the same async runtime database.
+Policy enforcement locks each Workspace policy and commits legal-hold checks,
+metadata deletion, archive evidence, and the next schedule in one transaction.
 The application-level PostgreSQL smoke completes registration and email verification
 over HTTP and asserts that no account lifecycle records leak into local SQLite. PostgreSQL
 must not be selected as the sole application database until the remaining

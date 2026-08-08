@@ -1,5 +1,6 @@
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
+import { type RetentionPolicyStore } from './retentionPolicyStore';
 
 export interface RetentionPolicyRecord {
   workspaceId: number;
@@ -79,7 +80,7 @@ interface RetentionFileDeletionRow {
 const DAY_MS = 86_400_000;
 const NEXT_ENFORCEMENT_MS = DAY_MS;
 
-export class RetentionPolicyRepository {
+export class RetentionPolicyRepository implements RetentionPolicyStore {
   constructor(
     private readonly db: DatabaseAdapter,
     private readonly now: () => Date = () => new Date(),

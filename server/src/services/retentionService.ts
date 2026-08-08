@@ -1,8 +1,8 @@
 import { type DocumentFileStorage } from './fileStorage';
 import {
-  RetentionPolicyRepository,
   type RetentionEventRecord,
 } from './retentionPolicyRepository';
+import { type RetentionPolicyStore } from './retentionPolicyStore';
 
 export interface RetentionEnforcementOutcome {
   event: RetentionEventRecord;
@@ -13,7 +13,7 @@ export interface RetentionEnforcementOutcome {
 
 export class RetentionService {
   constructor(
-    private readonly policies: RetentionPolicyRepository,
+    private readonly policies: RetentionPolicyStore,
     private readonly storage: DocumentFileStorage,
   ) {}
 
@@ -21,7 +21,7 @@ export class RetentionService {
     workspaceId: number,
     actorUserId: number | null,
   ): Promise<RetentionEnforcementOutcome> {
-    const event = this.policies.enforce(workspaceId, actorUserId);
+    const event = await this.policies.enforce(workspaceId, actorUserId);
     const blockedByLegalHold = event.eventType === 'enforcement_blocked';
     const files = blockedByLegalHold
       ? { deleted: 0, failed: 0 }
@@ -39,13 +39,13 @@ export class RetentionService {
   ): Promise<{ deleted: number; failed: number }> {
     let deleted = 0;
     let failed = 0;
-    for (const deletion of this.policies.pendingFileDeletions(workspaceId)) {
+    for (const deletion of await this.policies.pendingFileDeletions(workspaceId)) {
       try {
         await this.storage.delete(deletion.storageRef);
-        this.policies.completeFileDeletion(deletion.id);
+        await this.policies.completeFileDeletion(deletion.id);
         deleted += 1;
       } catch (error) {
-        this.policies.failFileDeletion(
+        await this.policies.failFileDeletion(
           deletion.id,
           deletion.attempts,
           error instanceof Error ? error.message : 'document deletion failed',

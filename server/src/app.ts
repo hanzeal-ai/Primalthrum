@@ -200,6 +200,8 @@ import { MfaRepository } from './services/mfaRepository';
 import { AsyncMfaRepository } from './services/asyncMfaRepository';
 import { MfaService } from './services/mfaService';
 import { RetentionPolicyRepository } from './services/retentionPolicyRepository';
+import { AsyncRetentionPolicyRepository } from './services/asyncRetentionPolicyRepository';
+import { type RetentionPolicyStore } from './services/retentionPolicyStore';
 import { RetentionScheduler } from './services/retentionScheduler';
 import { RetentionService } from './services/retentionService';
 import {
@@ -522,7 +524,9 @@ export function createApp(options: AppOptions = {}): Koa {
     options.accountPrivacyNow,
     options.accountDeletionGracePeriodMs,
   );
-  const retentionPolicies = new RetentionPolicyRepository(db);
+  const retentionPolicies: RetentionPolicyStore = runtimeDatabase
+    ? new AsyncRetentionPolicyRepository(runtimeDatabase)
+    : new RetentionPolicyRepository(db);
   const retentionService = new RetentionService(retentionPolicies, documentStorage);
   if (options.accountEmailSender) {
     accountEmailDispatcher = new AccountEmailDispatcher(
