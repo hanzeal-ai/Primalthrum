@@ -2163,9 +2163,11 @@ complete. Follow the same dependency and verification protocol used above.
   isolation. Trial activation now atomically enforces one use per user and
   Workspace while applying Credits and subscription state. Payment prices,
   customers, Checkout, subscription transitions, invoices, refunds, and retryable
-  Webhook evidence now use the async runtime database. Remaining security,
-  compliance, Operator repositories, payment reconciliation, and production data
-  transfer remain open before runtime cutover.
+  Webhook evidence now use the async runtime database. API Key creation,
+  authentication, revocation, active-Key limits, and immutable use evidence are
+  also async and verified through the PostgreSQL application composition.
+  Remaining security, compliance, Operator repositories, payment reconciliation,
+  and production data transfer remain open before runtime cutover.
 
 ### P23-01 Full Commercial End-To-End Suite
 

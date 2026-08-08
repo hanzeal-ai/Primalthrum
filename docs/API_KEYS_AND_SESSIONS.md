@@ -18,6 +18,9 @@ Authorization: Bearer ptk_prefix_secret
 - A Workspace can have at most 20 active Keys.
 - Revocation takes effect on the next request. Removing the creator from the
   Workspace also invalidates Keys created by that user.
+- SQLite and PostgreSQL share a parameterized async repository. Workspace-level
+  locking serializes the 20-Key limit, and application authentication, settings,
+  revocation, and immutable usage evidence use the same runtime database.
 
 Supported scopes:
 
@@ -33,6 +36,7 @@ settings routes even when the creating user could access those routes in the Web
 Every allowed API Key request updates last-use metadata and appends an immutable
 `api_key_usage_events` record with only Key ID, Workspace ID, method, path, and
 timestamp. Tokens and request payloads are never audit fields.
+Query strings and fragments are removed before the path is persisted.
 
 ## Session Security
 

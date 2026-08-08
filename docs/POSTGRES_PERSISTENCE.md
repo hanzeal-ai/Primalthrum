@@ -15,7 +15,7 @@ rollback, schema introspection, and explicit pool shutdown. Identity, Workspace,
 Session, Agent, Agent version, Run, StreamEvent, Document, RAG index, Conversation,
 ProviderConfig, Job, CapabilitySettings, ToolAudit, DocumentUploadSecurity,
 UsageRating, CreditLedger, UsageExportOutbox, BillingPlan, Entitlement, Trial,
-and PaymentLifecycle repositories now use this boundary. The async Billing facade
+PaymentLifecycle, and ApiKey repositories now use this boundary. The async Billing facade
 keeps Plan, Trial, Entitlement, Credits, subscriptions, invoices, refunds, and
 Webhook evidence in the same runtime database. Async usage rating and Credits
 serialize Workspace mutations in transactions, preserve idempotent immutable evidence,

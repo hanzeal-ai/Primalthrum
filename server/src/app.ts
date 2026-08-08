@@ -185,6 +185,8 @@ import { registerOperatorLegalHoldRoutes } from './routes/operatorLegalHoldRoute
 import { registerOperatorRoutes } from './routes/operatorRoutes';
 import { registerWorkspaceOwnershipRoutes } from './routes/workspaceOwnershipRoutes';
 import { ApiKeyRepository } from './services/apiKeyRepository';
+import { AsyncApiKeyRepository } from './services/asyncApiKeyRepository';
+import { type ApiKeyStore } from './services/apiKeyStore';
 import { MfaRepository } from './services/mfaRepository';
 import { MfaService } from './services/mfaService';
 import { RetentionPolicyRepository } from './services/retentionPolicyRepository';
@@ -395,7 +397,9 @@ export function createApp(options: AppOptions = {}): Koa {
   const supportAccess = new SupportAccessRepository(db);
   const localSecretVault = new LocalSecretVault(db);
   const mfaService = new MfaService(new MfaRepository(db, localSecretVault));
-  const apiKeyRepository = new ApiKeyRepository(db);
+  const apiKeyRepository: ApiKeyStore = runtimeDatabase
+    ? new AsyncApiKeyRepository(runtimeDatabase)
+    : new ApiKeyRepository(db);
   const asyncProviderSecretVault = runtimeDatabase
     ? new AsyncSecretVault(runtimeDatabase)
     : null;

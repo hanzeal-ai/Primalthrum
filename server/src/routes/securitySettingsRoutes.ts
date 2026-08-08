@@ -1,7 +1,7 @@
 import Router from '@koa/router';
 import type Koa from 'koa';
 
-import { ApiKeyRepository } from '../services/apiKeyRepository';
+import { type ApiKeyStore } from '../services/apiKeyStore';
 import { sendApiError } from '../services/apiErrors';
 import { type StructuredLogger } from '../services/logger';
 import { verifyPassword } from '../services/passwordHash';
@@ -10,7 +10,7 @@ import { type UserStore } from '../services/userStore';
 import { type WorkspacePermission } from '../services/workspaceAuthorization';
 
 interface SecuritySettingsRouteDependencies {
-  apiKeys: ApiKeyRepository;
+  apiKeys: ApiKeyStore;
   authorize: (ctx: Koa.Context, permission: WorkspacePermission) => boolean;
   currentUserId: (ctx: Koa.Context) => number;
   currentWorkspaceId: (ctx: Koa.Context) => number;
@@ -33,9 +33,9 @@ export function registerSecuritySettingsRoutes(
     users,
   } = dependencies;
 
-  router.get('/api/settings/api-keys', (ctx) => {
+  router.get('/api/settings/api-keys', async (ctx) => {
     if (!authorize(ctx, 'api_keys.manage')) return;
-    ctx.body = apiKeys.list(currentWorkspaceId(ctx));
+    ctx.body = await apiKeys.list(currentWorkspaceId(ctx));
   });
 
   router.post('/api/settings/api-keys', async (ctx) => {
@@ -53,7 +53,7 @@ export function registerSecuritySettingsRoutes(
     }
     try {
       ctx.status = 201;
-      ctx.body = apiKeys.create({
+      ctx.body = await apiKeys.create({
         workspaceId: currentWorkspaceId(ctx),
         name: body.name,
         scopes: body.scopes,
@@ -69,10 +69,10 @@ export function registerSecuritySettingsRoutes(
     }
   });
 
-  router.delete('/api/settings/api-keys/:id', (ctx) => {
+  router.delete('/api/settings/api-keys/:id', async (ctx) => {
     if (!authorize(ctx, 'api_keys.manage')) return;
     try {
-      apiKeys.revoke(currentWorkspaceId(ctx), Number(ctx.params.id));
+      await apiKeys.revoke(currentWorkspaceId(ctx), Number(ctx.params.id));
       ctx.status = 204;
     } catch (error) {
       sendApiError(ctx, logger, {

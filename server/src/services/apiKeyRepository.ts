@@ -63,8 +63,20 @@ interface ResolvedApiKeyRow extends ApiKeyRow {
   email_verified_at: string | null;
 }
 
-const MAX_ACTIVE_KEYS = 20;
+export const MAX_ACTIVE_API_KEYS = 20;
 const MAX_EXPIRY_DAYS = 365;
+
+export function normalizeApiKeyCreateInput(input: {
+  name: unknown;
+  scopes: unknown;
+  expiresInDays: unknown;
+}): { name: string; scopes: ApiKeyScope[]; expiresInDays: number } {
+  return {
+    name: normalizeName(input.name),
+    scopes: normalizeScopes(input.scopes),
+    expiresInDays: normalizeExpiryDays(input.expiresInDays),
+  };
+}
 
 export class ApiKeyRepository {
   constructor(private readonly db: DatabaseAdapter) {
@@ -87,9 +99,7 @@ export class ApiKeyRepository {
     expiresInDays: unknown;
     createdByUserId: number;
   }): CreatedApiKey {
-    const name = normalizeName(input.name);
-    const scopes = normalizeScopes(input.scopes);
-    const expiresInDays = normalizeExpiryDays(input.expiresInDays);
+    const { name, scopes, expiresInDays } = normalizeApiKeyCreateInput(input);
     const activeCount = Number(this.db.query<{ count: number }>(`
       SELECT COUNT(*) AS count
       FROM workspace_api_keys
@@ -97,8 +107,8 @@ export class ApiKeyRepository {
         AND revoked_at IS NULL
         AND expires_at > ${sqlValue(new Date().toISOString())};
     `)[0]?.count ?? 0);
-    if (activeCount >= MAX_ACTIVE_KEYS) {
-      throw new Error(`workspace cannot have more than ${MAX_ACTIVE_KEYS} active API keys`);
+    if (activeCount >= MAX_ACTIVE_API_KEYS) {
+      throw new Error(`workspace cannot have more than ${MAX_ACTIVE_API_KEYS} active API keys`);
     }
 
     const keyPrefix = `ptk_${randomBytes(6).toString('base64url')}`;

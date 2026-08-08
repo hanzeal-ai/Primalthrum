@@ -1,6 +1,7 @@
 import Koa from 'koa';
 
-import { ApiKeyRepository, type ApiKeyScope } from './apiKeyRepository';
+import { type ApiKeyScope } from './apiKeyRepository';
+import { type ApiKeyStore } from './apiKeyStore';
 import {
   type AuthenticatedSession,
 } from './sessionRepository';
@@ -16,7 +17,7 @@ export interface AuthContextState {
 
 export function createAuthMiddleware(
   sessions: SessionStore,
-  apiKeys?: ApiKeyRepository,
+  apiKeys?: ApiKeyStore,
 ): Koa.Middleware<Koa.DefaultState & AuthContextState> {
   return async (ctx, next) => {
     if (isPublicRequest(ctx)) {
@@ -33,7 +34,7 @@ export function createAuthMiddleware(
 
     const session = await sessions.findByToken(token);
     if (!session && apiKeys) {
-      const apiKey = apiKeys.resolve(token);
+      const apiKey = await apiKeys.resolve(token);
       if (apiKey) {
         if (!isApiKeyRequest(ctx)) {
           ctx.status = 403;
@@ -56,7 +57,7 @@ export function createAuthMiddleware(
           expiresAt: apiKey.expiresAt,
           emailVerified: apiKey.emailVerified,
         };
-        apiKeys.recordUse(apiKey.id, apiKey.user.workspaceId, ctx.method, ctx.path);
+        await apiKeys.recordUse(apiKey.id, apiKey.user.workspaceId, ctx.method, ctx.path);
         await next();
         return;
       }
