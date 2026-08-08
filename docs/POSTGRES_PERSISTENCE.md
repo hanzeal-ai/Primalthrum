@@ -13,12 +13,12 @@ The next-generation persistence boundary is available in
 the `pg` connection pool, positional parameters, transaction-scoped clients,
 rollback, schema introspection, and explicit pool shutdown. Identity, Workspace,
 Session, Agent, Agent version, Run, StreamEvent, Document, RAG index, Conversation,
-ProviderConfig, Job, CapabilitySettings, ToolAudit, DocumentUploadSecurity, and
-UsageRating repositories now use this boundary. Async usage rating serializes
-workspace writes in a transaction, preserves idempotent immutable evidence, and
-enforces monthly controls before insertion. PostgreSQL must not be selected as
-the sole application database until the remaining repositories and production
-data-transfer gates are complete.
+ProviderConfig, Job, CapabilitySettings, ToolAudit, DocumentUploadSecurity,
+UsageRating, and CreditLedger repositories now use this boundary. Async usage
+rating and Credits serialize Workspace mutations in transactions, preserve
+idempotent immutable evidence, and enforce cost or balance limits before
+insertion. PostgreSQL must not be selected as the sole application database
+until the remaining repositories and production data-transfer gates are complete.
 
 `server/src/db/postgresMigrations.ts` owns a separate PostgreSQL-native migration
 chain. It applies immutable ordered IDs in one transaction behind a PostgreSQL

@@ -14,6 +14,12 @@ Primalthrum treats internal entitlements and the credit ledger as the product au
 
 Credit values are non-negative integer platform credit units. Model and provider pricing converts raw usage into these units in the P18-03 rating layer.
 
+The credit ledger repository supports parameterized asynchronous SQLite and
+PostgreSQL access. Grants, reservations, settlements, releases, and refunds are
+serialized by Workspace inside database transactions. New Workspaces receive
+their Free-plan baseline exactly once, while every later balance mutation remains
+an immutable ledger entry applied by the database projection trigger.
+
 ## Ledger Invariants
 
 1. Every balance change appends one idempotent `credit_ledger_entries` row.
