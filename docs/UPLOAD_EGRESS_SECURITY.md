@@ -28,6 +28,9 @@ Migration 029 records immutable scan evidence in
 IDs; SHA-256 hashes of the normalized filename and original bytes; MIME and byte
 size; scanner; status; and bounded threat metadata. It never stores the filename,
 document content, Base64 payload, Provider secret, or Session token.
+The repository supports parameterized asynchronous SQLite and PostgreSQL writes,
+normalizes timestamps at the boundary, and scopes every read by Workspace. Both
+database providers enforce evidence immutability with a database trigger.
 
 ## Provider Egress Boundary
 
@@ -50,7 +53,8 @@ independent required controls.
 ```bash
 cd server
 node --test --test-concurrency=1 --require ts-node/register \
-  tests/providerEndpointPolicy.test.ts tests/uploadSecurity.test.ts
+  tests/providerEndpointPolicy.test.ts tests/uploadSecurity.test.ts \
+  tests/asyncDocumentUploadSecurityRepository.test.ts
 
 cd ../agent
 ./.venv/bin/python -m unittest discover -s tests -v

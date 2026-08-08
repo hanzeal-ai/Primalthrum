@@ -67,6 +67,8 @@ import {
   DocumentThreatDetectedError,
 } from './services/documentMalwareScanner';
 import { DocumentUploadSecurityRepository } from './services/documentUploadSecurityRepository';
+import { AsyncDocumentUploadSecurityRepository } from './services/asyncDocumentUploadSecurityRepository';
+import { type DocumentUploadSecurityStore } from './services/documentUploadSecurityStore';
 import { DocumentUploadSecurityService } from './services/documentUploadSecurityService';
 import { DurableJobDispatcher } from './services/durableJobDispatcher';
 import {
@@ -343,9 +345,12 @@ export function createApp(options: AppOptions = {}): Koa {
   const documentIndexRepository: DocumentIndexStore = runtimeDatabase
     ? new AsyncDocumentIndexRepository(runtimeDatabase)
     : new DocumentIndexRepository(db);
+  const documentUploadSecurityRepository: DocumentUploadSecurityStore = runtimeDatabase
+    ? new AsyncDocumentUploadSecurityRepository(runtimeDatabase)
+    : new DocumentUploadSecurityRepository(db);
   const documentUploadSecurity = new DocumentUploadSecurityService(
     options.documentMalwareScanner ?? createDocumentMalwareScanner(),
-    new DocumentUploadSecurityRepository(db),
+    documentUploadSecurityRepository,
   );
   const conversationRepository: ConversationStore = runtimeDatabase
     ? new AsyncConversationRepository(runtimeDatabase)

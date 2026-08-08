@@ -4,12 +4,12 @@ import {
   DocumentThreatDetectedError,
 } from './documentMalwareScanner';
 import { type ParsedDocumentUpload } from './documentUpload';
-import { DocumentUploadSecurityRepository } from './documentUploadSecurityRepository';
+import { type DocumentUploadSecurityStore } from './documentUploadSecurityStore';
 
 export class DocumentUploadSecurityService {
   constructor(
     private readonly scanner: DocumentMalwareScanner,
-    private readonly events: DocumentUploadSecurityRepository,
+    private readonly events: DocumentUploadSecurityStore,
   ) {}
 
   async inspect(input: {
@@ -20,10 +20,10 @@ export class DocumentUploadSecurityService {
   }): Promise<void> {
     try {
       const result = await this.scanner.scan(input.upload);
-      this.events.record({ ...input, scanner: result.scanner, status: 'clean' });
+      await this.events.record({ ...input, scanner: result.scanner, status: 'clean' });
     } catch (error) {
       if (error instanceof DocumentThreatDetectedError) {
-        this.events.record({
+        await this.events.record({
           ...input,
           scanner: error.scanner,
           status: 'rejected',
@@ -34,7 +34,7 @@ export class DocumentUploadSecurityService {
       const unavailable = error instanceof DocumentScanUnavailableError
         ? error
         : new DocumentScanUnavailableError(this.scanner.name);
-      this.events.record({
+      await this.events.record({
         ...input,
         scanner: unavailable.scanner,
         status: 'error',

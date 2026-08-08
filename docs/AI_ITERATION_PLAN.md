@@ -2144,11 +2144,12 @@ complete. Follow the same dependency and verification protocol used above.
   migration domains remain open. The tenth P22 slice completes PostgreSQL-native
   schema parity through `026`-`032`. An eleventh slice adds `033_job_reliability`
   with active Job deduplication and atomic multi-worker claims. A digest-pinned
-  real PostgreSQL run now applies all 33 migrations and verifies invitation targeting, Operator revision
-  guards, upload and privacy evidence, ownership history, legal-hold dual control,
-  blocked retention evidence, Job concurrency, Capability settings, and Tool audit
-  idempotency. Core identity and Agent runtime repositories are asynchronous and
-  parameterized; remaining commercial, security, compliance, and Operator
+  real PostgreSQL run now applies all 33 migrations and verifies invitation
+  targeting, Operator revision guards, upload and privacy evidence, ownership
+  history, legal-hold dual control, blocked retention evidence, Job concurrency,
+  Capability settings, Tool audit idempotency, and immutable minimized upload
+  security evidence. Core identity and Agent runtime repositories are asynchronous
+  and parameterized; remaining commercial, security, compliance, and Operator
   repositories plus production data transfer remain open before runtime cutover.
 
 ### P23-01 Full Commercial End-To-End Suite

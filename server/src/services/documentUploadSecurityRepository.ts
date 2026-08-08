@@ -2,7 +2,7 @@ import { createHash, randomUUID } from 'node:crypto';
 
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
-import { type ParsedDocumentUpload } from './documentUpload';
+import { type RecordDocumentUploadSecurityInput } from './documentUploadSecurityStore';
 
 export type DocumentUploadSecurityStatus = 'clean' | 'rejected' | 'error';
 
@@ -42,15 +42,7 @@ export class DocumentUploadSecurityRepository {
   constructor(private readonly db: DatabaseAdapter) {
   }
 
-  record(input: {
-    workspaceId: number;
-    agentId: number;
-    userId: number;
-    upload: ParsedDocumentUpload;
-    scanner: string;
-    status: DocumentUploadSecurityStatus;
-    threatName?: string;
-  }): DocumentUploadSecurityEvent {
+  record(input: RecordDocumentUploadSecurityInput): DocumentUploadSecurityEvent {
     const eventId = randomUUID();
     const filenameHash = createHash('sha256')
       .update(input.upload.filename.normalize('NFKC'))
