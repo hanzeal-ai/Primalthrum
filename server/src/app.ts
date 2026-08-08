@@ -29,6 +29,8 @@ import {
   CapabilityDisabledError,
   CapabilitySettingsRepository,
 } from './services/capabilitySettingsRepository';
+import { AsyncCapabilitySettingsRepository } from './services/asyncCapabilitySettingsRepository';
+import { type CapabilitySettingsStore } from './services/capabilitySettingsStore';
 import {
   ConversationRepository,
   type ConversationSource,
@@ -104,6 +106,8 @@ import {
 import { AsyncStreamEventRepository } from './services/asyncStreamEventRepository';
 import { type StreamEventStore } from './services/streamEventStore';
 import { ToolAuditRepository } from './services/toolAuditRepository';
+import { AsyncToolAuditRepository } from './services/asyncToolAuditRepository';
+import { type ToolAuditStore } from './services/toolAuditStore';
 import {
   capabilityKeysForConfig,
   resolveStreamRequest,
@@ -393,7 +397,9 @@ export function createApp(options: AppOptions = {}): Koa {
     providerConfigRepository,
     providerSecretVault,
   );
-  const capabilitySettingsRepository = new CapabilitySettingsRepository(db);
+  const capabilitySettingsRepository: CapabilitySettingsStore = identityDatabase
+    ? new AsyncCapabilitySettingsRepository(identityDatabase)
+    : new CapabilitySettingsRepository(db);
   const billingRepository = new BillingRepository(db);
   const paymentRepository = new PaymentLifecycleRepository(db);
   const paymentWebhookProcessor = new PaymentWebhookProcessor(
@@ -464,7 +470,9 @@ export function createApp(options: AppOptions = {}): Koa {
   for (const [planKey, priceRef] of Object.entries(options.paymentPriceRefs ?? {})) {
     if (priceRef.trim()) paymentRepository.configurePrice('stripe', planKey, priceRef.trim());
   }
-  const toolAuditRepository = new ToolAuditRepository(db);
+  const toolAuditRepository: ToolAuditStore = runtimeDatabase
+    ? new AsyncToolAuditRepository(runtimeDatabase)
+    : new ToolAuditRepository(db);
   const jobRepository: JobStore = runtimeDatabase
     ? new AsyncJobRepository(runtimeDatabase)
     : new JobRepository(db);
@@ -1782,7 +1790,7 @@ export function createApp(options: AppOptions = {}): Koa {
     try {
       const catalog = await fetchCapabilityCatalog(agentBaseUrl);
       const overrides = new Map(
-        capabilitySettingsRepository.list(currentWorkspaceId(ctx))
+        (await capabilitySettingsRepository.list(currentWorkspaceId(ctx)))
           .map((setting) => [setting.capabilityKey, setting.enabled]),
       );
       ctx.body = {
@@ -1832,7 +1840,7 @@ export function createApp(options: AppOptions = {}): Koa {
         });
         return;
       }
-      const setting = capabilitySettingsRepository.set(
+      const setting = await capabilitySettingsRepository.set(
         currentWorkspaceId(ctx),
         key,
         body.enabled,
@@ -1890,7 +1898,7 @@ export function createApp(options: AppOptions = {}): Koa {
 
       const config = version?.config ?? agent.config;
       const providers = await runtimeProviderResolver.resolve(config, agent.workspaceId);
-      const capabilitySnapshot = capabilitySettingsRepository.snapshot(
+      const capabilitySnapshot = await capabilitySettingsRepository.snapshot(
         agent.workspaceId,
         capabilityKeysForConfig(config, providers),
       );
@@ -1976,7 +1984,7 @@ export function createApp(options: AppOptions = {}): Koa {
         node: body.node,
         payload: body.payload,
       });
-      toolAuditRepository.recordStreamEvent(created);
+      await toolAuditRepository.recordStreamEvent(created);
       ctx.status = 201;
       ctx.body = created;
     } catch (error) {
@@ -2023,7 +2031,7 @@ export function createApp(options: AppOptions = {}): Koa {
       });
       return;
     }
-    ctx.body = toolAuditRepository.list(currentWorkspaceId(ctx), runId);
+    ctx.body = await toolAuditRepository.list(currentWorkspaceId(ctx), runId);
   });
 
   async function replayRunStream(
@@ -2292,7 +2300,7 @@ export function createApp(options: AppOptions = {}): Koa {
               payload: event.payload,
             });
             if (event.eventType === 'agent.error') sawAgentError = true;
-            toolAuditRepository.recordStreamEvent(created);
+            await toolAuditRepository.recordStreamEvent(created);
             if (event.eventType === 'agent.usage.reported') {
               runUsageService.recordLlmUsage({
                 runId: streamRequest.runId as number,

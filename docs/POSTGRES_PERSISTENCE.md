@@ -4,17 +4,18 @@ Primalthrum currently ships with SQLite for a single-node local deployment.
 Repositories now depend on `DatabaseAdapter` instead of the concrete
 `SqliteDatabase`, schema introspection is owned by the adapter, and repository
 constructors no longer execute migrations. Database initialization now happens
-once at the application composition boundary. This removes the concrete storage
-and constructor-lifecycle dependencies, but it does not yet make the runtime
-PostgreSQL compatible: repository operations are synchronous and much of the SQL
-is still SQLite-specific.
+once at the application composition boundary. The Agent runtime path is being
+migrated incrementally, while commercial, security, compliance, and Operator
+repositories still contain synchronous SQLite-specific operations.
 
 The next-generation persistence boundary is available in
 `server/src/db/asyncAdapter.ts`. `PostgresDatabase` implements this boundary with
 the `pg` connection pool, positional parameters, transaction-scoped clients,
-rollback, schema introspection, and explicit pool shutdown. Existing repositories
-do not use it yet, so PostgreSQL must not be selected as the application database
-until repository migration and PostgreSQL-native migrations are complete.
+rollback, schema introspection, and explicit pool shutdown. Identity, Workspace,
+Session, Agent, Agent version, Run, StreamEvent, Document, RAG index, Conversation,
+ProviderConfig, Job, CapabilitySettings, and ToolAudit repositories now use this
+boundary. PostgreSQL must not be selected as the sole application database until
+the remaining repositories and production data-transfer gates are complete.
 
 `server/src/db/postgresMigrations.ts` owns a separate PostgreSQL-native migration
 chain. It applies immutable ordered IDs in one transaction behind a PostgreSQL
@@ -39,9 +40,10 @@ retention controls, and MFA. Existing account/session timestamps are backfilled,
 and all security evidence tables reject updates and deletes at the database layer.
 Migrations `026` through `032` complete schema parity for Workspace invitation
 email, the Operator control plane and change control, upload security, account
-privacy rights, ownership transfer, and legal holds. PostgreSQL-native schema
-coverage is now `32/32`; runtime cutover remains blocked only by asynchronous,
-parameterized repository migration and production data-transfer evidence.
+privacy rights, ownership transfer, and legal holds. Migration `033` adds active
+Job deduplication for multi-worker scheduling and atomic claims. PostgreSQL-native
+schema coverage is now `33/33`; runtime cutover remains blocked by the remaining
+asynchronous repository migration and production data-transfer evidence.
 
 ## SQLite Assumption Audit
 
@@ -98,7 +100,8 @@ scripts/postgres-smoke.sh
 The script starts an isolated, digest-pinned PostgreSQL 17.10 container and verifies pooled
 connectivity, positional parameter binding, commit, rollback, health queries,
 concurrent migration locking, migration idempotency, core tables, and identity
-sequence behavior. It also executes all 32 migrations and exercises billing
+sequence behavior. It also executes all 33 migrations and exercises billing
 invariants, immutable security evidence, Operator revision guards, invitation
-targets, and two-operator legal-hold release.
+targets, two-operator legal-hold release, atomic Job claims, Capability settings,
+and idempotent Tool audit persistence.
 Set `POSTGRES_SMOKE_IMAGE` only when validating another PostgreSQL image explicitly.

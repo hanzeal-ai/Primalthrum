@@ -2,8 +2,8 @@ import type { AgentStore } from './agentStore';
 import type { AgentVersionStore } from './agentVersionStore';
 import {
   CapabilityDisabledError,
-  type CapabilitySettingsRepository,
 } from './capabilitySettingsRepository';
+import { type CapabilitySettingsStore } from './capabilitySettingsStore';
 import type { RunStore } from './runStore';
 import type {
   RuntimeModelEndpoint,
@@ -45,7 +45,7 @@ export async function resolveStreamRequest(
   workspaceId?: number,
   agentVersionRepository?: AgentVersionStore,
   runtimeProviderResolver?: RuntimeProviderResolver,
-  capabilitySettings?: CapabilitySettingsRepository,
+  capabilitySettings?: CapabilitySettingsStore,
   runIdentity?: StreamRunIdentity,
 ): Promise<ResolvedStreamRequest> {
   const candidate = body && typeof body === 'object' ? (body as Record<string, unknown>) : {};
@@ -75,7 +75,7 @@ export async function resolveStreamRequest(
       ? await runtimeProviderResolver.resolve(config, workspaceId)
       : mockRuntimeProviders();
     const capabilitySnapshot = typeof workspaceId === 'number' && capabilitySettings
-      ? capabilitySettings.snapshot(workspaceId, capabilityKeysForConfig(config, providers))
+      ? await capabilitySettings.snapshot(workspaceId, capabilityKeysForConfig(config, providers))
       : undefined;
     if (capabilitySnapshot && capabilitySettings) {
       try {

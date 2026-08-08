@@ -2142,11 +2142,14 @@ complete. Follow the same dependency and verification protocol used above.
   protection, API Key evidence, retention, and MFA. Real PostgreSQL mutation
   attempts prove each security event family is database-immutable; seven
   migration domains remain open. The tenth P22 slice completes PostgreSQL-native
-  schema parity through `026`-`032`. A digest-pinned real PostgreSQL run now
-  applies all 32 migrations and verifies invitation targeting, Operator revision
+  schema parity through `026`-`032`. An eleventh slice adds `033_job_reliability`
+  with active Job deduplication and atomic multi-worker claims. A digest-pinned
+  real PostgreSQL run now applies all 33 migrations and verifies invitation targeting, Operator revision
   guards, upload and privacy evidence, ownership history, legal-hold dual control,
-  and blocked retention evidence. Async parameterized repositories and production
-  data transfer remain open before runtime cutover.
+  blocked retention evidence, Job concurrency, Capability settings, and Tool audit
+  idempotency. Core identity and Agent runtime repositories are asynchronous and
+  parameterized; remaining commercial, security, compliance, and Operator
+  repositories plus production data transfer remain open before runtime cutover.
 
 ### P23-01 Full Commercial End-To-End Suite
 

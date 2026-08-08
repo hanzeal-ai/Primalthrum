@@ -6,8 +6,8 @@ import { sendApiError } from '../services/apiErrors';
 import { BillingError } from '../services/billingRepository';
 import {
   CapabilityDisabledError,
-  CapabilitySettingsRepository,
 } from '../services/capabilitySettingsRepository';
+import { type CapabilitySettingsStore } from '../services/capabilitySettingsStore';
 import { type StructuredLogger } from '../services/logger';
 import {
   MeteredOperationService,
@@ -24,7 +24,7 @@ import { type WorkspacePermission } from '../services/workspaceAuthorization';
 
 interface SpeechRouteDependencies {
   authorize: (ctx: Koa.Context, permission: WorkspacePermission) => boolean;
-  capabilities: CapabilitySettingsRepository;
+  capabilities: CapabilitySettingsStore;
   currentWorkspaceId: (ctx: Koa.Context) => number;
   logger: StructuredLogger;
   metering: MeteredOperationService;
@@ -53,7 +53,7 @@ export function registerSpeechRoutes(
       const workspaceId = currentWorkspaceId(ctx);
       const provider = await resolver.resolve('stt', workspaceId, providerConfigId);
       capabilities.assertEnabled(
-        capabilities.snapshot(workspaceId, [`stt:${provider.provider}`]),
+        await capabilities.snapshot(workspaceId, [`stt:${provider.provider}`]),
       );
       operation = metering.begin({
         workspaceId,
@@ -84,7 +84,7 @@ export function registerSpeechRoutes(
       const workspaceId = currentWorkspaceId(ctx);
       const provider = await resolver.resolve('tts', workspaceId, providerConfigId);
       capabilities.assertEnabled(
-        capabilities.snapshot(workspaceId, [`tts:${provider.provider}`]),
+        await capabilities.snapshot(workspaceId, [`tts:${provider.provider}`]),
       );
       const text = parseSpeechText(body.text);
       operation = metering.begin({
