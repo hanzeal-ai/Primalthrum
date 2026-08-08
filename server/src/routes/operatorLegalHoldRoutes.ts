@@ -6,14 +6,14 @@ import { OperatorAuditRepository } from '../services/operatorAuditRepository';
 import { OperatorIdentityRepository } from '../services/operatorIdentityRepository';
 import {
   WorkspaceLegalHoldError,
-  WorkspaceLegalHoldRepository,
 } from '../services/workspaceLegalHoldRepository';
+import { type WorkspaceLegalHoldStore } from '../services/workspaceLegalHoldStore';
 import { operatorError, requireOperator } from './operatorRoutes';
 
 interface OperatorLegalHoldRouteOptions {
   audit: OperatorAuditRepository;
   identity: OperatorIdentityRepository;
-  legalHolds: WorkspaceLegalHoldRepository;
+  legalHolds: WorkspaceLegalHoldStore;
   logger: StructuredLogger;
 }
 
@@ -21,10 +21,10 @@ export function registerOperatorLegalHoldRoutes(
   router: Router,
   options: OperatorLegalHoldRouteOptions,
 ): void {
-  router.get('/api/operator/legal-holds', (ctx) => {
+  router.get('/api/operator/legal-holds', async (ctx) => {
     const authenticated = requireOperator(ctx, options, 'legal_holds.read');
     if (!authenticated) return;
-    const holds = options.legalHolds.list(queryLimit(ctx.query.limit));
+    const holds = await options.legalHolds.list(queryLimit(ctx.query.limit));
     options.audit.record({
       operatorUserId: authenticated.user.id,
       eventType: 'operator.legal_holds_read',
@@ -34,12 +34,12 @@ export function registerOperatorLegalHoldRoutes(
     ctx.body = holds;
   });
 
-  router.post('/api/operator/legal-holds', (ctx) => {
+  router.post('/api/operator/legal-holds', async (ctx) => {
     const authenticated = requireOperator(ctx, options, 'legal_holds.manage');
     if (!authenticated) return;
     try {
       const body = requestBody(ctx);
-      const hold = options.legalHolds.create({
+      const hold = await options.legalHolds.create({
         workspaceId: body.workspaceId,
         externalCaseRef: body.externalCaseRef,
         basis: body.basis,
@@ -64,12 +64,12 @@ export function registerOperatorLegalHoldRoutes(
     }
   });
 
-  router.post('/api/operator/legal-holds/:id/release', (ctx) => {
+  router.post('/api/operator/legal-holds/:id/release', async (ctx) => {
     const authenticated = requireOperator(ctx, options, 'legal_holds.manage');
     if (!authenticated) return;
     try {
       const body = requestBody(ctx);
-      const hold = options.legalHolds.release(ctx.params.id, {
+      const hold = await options.legalHolds.release(ctx.params.id, {
         expectedRevision: body.expectedRevision,
         releaseReason: body.releaseReason,
         operatorUserId: authenticated.user.id,

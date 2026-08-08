@@ -2192,6 +2192,10 @@ complete. Follow the same dependency and verification protocol used above.
   removal, and account/Workspace anonymization now use that same async database.
   PostgreSQL locks every active member Workspace and rechecks legal and commercial
   blockers before deletion, while application smoke proves zero fallback leakage.
+  Workspace Legal Hold placement, reads, active counts, and second-operator release
+  now have a parameterized async repository. Real PostgreSQL concurrency smoke proves
+  one-winner revision semantics and atomic immutable events. Global composition waits
+  for the Operator identity and audit repositories so foreign keys cannot span stores.
 
 ### P23-01 Full Commercial End-To-End Suite
 

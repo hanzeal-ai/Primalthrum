@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
+import { type WorkspaceLegalHoldStore } from './workspaceLegalHoldStore';
 
 export const LEGAL_HOLD_BASES = [
   'litigation',
@@ -59,7 +60,7 @@ export class WorkspaceLegalHoldError extends Error {
   }
 }
 
-export class WorkspaceLegalHoldRepository {
+export class WorkspaceLegalHoldRepository implements WorkspaceLegalHoldStore {
   constructor(
     private readonly db: DatabaseAdapter,
     private readonly now: () => Date = () => new Date(),

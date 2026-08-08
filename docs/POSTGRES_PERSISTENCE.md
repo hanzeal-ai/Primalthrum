@@ -43,6 +43,11 @@ deletion scheduling, credential revocation, file removal, and account/Workspace
 anonymization now use the async runtime database. Deletion locks every active
 member Workspace and rechecks legal holds and commercial blockers before files
 or metadata are removed.
+An asynchronous legal-hold repository now parameterizes placement, listing, and
+two-operator release against SQLite or PostgreSQL. PostgreSQL row locks serialize
+competing releases and preserve placement/release evidence in the same transaction.
+Application composition remains on the synchronous fallback until Operator identity
+and audit repositories share the asynchronous database boundary.
 The application-level PostgreSQL smoke completes registration and email verification
 over HTTP and asserts that no account lifecycle records leak into local SQLite. PostgreSQL
 must not be selected as the sole application database until the remaining
