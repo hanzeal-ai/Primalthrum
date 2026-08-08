@@ -4,6 +4,7 @@ import {
   normalizeSupportGrantPermissions,
   type SupportGrantPermission,
 } from './operatorAuthorization';
+import { type SupportAccessStore } from './supportAccessStore';
 
 const MAX_GRANT_MS = 4 * 60 * 60 * 1000;
 const MIN_GRANT_MS = 5 * 60 * 1000;
@@ -35,7 +36,7 @@ interface SupportGrantRow {
   created_at: string;
 }
 
-export class SupportAccessRepository {
+export class SupportAccessRepository implements SupportAccessStore {
   constructor(
     private readonly db: DatabaseAdapter,
     private readonly now: () => Date = () => new Date(),

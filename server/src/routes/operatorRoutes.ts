@@ -12,7 +12,7 @@ import { type AuthenticatedOperatorSession } from '../services/operatorIdentityR
 import { type OperatorIdentityStore } from '../services/operatorIdentityStore';
 import { OperatorReadRepository } from '../services/operatorReadRepository';
 import { hashPassword, verifyPassword, verifyPasswordOrDummy } from '../services/passwordHash';
-import { SupportAccessRepository } from '../services/supportAccessRepository';
+import { type SupportAccessStore } from '../services/supportAccessStore';
 
 export interface OperatorRouteSecurityOptions {
   audit: OperatorAuditStore;
@@ -25,7 +25,7 @@ interface OperatorRouteOptions extends OperatorRouteSecurityOptions {
   enforceAbuse: (ctx: Koa.Context) => Promise<boolean>;
   reads: OperatorReadRepository;
   readiness: () => Promise<unknown>;
-  support: SupportAccessRepository;
+  support: SupportAccessStore;
 }
 
 export function registerOperatorRoutes(

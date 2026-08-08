@@ -2197,8 +2197,10 @@ complete. Follow the same dependency and verification protocol used above.
   one-winner revision semantics and atomic immutable events. Operator identity and
   immutable audit now have async repositories, and all four Operator route groups await
   those shared contracts. PostgreSQL verifies one-time bootstrap, session revocation,
-  password rotation, metadata sanitization, and immutable evidence. Global composition
-  waits for read, support, Flag, and incident repositories so no Operator flow spans stores.
+  password rotation, metadata sanitization, and immutable evidence. Support Access
+  Grants now serialize active-grant creation with Workspace and assignee locks and
+  preserve scoped revocation evidence. Global composition waits for read, Flag, and
+  incident repositories so no Operator flow spans stores.
 
 ### P23-01 Full Commercial End-To-End Suite
 

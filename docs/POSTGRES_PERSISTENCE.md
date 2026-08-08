@@ -49,8 +49,10 @@ competing releases and preserve placement/release evidence in the same transacti
 Operator identity and immutable audit now also expose parameterized async repositories;
 all Operator route groups await the shared identity/audit contracts. PostgreSQL smoke
 verifies one-time bootstrap enforcement, session revocation, password rotation, audit
-sanitization, and database-level immutability. Application composition remains on the
-synchronous fallback until the remaining Operator read, support, Flag, and incident
+sanitization, and database-level immutability. Support Access Grants now have an async
+repository that locks the Workspace and assignee before enforcing one active grant,
+and persists scoped creation and revocation evidence. Application composition remains
+on the synchronous fallback until the remaining Operator read, Flag, and incident
 repositories share the asynchronous database boundary.
 The application-level PostgreSQL smoke completes registration and email verification
 over HTTP and asserts that no account lifecycle records leak into local SQLite. PostgreSQL
