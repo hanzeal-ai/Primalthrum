@@ -3,22 +3,20 @@ import { timingSafeEqual } from 'node:crypto';
 import type Koa from 'koa';
 
 import { type StructuredLogger } from '../services/logger';
-import { OperatorAuditRepository } from '../services/operatorAuditRepository';
+import { type OperatorAuditStore } from '../services/operatorAuditStore';
 import {
   hasOperatorPermission,
   type OperatorPermission,
 } from '../services/operatorAuthorization';
-import {
-  OperatorIdentityRepository,
-  type AuthenticatedOperatorSession,
-} from '../services/operatorIdentityRepository';
+import { type AuthenticatedOperatorSession } from '../services/operatorIdentityRepository';
+import { type OperatorIdentityStore } from '../services/operatorIdentityStore';
 import { OperatorReadRepository } from '../services/operatorReadRepository';
 import { hashPassword, verifyPassword, verifyPasswordOrDummy } from '../services/passwordHash';
 import { SupportAccessRepository } from '../services/supportAccessRepository';
 
 export interface OperatorRouteSecurityOptions {
-  audit: OperatorAuditRepository;
-  identity: OperatorIdentityRepository;
+  audit: OperatorAuditStore;
+  identity: OperatorIdentityStore;
   logger: StructuredLogger;
 }
 
@@ -34,16 +32,16 @@ export function registerOperatorRoutes(
   router: Router,
   options: OperatorRouteOptions,
 ): void {
-  router.get('/api/operator/setup/status', (ctx) => {
+  router.get('/api/operator/setup/status', async (ctx) => {
     ctx.body = {
-      needsSetup: options.identity.needsSetup(),
+      needsSetup: await options.identity.needsSetup(),
       setupEnabled: validConfiguredBootstrapToken(options.bootstrapToken),
     };
   });
 
   router.post('/api/operator/setup', async (ctx) => {
     if (!await options.enforceAbuse(ctx)) return;
-    if (!options.identity.needsSetup()) {
+    if (!await options.identity.needsSetup()) {
       operatorError(ctx, options.logger, 409, 'OPERATOR_SETUP_COMPLETE', 'operator setup is already complete');
       return;
     }
@@ -54,9 +52,9 @@ export function registerOperatorRoutes(
     try {
       const body = requestBody(ctx);
       const password = normalizeOperatorPassword(body.password);
-      const user = options.identity.createInitial(body.email, hashPassword(password));
-      const session = options.identity.createSession(user.id);
-      options.audit.record({
+      const user = await options.identity.createInitial(body.email, hashPassword(password));
+      const session = await options.identity.createSession(user.id);
+      await options.audit.record({
         operatorUserId: user.id,
         eventType: 'operator.setup_completed',
         targetType: 'operator',
@@ -73,12 +71,12 @@ export function registerOperatorRoutes(
     if (!await options.enforceAbuse(ctx)) return;
     const body = requestBody(ctx);
     const password = typeof body.password === 'string' ? body.password : '';
-    const credentials = options.identity.findCredentialsByEmail(body.email);
+    const credentials = await options.identity.findCredentialsByEmail(body.email);
     if (
       !verifyPasswordOrDummy(password, credentials?.passwordHash ?? null)
       || credentials?.status !== 'active'
     ) {
-      options.audit.record({
+      await options.audit.record({
         eventType: 'operator.login_failed',
         targetType: 'operator',
         metadata: { identityProvided: typeof body.email === 'string' && Boolean(body.email.trim()) },
@@ -86,8 +84,8 @@ export function registerOperatorRoutes(
       operatorError(ctx, options.logger, 401, 'OPERATOR_AUTHENTICATION_FAILED', 'invalid operator credentials');
       return;
     }
-    const session = options.identity.createSession(credentials.id);
-    options.audit.record({
+    const session = await options.identity.createSession(credentials.id);
+    await options.audit.record({
       operatorUserId: credentials.id,
       eventType: 'operator.login_succeeded',
       targetType: 'operator',
@@ -97,17 +95,17 @@ export function registerOperatorRoutes(
     ctx.body = { user, session };
   });
 
-  router.get('/api/operator/auth/session', (ctx) => {
-    const authenticated = requireOperator(ctx, options);
+  router.get('/api/operator/auth/session', async (ctx) => {
+    const authenticated = await requireOperator(ctx, options);
     if (!authenticated) return;
     ctx.body = { user: authenticated.user, expiresAt: authenticated.expiresAt };
   });
 
-  router.post('/api/operator/auth/logout', (ctx) => {
-    const authenticated = requireOperator(ctx, options);
+  router.post('/api/operator/auth/logout', async (ctx) => {
+    const authenticated = await requireOperator(ctx, options);
     if (!authenticated) return;
-    options.identity.revokeToken(operatorToken(ctx));
-    options.audit.record({
+    await options.identity.revokeToken(operatorToken(ctx));
+    await options.audit.record({
       operatorUserId: authenticated.user.id,
       eventType: 'operator.logout',
       targetType: 'operator',
@@ -116,22 +114,22 @@ export function registerOperatorRoutes(
     ctx.status = 204;
   });
 
-  router.put('/api/operator/auth/password', (ctx) => {
-    const authenticated = requireOperator(ctx, options, undefined, true);
+  router.put('/api/operator/auth/password', async (ctx) => {
+    const authenticated = await requireOperator(ctx, options, undefined, true);
     if (!authenticated) return;
     const body = requestBody(ctx);
     const currentPassword = typeof body.currentPassword === 'string' ? body.currentPassword : '';
-    const credentials = options.identity.findCredentialsByEmail(authenticated.user.email);
+    const credentials = await options.identity.findCredentialsByEmail(authenticated.user.email);
     if (!credentials || !verifyPassword(currentPassword, credentials.passwordHash)) {
       operatorError(ctx, options.logger, 403, 'OPERATOR_REAUTHENTICATION_REQUIRED', 'current password is invalid');
       return;
     }
     try {
       const password = normalizeOperatorPassword(body.password);
-      options.identity.updatePassword(authenticated.user.id, hashPassword(password));
-      const session = options.identity.createSession(authenticated.user.id);
-      const user = options.identity.findById(authenticated.user.id);
-      options.audit.record({
+      await options.identity.updatePassword(authenticated.user.id, hashPassword(password));
+      const session = await options.identity.createSession(authenticated.user.id);
+      const user = await options.identity.findById(authenticated.user.id);
+      await options.audit.record({
         operatorUserId: authenticated.user.id,
         eventType: 'operator.password_changed',
         targetType: 'operator',
@@ -144,13 +142,13 @@ export function registerOperatorRoutes(
   });
 
   router.get('/api/operator/overview', async (ctx) => {
-    const authenticated = requireOperator(ctx, options, 'overview.read');
+    const authenticated = await requireOperator(ctx, options, 'overview.read');
     if (!authenticated) return;
     const [readiness, overview] = await Promise.all([
       options.readiness(),
       Promise.resolve(options.reads.overview()),
     ]);
-    options.audit.record({
+    await options.audit.record({
       operatorUserId: authenticated.user.id,
       eventType: 'operator.overview_read',
       targetType: 'platform',
@@ -158,11 +156,11 @@ export function registerOperatorRoutes(
     ctx.body = { overview, readiness };
   });
 
-  router.get('/api/operator/workspaces', (ctx) => {
-    const authenticated = requireOperator(ctx, options, 'workspaces.read');
+  router.get('/api/operator/workspaces', async (ctx) => {
+    const authenticated = await requireOperator(ctx, options, 'workspaces.read');
     if (!authenticated) return;
-    const workspaces = options.reads.listWorkspaces(queryLimit(ctx.query.limit));
-    options.audit.record({
+    const workspaces = await options.reads.listWorkspaces(queryLimit(ctx.query.limit));
+    await options.audit.record({
       operatorUserId: authenticated.user.id,
       eventType: 'operator.workspaces_read',
       targetType: 'workspace',
@@ -171,15 +169,15 @@ export function registerOperatorRoutes(
     ctx.body = workspaces;
   });
 
-  router.get('/api/operator/workspaces/:id', (ctx) => {
-    const authenticated = requireOperator(ctx, options, 'workspaces.read');
+  router.get('/api/operator/workspaces/:id', async (ctx) => {
+    const authenticated = await requireOperator(ctx, options, 'workspaces.read');
     if (!authenticated) return;
-    const workspace = options.reads.workspace(positiveId(ctx.params.id));
+    const workspace = await options.reads.workspace(positiveId(ctx.params.id));
     if (!workspace) {
       operatorError(ctx, options.logger, 404, 'OPERATOR_WORKSPACE_NOT_FOUND', 'workspace not found');
       return;
     }
-    options.audit.record({
+    await options.audit.record({
       operatorUserId: authenticated.user.id,
       eventType: 'operator.workspace_read',
       targetType: 'workspace',
@@ -188,23 +186,23 @@ export function registerOperatorRoutes(
     ctx.body = workspace;
   });
 
-  router.get('/api/operator/operators', (ctx) => {
-    const authenticated = requireOperator(ctx, options, 'operators.read');
+  router.get('/api/operator/operators', async (ctx) => {
+    const authenticated = await requireOperator(ctx, options, 'operators.read');
     if (!authenticated) return;
-    ctx.body = options.identity.list();
+    ctx.body = await options.identity.list();
   });
 
-  router.post('/api/operator/operators', (ctx) => {
-    const authenticated = requireOperator(ctx, options, 'operators.manage');
+  router.post('/api/operator/operators', async (ctx) => {
+    const authenticated = await requireOperator(ctx, options, 'operators.manage');
     if (!authenticated) return;
     try {
       const body = requestBody(ctx);
-      const user = options.identity.create({
+      const user = await options.identity.create({
         email: body.email,
         passwordHash: hashPassword(normalizeOperatorPassword(body.password)),
         role: body.role,
       });
-      options.audit.record({
+      await options.audit.record({
         operatorUserId: authenticated.user.id,
         eventType: 'operator.user_created',
         targetType: 'operator',
@@ -218,19 +216,19 @@ export function registerOperatorRoutes(
     }
   });
 
-  router.get('/api/operator/support-grants', (ctx) => {
-    const authenticated = requireOperator(ctx, options, 'support.read');
+  router.get('/api/operator/support-grants', async (ctx) => {
+    const authenticated = await requireOperator(ctx, options, 'support.read');
     if (!authenticated) return;
     const canManage = hasOperatorPermission(authenticated.user.role, 'support.manage');
-    ctx.body = options.support.list(canManage ? undefined : authenticated.user.id);
+    ctx.body = await options.support.list(canManage ? undefined : authenticated.user.id);
   });
 
-  router.post('/api/operator/support-grants', (ctx) => {
-    const authenticated = requireOperator(ctx, options, 'support.manage');
+  router.post('/api/operator/support-grants', async (ctx) => {
+    const authenticated = await requireOperator(ctx, options, 'support.manage');
     if (!authenticated) return;
     try {
       const body = requestBody(ctx);
-      const grant = options.support.create({
+      const grant = await options.support.create({
         workspaceId: positiveId(body.workspaceId),
         operatorUserId: positiveId(body.operatorUserId),
         permissions: body.permissions,
@@ -239,7 +237,7 @@ export function registerOperatorRoutes(
         expiresAt: body.expiresAt,
         createdByOperatorId: authenticated.user.id,
       });
-      options.audit.record({
+      await options.audit.record({
         operatorUserId: authenticated.user.id,
         eventType: 'operator.support_grant_created',
         targetType: 'support_grant',
@@ -259,15 +257,15 @@ export function registerOperatorRoutes(
     }
   });
 
-  router.delete('/api/operator/support-grants/:id', (ctx) => {
-    const authenticated = requireOperator(ctx, options, 'support.manage');
+  router.delete('/api/operator/support-grants/:id', async (ctx) => {
+    const authenticated = await requireOperator(ctx, options, 'support.manage');
     if (!authenticated) return;
-    const grant = options.support.revoke(positiveId(ctx.params.id), authenticated.user.id);
+    const grant = await options.support.revoke(positiveId(ctx.params.id), authenticated.user.id);
     if (!grant) {
       operatorError(ctx, options.logger, 404, 'OPERATOR_SUPPORT_GRANT_NOT_FOUND', 'support grant not found');
       return;
     }
-    options.audit.record({
+    await options.audit.record({
       operatorUserId: authenticated.user.id,
       eventType: 'operator.support_grant_revoked',
       targetType: 'support_grant',
@@ -277,20 +275,20 @@ export function registerOperatorRoutes(
     ctx.body = grant;
   });
 
-  router.get('/api/operator/support-grants/:id/context', (ctx) => {
-    const authenticated = requireOperator(ctx, options, 'support.use');
+  router.get('/api/operator/support-grants/:id/context', async (ctx) => {
+    const authenticated = await requireOperator(ctx, options, 'support.use');
     if (!authenticated) return;
-    const grant = options.support.findActive(positiveId(ctx.params.id), authenticated.user.id);
+    const grant = await options.support.findActive(positiveId(ctx.params.id), authenticated.user.id);
     if (!grant) {
       operatorError(ctx, options.logger, 403, 'OPERATOR_SUPPORT_ACCESS_DENIED', 'active assigned support access is required');
       return;
     }
-    const context = options.reads.supportContext(grant.workspaceId, grant.permissions);
+    const context = await options.reads.supportContext(grant.workspaceId, grant.permissions);
     if (!context) {
       operatorError(ctx, options.logger, 404, 'OPERATOR_WORKSPACE_NOT_FOUND', 'workspace not found');
       return;
     }
-    options.audit.record({
+    await options.audit.record({
       operatorUserId: authenticated.user.id,
       eventType: 'operator.support_context_read',
       targetType: 'workspace',
@@ -300,11 +298,11 @@ export function registerOperatorRoutes(
     ctx.body = { grant, context };
   });
 
-  router.get('/api/operator/audit', (ctx) => {
-    const authenticated = requireOperator(ctx, options, 'audit.read');
+  router.get('/api/operator/audit', async (ctx) => {
+    const authenticated = await requireOperator(ctx, options, 'audit.read');
     if (!authenticated) return;
-    const events = options.audit.list(queryLimit(ctx.query.limit));
-    options.audit.record({
+    const events = await options.audit.list(queryLimit(ctx.query.limit));
+    await options.audit.record({
       operatorUserId: authenticated.user.id,
       eventType: 'operator.audit_read',
       targetType: 'operator_audit',
@@ -319,8 +317,17 @@ export function requireOperator(
   options: OperatorRouteSecurityOptions,
   permission?: OperatorPermission,
   allowPasswordChange = false,
-): AuthenticatedOperatorSession | null {
-  const session = options.identity.findByToken(operatorToken(ctx));
+): Promise<AuthenticatedOperatorSession | null> {
+  return requireOperatorAsync(ctx, options, permission, allowPasswordChange);
+}
+
+async function requireOperatorAsync(
+  ctx: Koa.Context,
+  options: OperatorRouteSecurityOptions,
+  permission?: OperatorPermission,
+  allowPasswordChange = false,
+): Promise<AuthenticatedOperatorSession | null> {
+  const session = await options.identity.findByToken(operatorToken(ctx));
   if (!session) {
     operatorError(ctx, options.logger, 401, 'OPERATOR_AUTHENTICATION_REQUIRED', 'operator authentication is required');
     return null;
@@ -330,7 +337,7 @@ export function requireOperator(
     return null;
   }
   if (permission && !hasOperatorPermission(session.user.role, permission)) {
-    options.audit.record({
+    await options.audit.record({
       operatorUserId: session.user.id,
       eventType: 'operator.authorization_denied',
       targetType: 'permission',

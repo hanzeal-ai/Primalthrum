@@ -46,8 +46,12 @@ or metadata are removed.
 An asynchronous legal-hold repository now parameterizes placement, listing, and
 two-operator release against SQLite or PostgreSQL. PostgreSQL row locks serialize
 competing releases and preserve placement/release evidence in the same transaction.
-Application composition remains on the synchronous fallback until Operator identity
-and audit repositories share the asynchronous database boundary.
+Operator identity and immutable audit now also expose parameterized async repositories;
+all Operator route groups await the shared identity/audit contracts. PostgreSQL smoke
+verifies one-time bootstrap enforcement, session revocation, password rotation, audit
+sanitization, and database-level immutability. Application composition remains on the
+synchronous fallback until the remaining Operator read, support, Flag, and incident
+repositories share the asynchronous database boundary.
 The application-level PostgreSQL smoke completes registration and email verification
 over HTTP and asserts that no account lifecycle records leak into local SQLite. PostgreSQL
 must not be selected as the sole application database until the remaining

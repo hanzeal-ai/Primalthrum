@@ -1,17 +1,17 @@
 import Router from '@koa/router';
 import type Koa from 'koa';
 
-import { OperatorAuditRepository } from '../services/operatorAuditRepository';
+import { type OperatorAuditStore } from '../services/operatorAuditStore';
 import { OperatorFeatureFlagRepository } from '../services/operatorFeatureFlagRepository';
 import { OperatorIncidentRepository } from '../services/operatorIncidentRepository';
 import { type StructuredLogger } from '../services/logger';
-import { OperatorIdentityRepository } from '../services/operatorIdentityRepository';
+import { type OperatorIdentityStore } from '../services/operatorIdentityStore';
 import { operatorError, requireOperator } from './operatorRoutes';
 
 interface OperatorChangeRouteOptions {
-  audit: OperatorAuditRepository;
+  audit: OperatorAuditStore;
   featureFlags: OperatorFeatureFlagRepository;
-  identity: OperatorIdentityRepository;
+  identity: OperatorIdentityStore;
   incidents: OperatorIncidentRepository;
   logger: StructuredLogger;
 }
@@ -20,20 +20,20 @@ export function registerOperatorChangeRoutes(
   router: Router,
   options: OperatorChangeRouteOptions,
 ): void {
-  router.get('/api/operator/feature-flags', (ctx) => {
-    const authenticated = requireOperator(ctx, options, 'feature_flags.read');
+  router.get('/api/operator/feature-flags', async (ctx) => {
+    const authenticated = await requireOperator(ctx, options, 'feature_flags.read');
     if (!authenticated) return;
-    const flags = options.featureFlags.list();
-    recordRead(options, authenticated.user.id, 'operator.feature_flags_read', 'feature_flag', flags.length);
+    const flags = await options.featureFlags.list();
+    await recordRead(options, authenticated.user.id, 'operator.feature_flags_read', 'feature_flag', flags.length);
     ctx.body = flags;
   });
 
-  router.post('/api/operator/feature-flags', (ctx) => {
-    const authenticated = requireOperator(ctx, options, 'feature_flags.manage');
+  router.post('/api/operator/feature-flags', async (ctx) => {
+    const authenticated = await requireOperator(ctx, options, 'feature_flags.manage');
     if (!authenticated) return;
     try {
       const body = requestBody(ctx);
-      const flag = options.featureFlags.create({
+      const flag = await options.featureFlags.create({
         key: body.key,
         description: body.description,
         enabled: body.enabled,
@@ -41,7 +41,7 @@ export function registerOperatorChangeRoutes(
         rolloutPercentage: body.rolloutPercentage,
         operatorUserId: authenticated.user.id,
       });
-      options.audit.record({
+      await options.audit.record({
         operatorUserId: authenticated.user.id,
         eventType: 'operator.feature_flag_created',
         targetType: 'feature_flag',
@@ -55,12 +55,12 @@ export function registerOperatorChangeRoutes(
     }
   });
 
-  router.put('/api/operator/feature-flags/:id', (ctx) => {
-    const authenticated = requireOperator(ctx, options, 'feature_flags.manage');
+  router.put('/api/operator/feature-flags/:id', async (ctx) => {
+    const authenticated = await requireOperator(ctx, options, 'feature_flags.manage');
     if (!authenticated) return;
     try {
       const body = requestBody(ctx);
-      const flag = options.featureFlags.update(positiveId(ctx.params.id), {
+      const flag = await options.featureFlags.update(positiveId(ctx.params.id), {
         description: body.description,
         enabled: body.enabled,
         killSwitch: body.killSwitch,
@@ -68,7 +68,7 @@ export function registerOperatorChangeRoutes(
         expectedRevision: body.expectedRevision,
         operatorUserId: authenticated.user.id,
       });
-      options.audit.record({
+      await options.audit.record({
         operatorUserId: authenticated.user.id,
         eventType: 'operator.feature_flag_updated',
         targetType: 'feature_flag',
@@ -86,32 +86,32 @@ export function registerOperatorChangeRoutes(
     }
   });
 
-  router.get('/api/operator/feature-flags/:id/events', (ctx) => {
-    const authenticated = requireOperator(ctx, options, 'feature_flags.read');
+  router.get('/api/operator/feature-flags/:id/events', async (ctx) => {
+    const authenticated = await requireOperator(ctx, options, 'feature_flags.read');
     if (!authenticated) return;
     try {
       const flagId = positiveId(ctx.params.id);
-      const events = options.featureFlags.listEvents(flagId, queryLimit(ctx.query.limit));
-      recordRead(options, authenticated.user.id, 'operator.feature_flag_events_read', 'feature_flag', events.length, flagId);
+      const events = await options.featureFlags.listEvents(flagId, queryLimit(ctx.query.limit));
+      await recordRead(options, authenticated.user.id, 'operator.feature_flag_events_read', 'feature_flag', events.length, flagId);
       ctx.body = events;
     } catch (error) {
       changeRequestError(ctx, options.logger, error);
     }
   });
 
-  router.post('/api/operator/feature-flags/:id/overrides', (ctx) => {
-    const authenticated = requireOperator(ctx, options, 'feature_flags.manage');
+  router.post('/api/operator/feature-flags/:id/overrides', async (ctx) => {
+    const authenticated = await requireOperator(ctx, options, 'feature_flags.manage');
     if (!authenticated) return;
     try {
       const flagId = positiveId(ctx.params.id);
       const body = requestBody(ctx);
-      const override = options.featureFlags.createOverride(flagId, {
+      const override = await options.featureFlags.createOverride(flagId, {
         workspaceId: body.workspaceId,
         enabled: body.enabled,
         reason: body.reason,
         operatorUserId: authenticated.user.id,
       });
-      options.audit.record({
+      await options.audit.record({
         operatorUserId: authenticated.user.id,
         eventType: 'operator.feature_flag_override_created',
         targetType: 'feature_flag_override',
@@ -125,13 +125,13 @@ export function registerOperatorChangeRoutes(
     }
   });
 
-  router.post('/api/operator/feature-flags/:id/overrides/:overrideId/revoke', (ctx) => {
-    const authenticated = requireOperator(ctx, options, 'feature_flags.manage');
+  router.post('/api/operator/feature-flags/:id/overrides/:overrideId/revoke', async (ctx) => {
+    const authenticated = await requireOperator(ctx, options, 'feature_flags.manage');
     if (!authenticated) return;
     try {
       const flagId = positiveId(ctx.params.id);
       const body = requestBody(ctx);
-      const override = options.featureFlags.revokeOverride(
+      const override = await options.featureFlags.revokeOverride(
         flagId,
         positiveId(ctx.params.overrideId),
         {
@@ -139,7 +139,7 @@ export function registerOperatorChangeRoutes(
           operatorUserId: authenticated.user.id,
         },
       );
-      options.audit.record({
+      await options.audit.record({
         operatorUserId: authenticated.user.id,
         eventType: 'operator.feature_flag_override_revoked',
         targetType: 'feature_flag_override',
@@ -152,32 +152,32 @@ export function registerOperatorChangeRoutes(
     }
   });
 
-  router.get('/api/operator/incidents', (ctx) => {
-    const authenticated = requireOperator(ctx, options, 'incidents.read');
+  router.get('/api/operator/incidents', async (ctx) => {
+    const authenticated = await requireOperator(ctx, options, 'incidents.read');
     if (!authenticated) return;
-    const incidents = options.incidents.list(queryLimit(ctx.query.limit));
-    recordRead(options, authenticated.user.id, 'operator.incidents_read', 'incident', incidents.length);
+    const incidents = await options.incidents.list(queryLimit(ctx.query.limit));
+    await recordRead(options, authenticated.user.id, 'operator.incidents_read', 'incident', incidents.length);
     ctx.body = incidents;
   });
 
-  router.get('/api/operator/incidents/:id', (ctx) => {
-    const authenticated = requireOperator(ctx, options, 'incidents.read');
+  router.get('/api/operator/incidents/:id', async (ctx) => {
+    const authenticated = await requireOperator(ctx, options, 'incidents.read');
     if (!authenticated) return;
-    const incident = options.incidents.find(positiveId(ctx.params.id));
+    const incident = await options.incidents.find(positiveId(ctx.params.id));
     if (!incident) {
       operatorError(ctx, options.logger, 404, 'OPERATOR_INCIDENT_NOT_FOUND', 'incident not found');
       return;
     }
-    recordRead(options, authenticated.user.id, 'operator.incident_read', 'incident', 1, incident.id);
+    await recordRead(options, authenticated.user.id, 'operator.incident_read', 'incident', 1, incident.id);
     ctx.body = incident;
   });
 
-  router.post('/api/operator/incidents', (ctx) => {
-    const authenticated = requireOperator(ctx, options, 'incidents.manage');
+  router.post('/api/operator/incidents', async (ctx) => {
+    const authenticated = await requireOperator(ctx, options, 'incidents.manage');
     if (!authenticated) return;
     try {
       const body = requestBody(ctx);
-      const incident = options.incidents.create({
+      const incident = await options.incidents.create({
         title: body.title,
         severity: body.severity,
         impactScope: body.impactScope,
@@ -187,7 +187,7 @@ export function registerOperatorChangeRoutes(
         ownerOperatorId: body.ownerOperatorId,
         operatorUserId: authenticated.user.id,
       });
-      options.audit.record({
+      await options.audit.record({
         operatorUserId: authenticated.user.id,
         eventType: 'operator.incident_created',
         targetType: 'incident',
@@ -205,12 +205,12 @@ export function registerOperatorChangeRoutes(
     }
   });
 
-  router.put('/api/operator/incidents/:id', (ctx) => {
-    const authenticated = requireOperator(ctx, options, 'incidents.manage');
+  router.put('/api/operator/incidents/:id', async (ctx) => {
+    const authenticated = await requireOperator(ctx, options, 'incidents.manage');
     if (!authenticated) return;
     try {
       const body = requestBody(ctx);
-      const incident = options.incidents.update(positiveId(ctx.params.id), {
+      const incident = await options.incidents.update(positiveId(ctx.params.id), {
         title: body.title,
         severity: body.severity,
         status: body.status,
@@ -221,7 +221,7 @@ export function registerOperatorChangeRoutes(
         expectedRevision: body.expectedRevision,
         operatorUserId: authenticated.user.id,
       });
-      options.audit.record({
+      await options.audit.record({
         operatorUserId: authenticated.user.id,
         eventType: 'operator.incident_updated',
         targetType: 'incident',
@@ -238,18 +238,18 @@ export function registerOperatorChangeRoutes(
     }
   });
 
-  router.post('/api/operator/incidents/:id/events', (ctx) => {
-    const authenticated = requireOperator(ctx, options, 'incidents.manage');
+  router.post('/api/operator/incidents/:id/events', async (ctx) => {
+    const authenticated = await requireOperator(ctx, options, 'incidents.manage');
     if (!authenticated) return;
     try {
       const incidentId = positiveId(ctx.params.id);
       const body = requestBody(ctx);
-      const event = options.incidents.appendEvent(incidentId, {
+      const event = await options.incidents.appendEvent(incidentId, {
         eventType: body.eventType,
         message: body.message,
         operatorUserId: authenticated.user.id,
       });
-      options.audit.record({
+      await options.audit.record({
         operatorUserId: authenticated.user.id,
         eventType: 'operator.incident_event_created',
         targetType: 'incident',
@@ -282,15 +282,15 @@ function queryLimit(value: unknown): number {
   return Number.isSafeInteger(parsed) && parsed > 0 ? Math.min(parsed, 200) : 100;
 }
 
-function recordRead(
+async function recordRead(
   options: Pick<OperatorChangeRouteOptions, 'audit'>,
   operatorUserId: number,
   eventType: string,
   targetType: string,
   count: number,
   targetId?: number,
-): void {
-  options.audit.record({
+): Promise<void> {
+  await options.audit.record({
     operatorUserId,
     eventType,
     targetType,

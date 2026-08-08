@@ -7,6 +7,7 @@ import {
   normalizeOperatorRole,
   type OperatorRole,
 } from './operatorAuthorization';
+import { type OperatorIdentityStore } from './operatorIdentityStore';
 
 const OPERATOR_SESSION_TTL_MS = 12 * 60 * 60 * 1000;
 
@@ -49,7 +50,7 @@ interface OperatorSessionRow extends OperatorRow {
   expires_at: string;
 }
 
-export class OperatorIdentityRepository {
+export class OperatorIdentityRepository implements OperatorIdentityStore {
   constructor(
     private readonly db: DatabaseAdapter,
     private readonly now: () => Date = () => new Date(),

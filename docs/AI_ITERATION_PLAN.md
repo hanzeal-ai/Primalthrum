@@ -2194,8 +2194,11 @@ complete. Follow the same dependency and verification protocol used above.
   blockers before deletion, while application smoke proves zero fallback leakage.
   Workspace Legal Hold placement, reads, active counts, and second-operator release
   now have a parameterized async repository. Real PostgreSQL concurrency smoke proves
-  one-winner revision semantics and atomic immutable events. Global composition waits
-  for the Operator identity and audit repositories so foreign keys cannot span stores.
+  one-winner revision semantics and atomic immutable events. Operator identity and
+  immutable audit now have async repositories, and all four Operator route groups await
+  those shared contracts. PostgreSQL verifies one-time bootstrap, session revocation,
+  password rotation, metadata sanitization, and immutable evidence. Global composition
+  waits for read, support, Flag, and incident repositories so no Operator flow spans stores.
 
 ### P23-01 Full Commercial End-To-End Suite
 

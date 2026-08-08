@@ -1,19 +1,12 @@
 import { randomUUID } from 'node:crypto';
 
-import { type DatabaseAdapter } from '../db/adapter';
-import { sqlValue } from '../db/sql';
-import { type OperatorAuditStore } from './operatorAuditStore';
-
-export interface OperatorAuditRecord {
-  id: number;
-  eventId: string;
-  operatorUserId: number | null;
-  eventType: string;
-  targetType: string;
-  targetId: string;
-  metadata: Record<string, unknown>;
-  createdAt: string;
-}
+import { type AsyncDatabaseAdapter } from '../db/asyncAdapter';
+import { databaseTimestamp } from '../db/databaseTimestamp';
+import { type OperatorAuditRecord } from './operatorAuditRepository';
+import {
+  type OperatorAuditStore,
+  type RecordOperatorAuditInput,
+} from './operatorAuditStore';
 
 interface AuditRow {
   id: number;
@@ -23,55 +16,63 @@ interface AuditRow {
   target_type: string;
   target_id: string;
   metadata_json: string;
-  created_at: string;
+  created_at: string | Date;
 }
 
-export class OperatorAuditRepository implements OperatorAuditStore {
-  constructor(private readonly db: DatabaseAdapter) {
-  }
+export class AsyncOperatorAuditRepository implements OperatorAuditStore {
+  constructor(private readonly database: AsyncDatabaseAdapter) {}
 
-  record(input: {
-    operatorUserId?: number | null;
-    eventType: string;
-    targetType?: string;
-    targetId?: string | number;
-    metadata?: Record<string, unknown>;
-  }): OperatorAuditRecord {
+  async record(input: RecordOperatorAuditInput): Promise<OperatorAuditRecord> {
     const eventType = normalizeKey(input.eventType, 'event type');
     const targetType = input.targetType ? normalizeKey(input.targetType, 'target type') : '';
     const targetId = String(input.targetId ?? '').slice(0, 128);
     const eventId = randomUUID();
-    this.db.run(`
-      INSERT INTO operator_audit_events (
-        event_id, operator_user_id, event_type, target_type, target_id, metadata_json
-      ) VALUES (
-        ${sqlValue(eventId)}, ${sqlValue(input.operatorUserId ?? null)},
-        ${sqlValue(eventType)}, ${sqlValue(targetType)}, ${sqlValue(targetId)},
-        ${sqlValue(JSON.stringify(sanitizeMetadata(input.metadata ?? {})))}
-      );
-    `);
-    const row = this.db.query<AuditRow>(`
-      SELECT id, event_id, operator_user_id, event_type, target_type,
-        target_id, metadata_json, created_at
-      FROM operator_audit_events
-      WHERE event_id = ${sqlValue(eventId)}
-      LIMIT 1;
-    `)[0];
-    if (!row) throw new Error('operator audit event could not be loaded');
-    return toAuditRecord(row);
+    await this.database.execute({
+      text: `
+        INSERT INTO operator_audit_events (
+          event_id, operator_user_id, event_type, target_type, target_id, metadata_json
+        ) VALUES ($1, $2, $3, $4, $5, $6);
+      `,
+      values: [
+        eventId,
+        input.operatorUserId ?? null,
+        eventType,
+        targetType,
+        targetId,
+        JSON.stringify(sanitizeMetadata(input.metadata ?? {})),
+      ],
+    });
+    const rows = await this.database.query<AuditRow>({
+      text: `
+        SELECT ${AUDIT_COLUMNS} FROM operator_audit_events
+        WHERE event_id = $1 LIMIT 1;
+      `,
+      values: [eventId],
+    });
+    if (!rows[0]) throw new Error('operator audit event could not be loaded');
+    return toAuditRecord(rows[0]);
   }
 
-  list(limit = 100): OperatorAuditRecord[] {
+  async list(limit = 100): Promise<OperatorAuditRecord[]> {
     const boundedLimit = Math.min(Math.max(Math.floor(limit), 1), 200);
-    return this.db.query<AuditRow>(`
-      SELECT id, event_id, operator_user_id, event_type, target_type,
-        target_id, metadata_json, created_at
-      FROM operator_audit_events
-      ORDER BY id DESC
-      LIMIT ${boundedLimit};
-    `).map(toAuditRecord);
+    const rows = await this.database.query<AuditRow>({
+      text: `SELECT ${AUDIT_COLUMNS} FROM operator_audit_events ORDER BY id DESC LIMIT $1;`,
+      values: [boundedLimit],
+    });
+    return rows.map(toAuditRecord);
   }
 }
+
+const AUDIT_COLUMNS = [
+  'id',
+  'event_id',
+  'operator_user_id',
+  'event_type',
+  'target_type',
+  'target_id',
+  'metadata_json',
+  'created_at',
+].join(', ');
 
 const SENSITIVE_KEY = /(password|token|secret|authorization|cookie|payload|content)/i;
 
@@ -122,6 +123,6 @@ function toAuditRecord(row: AuditRow): OperatorAuditRecord {
     targetType: row.target_type,
     targetId: row.target_id,
     metadata: JSON.parse(row.metadata_json) as Record<string, unknown>,
-    createdAt: row.created_at,
+    createdAt: databaseTimestamp(row.created_at),
   };
 }

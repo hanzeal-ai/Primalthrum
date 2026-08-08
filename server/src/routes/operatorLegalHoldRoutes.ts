@@ -2,8 +2,8 @@ import Router from '@koa/router';
 import type Koa from 'koa';
 
 import { type StructuredLogger } from '../services/logger';
-import { OperatorAuditRepository } from '../services/operatorAuditRepository';
-import { OperatorIdentityRepository } from '../services/operatorIdentityRepository';
+import { type OperatorAuditStore } from '../services/operatorAuditStore';
+import { type OperatorIdentityStore } from '../services/operatorIdentityStore';
 import {
   WorkspaceLegalHoldError,
 } from '../services/workspaceLegalHoldRepository';
@@ -11,8 +11,8 @@ import { type WorkspaceLegalHoldStore } from '../services/workspaceLegalHoldStor
 import { operatorError, requireOperator } from './operatorRoutes';
 
 interface OperatorLegalHoldRouteOptions {
-  audit: OperatorAuditRepository;
-  identity: OperatorIdentityRepository;
+  audit: OperatorAuditStore;
+  identity: OperatorIdentityStore;
   legalHolds: WorkspaceLegalHoldStore;
   logger: StructuredLogger;
 }
@@ -22,10 +22,10 @@ export function registerOperatorLegalHoldRoutes(
   options: OperatorLegalHoldRouteOptions,
 ): void {
   router.get('/api/operator/legal-holds', async (ctx) => {
-    const authenticated = requireOperator(ctx, options, 'legal_holds.read');
+    const authenticated = await requireOperator(ctx, options, 'legal_holds.read');
     if (!authenticated) return;
     const holds = await options.legalHolds.list(queryLimit(ctx.query.limit));
-    options.audit.record({
+    await options.audit.record({
       operatorUserId: authenticated.user.id,
       eventType: 'operator.legal_holds_read',
       targetType: 'legal_hold',
@@ -35,7 +35,7 @@ export function registerOperatorLegalHoldRoutes(
   });
 
   router.post('/api/operator/legal-holds', async (ctx) => {
-    const authenticated = requireOperator(ctx, options, 'legal_holds.manage');
+    const authenticated = await requireOperator(ctx, options, 'legal_holds.manage');
     if (!authenticated) return;
     try {
       const body = requestBody(ctx);
@@ -46,7 +46,7 @@ export function registerOperatorLegalHoldRoutes(
         reason: body.reason,
         operatorUserId: authenticated.user.id,
       });
-      options.audit.record({
+      await options.audit.record({
         operatorUserId: authenticated.user.id,
         eventType: 'operator.legal_hold_placed',
         targetType: 'legal_hold',
@@ -65,7 +65,7 @@ export function registerOperatorLegalHoldRoutes(
   });
 
   router.post('/api/operator/legal-holds/:id/release', async (ctx) => {
-    const authenticated = requireOperator(ctx, options, 'legal_holds.manage');
+    const authenticated = await requireOperator(ctx, options, 'legal_holds.manage');
     if (!authenticated) return;
     try {
       const body = requestBody(ctx);
@@ -74,7 +74,7 @@ export function registerOperatorLegalHoldRoutes(
         releaseReason: body.releaseReason,
         operatorUserId: authenticated.user.id,
       });
-      options.audit.record({
+      await options.audit.record({
         operatorUserId: authenticated.user.id,
         eventType: 'operator.legal_hold_released',
         targetType: 'legal_hold',
