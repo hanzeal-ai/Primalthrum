@@ -216,15 +216,37 @@ import {
   type WorkspacePermission,
 } from './services/workspaceAuthorization';
 import { OperatorIdentityRepository } from './services/operatorIdentityRepository';
+import { AsyncOperatorIdentityRepository } from './services/asyncOperatorIdentityRepository';
+import { type OperatorIdentityStore } from './services/operatorIdentityStore';
 import { OperatorAuditRepository } from './services/operatorAuditRepository';
+import { AsyncOperatorAuditRepository } from './services/asyncOperatorAuditRepository';
+import { type OperatorAuditStore } from './services/operatorAuditStore';
 import { OperatorBillingReadRepository } from './services/operatorBillingReadRepository';
+import { AsyncOperatorBillingReadRepository } from './services/asyncOperatorBillingReadRepository';
+import { type OperatorBillingReadStore } from './services/operatorBillingReadStore';
 import { OperatorCustomerReadRepository } from './services/operatorCustomerReadRepository';
+import { AsyncOperatorCustomerReadRepository } from './services/asyncOperatorCustomerReadRepository';
+import { type OperatorCustomerReadStore } from './services/operatorCustomerReadStore';
 import { OperatorFeatureFlagRepository } from './services/operatorFeatureFlagRepository';
+import { AsyncOperatorFeatureFlagRepository } from './services/asyncOperatorFeatureFlagRepository';
+import { type OperatorFeatureFlagStore } from './services/operatorFeatureFlagStore';
 import { OperatorIncidentRepository } from './services/operatorIncidentRepository';
+import { AsyncOperatorIncidentRepository } from './services/asyncOperatorIncidentRepository';
+import { type OperatorIncidentStore } from './services/operatorIncidentStore';
 import { OperatorReadRepository } from './services/operatorReadRepository';
+import { AsyncOperatorReadRepository } from './services/asyncOperatorReadRepository';
+import { type OperatorReadStore } from './services/operatorReadStore';
 import { OperatorRuntimeReadRepository } from './services/operatorRuntimeReadRepository';
+import { AsyncOperatorRuntimeReadRepository } from './services/asyncOperatorRuntimeReadRepository';
+import { type OperatorRuntimeReadStore } from './services/operatorRuntimeReadStore';
 import { OperatorSecurityReadRepository } from './services/operatorSecurityReadRepository';
+import { AsyncOperatorSecurityReadRepository } from './services/asyncOperatorSecurityReadRepository';
+import { type OperatorSecurityReadStore } from './services/operatorSecurityReadStore';
 import { SupportAccessRepository } from './services/supportAccessRepository';
+import { AsyncSupportAccessRepository } from './services/asyncSupportAccessRepository';
+import { type SupportAccessStore } from './services/supportAccessStore';
+import { AsyncWorkspaceLegalHoldRepository } from './services/asyncWorkspaceLegalHoldRepository';
+import { type WorkspaceLegalHoldStore } from './services/workspaceLegalHoldStore';
 
 export interface AppOptions {
   accountDeletionGracePeriodMs?: number;
@@ -409,17 +431,39 @@ export function createApp(options: AppOptions = {}): Koa {
   const workspaceOwnershipRepository: WorkspaceOwnershipStore = identityDatabase
     ? new AsyncWorkspaceOwnershipRepository(identityDatabase)
     : new WorkspaceOwnershipRepository(db, syncWorkspaceRepository);
-  const operatorIdentity = new OperatorIdentityRepository(db);
-  const operatorAudit = new OperatorAuditRepository(db);
-  const operatorBillingReads = new OperatorBillingReadRepository(db);
-  const operatorCustomerReads = new OperatorCustomerReadRepository(db);
-  const operatorFeatureFlags = new OperatorFeatureFlagRepository(db);
-  const operatorIncidents = new OperatorIncidentRepository(db);
-  const workspaceLegalHolds = new WorkspaceLegalHoldRepository(db);
-  const operatorReads = new OperatorReadRepository(db);
-  const operatorRuntimeReads = new OperatorRuntimeReadRepository(db);
-  const operatorSecurityReads = new OperatorSecurityReadRepository(db);
-  const supportAccess = new SupportAccessRepository(db);
+  const operatorIdentity: OperatorIdentityStore = runtimeDatabase
+    ? new AsyncOperatorIdentityRepository(runtimeDatabase)
+    : new OperatorIdentityRepository(db);
+  const operatorAudit: OperatorAuditStore = runtimeDatabase
+    ? new AsyncOperatorAuditRepository(runtimeDatabase)
+    : new OperatorAuditRepository(db);
+  const operatorBillingReads: OperatorBillingReadStore = runtimeDatabase
+    ? new AsyncOperatorBillingReadRepository(runtimeDatabase)
+    : new OperatorBillingReadRepository(db);
+  const operatorCustomerReads: OperatorCustomerReadStore = runtimeDatabase
+    ? new AsyncOperatorCustomerReadRepository(runtimeDatabase)
+    : new OperatorCustomerReadRepository(db);
+  const operatorFeatureFlags: OperatorFeatureFlagStore = runtimeDatabase
+    ? new AsyncOperatorFeatureFlagRepository(runtimeDatabase)
+    : new OperatorFeatureFlagRepository(db);
+  const operatorIncidents: OperatorIncidentStore = runtimeDatabase
+    ? new AsyncOperatorIncidentRepository(runtimeDatabase)
+    : new OperatorIncidentRepository(db);
+  const workspaceLegalHolds: WorkspaceLegalHoldStore = runtimeDatabase
+    ? new AsyncWorkspaceLegalHoldRepository(runtimeDatabase)
+    : new WorkspaceLegalHoldRepository(db);
+  const operatorReads: OperatorReadStore = runtimeDatabase
+    ? new AsyncOperatorReadRepository(runtimeDatabase)
+    : new OperatorReadRepository(db);
+  const operatorRuntimeReads: OperatorRuntimeReadStore = runtimeDatabase
+    ? new AsyncOperatorRuntimeReadRepository(runtimeDatabase)
+    : new OperatorRuntimeReadRepository(db);
+  const operatorSecurityReads: OperatorSecurityReadStore = runtimeDatabase
+    ? new AsyncOperatorSecurityReadRepository(runtimeDatabase)
+    : new OperatorSecurityReadRepository(db);
+  const supportAccess: SupportAccessStore = runtimeDatabase
+    ? new AsyncSupportAccessRepository(runtimeDatabase)
+    : new SupportAccessRepository(db);
   const localSecretVault = new LocalSecretVault(db);
   const asyncIdentitySecretVault = identityDatabase
     ? new AsyncSecretVault(identityDatabase)

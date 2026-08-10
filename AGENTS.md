@@ -1,3 +1,15 @@
+## File Responsibility And Decoupling
+
+- New production files MUST have one primary responsibility and one clear reason to change.
+- Keep transport/routes, application composition, domain validation, data contracts, persistence mapping, and UI rendering in separate modules when they can be tested or changed independently.
+- Composition roots such as `server/src/app.ts`, `server/index.ts`, and `agent/main.py` may wire dependencies and lifecycle only; do not add business rules, SQL, request validation, or feature UI to them.
+- Keep features, components, and pages decoupled: a feature owns one cohesive business capability, a component owns reusable presentation or interaction, and a page owns routing plus feature composition only.
+- Features must not import page modules. Reusable components must not depend on a specific page or perform feature API orchestration. Pages must not contain independent business workflows, persistence calls, or reusable domain logic.
+- React page components coordinate feature modules. Extract feature-scoped API clients, stateful hooks, forms, panels, and domain types instead of extending a page with another independent workflow.
+- A hand-written production file above 400 lines is an architecture warning. A change that adds a new responsibility to such a file MUST first extract the touched responsibility; ordered migration catalogs and generated artifacts are exempt when splitting would obscure ordering.
+- Do not create catch-all `utils`, `types`, `services`, or `client` modules. Name modules after the capability they own and keep public contracts narrow.
+- Refactors MUST preserve behavior with focused tests. Review the largest changed files before commit and record any intentional exception in the relevant architecture document.
+
 <!-- gitnexus:start -->
 # GitNexus — Code Intelligence
 

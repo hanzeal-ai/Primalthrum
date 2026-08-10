@@ -2206,7 +2206,12 @@ complete. Follow the same dependency and verification protocol used above.
   omit provider payloads, URLs, and errors. Feature Flags now serialize revision updates
   and active Workspace overrides while committing immutable events atomically; real
   PostgreSQL concurrency smoke verifies one-winner semantics and deterministic evaluation.
-  Global composition waits for the incident repository so no Operator flow spans stores.
+  Incidents now use the same parameterized async boundary with row-locked revisions,
+  guarded transitions, scoped targets, and atomic append-only timelines. Global
+  composition selects the shared async runtime database for every Operator store, and a
+  PostgreSQL HTTP smoke covers all route groups, concurrent incident updates, and zero
+  fallback SQLite access. Production data transfer, backup/restore, rollback, Redis,
+  durable workers, managed secrets, OpenTelemetry, deployment, and scaling remain open.
 
 ### P23-01 Full Commercial End-To-End Suite
 

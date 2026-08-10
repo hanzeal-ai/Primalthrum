@@ -3,7 +3,7 @@ import type Koa from 'koa';
 
 import { type OperatorAuditStore } from '../services/operatorAuditStore';
 import { type OperatorFeatureFlagStore } from '../services/operatorFeatureFlagStore';
-import { OperatorIncidentRepository } from '../services/operatorIncidentRepository';
+import { type OperatorIncidentStore } from '../services/operatorIncidentStore';
 import { type StructuredLogger } from '../services/logger';
 import { type OperatorIdentityStore } from '../services/operatorIdentityStore';
 import { operatorError, requireOperator } from './operatorRoutes';
@@ -12,7 +12,7 @@ interface OperatorChangeRouteOptions {
   audit: OperatorAuditStore;
   featureFlags: OperatorFeatureFlagStore;
   identity: OperatorIdentityStore;
-  incidents: OperatorIncidentRepository;
+  incidents: OperatorIncidentStore;
   logger: StructuredLogger;
 }
 

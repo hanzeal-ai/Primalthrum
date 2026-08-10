@@ -58,12 +58,17 @@ subscription, monthly usage, invoice, refund, and failed-Webhook views now share
 async boundary without exposing payment URLs, payloads, or error text. Application
 Feature Flags now also have an async repository with row-locked revision updates,
 one-active-Workspace-override enforcement, deterministic evaluation, and transactional
-immutable events. Application composition remains on the synchronous fallback until the
-incident repository shares the asynchronous database boundary.
+immutable events. Operator incidents now share that async boundary with row-locked
+revision updates, scoped target validation, guarded status transitions, and atomic
+append-only timelines. When an async runtime database is configured, application
+composition selects it for every Operator identity, audit, support, legal-hold, read,
+Feature Flag, and incident store; the SQLite fallback remains available for local mode.
+The PostgreSQL Operator application smoke exercises every route group, proves concurrent
+incident updates have exactly one winner, and rejects any fallback SQLite access.
 The application-level PostgreSQL smoke completes registration and email verification
 over HTTP and asserts that no account lifecycle records leak into local SQLite. PostgreSQL
-must not be selected as the sole application database until the remaining
-Operator repositories and production data-transfer gates are complete.
+must not be selected as the sole application database until the remaining production
+data-transfer, backup, restore, and rollback gates are complete.
 
 `server/src/db/postgresMigrations.ts` owns a separate PostgreSQL-native migration
 chain. It applies immutable ordered IDs in one transaction behind a PostgreSQL

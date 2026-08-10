@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
+import { type OperatorIncidentStore } from './operatorIncidentStore';
 
 export const INCIDENT_SEVERITIES = ['sev1', 'sev2', 'sev3', 'sev4'] as const;
 export const INCIDENT_STATUSES = ['investigating', 'identified', 'monitoring', 'resolved'] as const;
@@ -83,7 +84,7 @@ interface IncidentEventRow {
   created_at: string;
 }
 
-export class OperatorIncidentRepository {
+export class OperatorIncidentRepository implements OperatorIncidentStore {
   constructor(
     private readonly db: DatabaseAdapter,
     private readonly now: () => Date = () => new Date(),
