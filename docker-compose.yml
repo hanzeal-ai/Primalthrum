@@ -1,4 +1,18 @@
 services:
+  postgres:
+    image: postgres@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
+    environment:
+      POSTGRES_USER: primalthrum
+      POSTGRES_PASSWORD: primalthrum-development-secret
+      POSTGRES_DB: primalthrum
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U primalthrum -d primalthrum"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+
   object-storage:
     image: minio/minio:RELEASE.2025-04-22T22-12-26Z
     command: server /data --console-address :9001
@@ -39,8 +53,12 @@ services:
         condition: service_started
       object-storage-init:
         condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
     environment:
       AGENT_BASE_URL: http://agent:8000
+      DATABASE_URL: postgresql://primalthrum:primalthrum-development-secret@postgres:5432/primalthrum
+      DATABASE_POOL_MAX: "20"
       DOCUMENT_STORAGE_PROVIDER: s3
       OBJECT_STORAGE_ENDPOINT: http://object-storage:9000
       OBJECT_STORAGE_ACCESS_KEY_ID: primalthrum-development
@@ -69,3 +87,4 @@ services:
 
 volumes:
   object-storage-data:
+  postgres-data:

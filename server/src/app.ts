@@ -8,6 +8,7 @@ import { type DatabaseAdapter } from './db/adapter';
 import { type AsyncDatabaseAdapter } from './db/asyncAdapter';
 import { AsyncSqliteDatabase } from './db/asyncSqlite';
 import { createSqliteDatabase, initializeDatabase } from './db/databaseFactory';
+import { DisabledDatabase } from './db/disabled';
 import { generateAgentProject } from './generators/agentProjectGenerator';
 import {
   AgentRepository,
@@ -363,13 +364,18 @@ export function createApp(options: AppOptions = {}): Koa {
   const logger = options.logger ?? new JsonConsoleLogger();
   const metrics = options.metrics ?? new MetricsRegistry();
   const databasePath = options.dbPath ?? DEFAULT_DB_PATH;
+  const injectedAsyncDatabase = options.identityDatabase ?? options.runtimeDatabase;
   const db = options.database
     ? initializeDatabase(options.database)
-    : createSqliteDatabase(databasePath);
-  const ownedIdentityDatabase = !options.database && !options.identityDatabase
+    : injectedAsyncDatabase
+      ? new DisabledDatabase()
+      : createSqliteDatabase(databasePath);
+  const ownedIdentityDatabase = !options.database && !injectedAsyncDatabase
     ? new AsyncSqliteDatabase(databasePath)
     : undefined;
-  const identityDatabase = options.identityDatabase ?? ownedIdentityDatabase;
+  const identityDatabase = options.identityDatabase
+    ?? options.runtimeDatabase
+    ?? ownedIdentityDatabase;
   const runtimeDatabase = options.runtimeDatabase ?? identityDatabase;
   if (ownedIdentityDatabase) {
     registerAppCleanup(app, () => ownedIdentityDatabase.close());
@@ -416,6 +422,11 @@ export function createApp(options: AppOptions = {}): Koa {
   const documentStorage = options.documentStorage ?? new LocalDocumentStorage(
     options.documentStorageDir ?? DEFAULT_DOCUMENT_STORAGE_DIR,
   );
+  const readiness = () => checkServerReadiness({
+    ...(runtimeDatabase ? { asyncDatabase: runtimeDatabase } : { db }),
+    agentBaseUrl,
+    documentStorage,
+  });
   const syncUserRepository = new UserRepository(db);
   const syncWorkspaceRepository = new WorkspaceRepository(db);
   const syncSessionRepository = new SessionRepository(db);
@@ -1037,7 +1048,7 @@ export function createApp(options: AppOptions = {}): Koa {
     identity: operatorIdentity,
     logger,
     reads: operatorReads,
-    readiness: () => checkServerReadiness({ db, agentBaseUrl, documentStorage }),
+    readiness,
     support: supportAccess,
   });
   registerOperatorDomainRoutes(operatorRouter, {
@@ -1115,7 +1126,7 @@ export function createApp(options: AppOptions = {}): Koa {
   });
 
   router.get('/ready', async (ctx) => {
-    const report = await checkServerReadiness({ db, agentBaseUrl, documentStorage });
+    const report = await readiness();
     ctx.status = report.status === 'ready' ? 200 : 503;
     ctx.body = report;
   });

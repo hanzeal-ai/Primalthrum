@@ -2210,8 +2210,13 @@ complete. Follow the same dependency and verification protocol used above.
   guarded transitions, scoped targets, and atomic append-only timelines. Global
   composition selects the shared async runtime database for every Operator store, and a
   PostgreSQL HTTP smoke covers all route groups, concurrent incident updates, and zero
-  fallback SQLite access. Production data transfer, backup/restore, rollback, Redis,
-  durable workers, managed secrets, OpenTelemetry, deployment, and scaling remain open.
+  fallback SQLite access. The Node production entrypoint now validates `DATABASE_URL`,
+  applies all PostgreSQL migrations before listening, closes failed pools, and rejects
+  production SQLite. Async composition no longer creates a fallback SQLite file, and
+  readiness probes the selected PostgreSQL database. Docker Compose now boots the same
+  digest-pinned PostgreSQL service and routes the complete application through it.
+  Production data transfer, backup/restore, rollback, Redis, durable workers, managed
+  secrets, OpenTelemetry, deployment hardening, and scaling remain open.
 
 ### P23-01 Full Commercial End-To-End Suite
 

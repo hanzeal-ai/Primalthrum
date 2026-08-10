@@ -1,4 +1,5 @@
 import { type DatabaseAdapter } from '../db/adapter';
+import { type AsyncDatabaseAdapter } from '../db/asyncAdapter';
 import { type DocumentFileStorage } from './fileStorage';
 
 export type ReadinessCheckStatus = 'ok' | 'failed';
@@ -18,13 +19,14 @@ export interface ReadinessReport {
 }
 
 export async function checkServerReadiness(input: {
-  db: DatabaseAdapter;
+  db?: DatabaseAdapter;
+  asyncDatabase?: AsyncDatabaseAdapter;
   agentBaseUrl: string;
   agentTimeoutMs?: number;
   documentStorage?: DocumentFileStorage;
 }): Promise<ReadinessReport> {
   const checks: ReadinessCheck[] = [
-    checkDatabase(input.db),
+    await checkDatabase(input),
     await checkAgentRuntime(input.agentBaseUrl, input.agentTimeoutMs ?? 1500),
   ];
   if (input.documentStorage) checks.push(await checkDocumentStorage(input.documentStorage));
@@ -51,10 +53,16 @@ async function checkDocumentStorage(storage: DocumentFileStorage): Promise<Readi
   }
 }
 
-function checkDatabase(db: DatabaseAdapter): ReadinessCheck {
+async function checkDatabase(input: {
+  db?: DatabaseAdapter;
+  asyncDatabase?: AsyncDatabaseAdapter;
+}): Promise<ReadinessCheck> {
   const startedAt = Date.now();
   try {
-    const rows = db.query<{ ok: number }>('SELECT 1 AS ok;');
+    const rows = input.asyncDatabase
+      ? await input.asyncDatabase.query<{ ok: number }>({ text: 'SELECT 1 AS ok;' })
+      : input.db?.query<{ ok: number }>('SELECT 1 AS ok;');
+    if (!rows) throw new Error('database probe is not configured');
     if (Number(rows[0]?.ok) !== 1) {
       throw new Error('database probe returned an unexpected result');
     }

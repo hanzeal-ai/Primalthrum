@@ -6,7 +6,7 @@ This guide installs Primalthrum for a local or single-node commercial pilot.
 
 - Node.js and pnpm.
 - Python 3.11 or newer.
-- `sqlite3` CLI available on `PATH`.
+- PostgreSQL 17 for production, or `sqlite3` on `PATH` for local development.
 - A private ClamAV service for every production deployment.
 - A private, versioned S3-compatible bucket for production document storage.
 - Docker when running the object-storage integration smoke locally.
@@ -40,9 +40,12 @@ export CLAMAV_HOST=clamav
 export CLAMAV_PORT=3310
 ```
 
-For a production server, also configure `DOCUMENT_STORAGE_PROVIDER=s3` and every
-`OBJECT_STORAGE_*` value from `server/.env.example` through the deployment secret
-manager. Startup fails closed when production uses local storage or an HTTP endpoint.
+For a production server, configure `DATABASE_URL`, `DOCUMENT_STORAGE_PROVIDER=s3`,
+and every `OBJECT_STORAGE_*` value from `server/.env.example` through the deployment
+secret manager. The Node server validates the PostgreSQL URL, opens a bounded pool,
+applies all ordered migrations, and only then opens its HTTP port. Startup fails closed
+without PostgreSQL, when migration fails, when production uses local storage, or when
+the object-storage endpoint is HTTP.
 
 ## Start
 

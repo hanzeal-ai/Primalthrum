@@ -1,12 +1,11 @@
 # Postgres Persistence Path
 
-Primalthrum currently ships with SQLite for a single-node local deployment.
-Repositories now depend on `DatabaseAdapter` instead of the concrete
-`SqliteDatabase`, schema introspection is owned by the adapter, and repository
-constructors no longer execute migrations. Database initialization now happens
-once at the application composition boundary. The Agent runtime path is being
-migrated incrementally, while commercial, security, compliance, and Operator
-repositories still contain synchronous SQLite-specific operations.
+Primalthrum uses SQLite for local single-node development and selects PostgreSQL
+whenever `DATABASE_URL` is configured. Production startup requires PostgreSQL,
+applies ordered migrations before listening, and closes the pool when migration or
+application composition fails. Repositories retain synchronous SQLite implementations
+for local compatibility while production composition selects their parameterized async
+stores.
 
 The next-generation persistence boundary is available in
 `server/src/db/asyncAdapter.ts`. `PostgresDatabase` implements this boundary with
@@ -128,19 +127,15 @@ asynchronous repository migration and production data-transfer evidence.
 
 Use SQLite when running one local operator, local demos, or development environments where the server and database share a filesystem.
 
-Use Postgres when running multiple server instances, deploying to managed cloud infrastructure, requiring managed backups, or needing stronger concurrency guarantees for jobs, runs, audit logs, and provider configuration.
+Use Postgres when running multiple server instances, deploying to managed cloud infrastructure, requiring managed backups, or needing stronger concurrency guarantees for jobs, runs, audit logs, and provider configuration. `NODE_ENV=production` without a valid `DATABASE_URL` is rejected before the server listens.
 
-## Postgres Adapter Plan
+## Remaining Production Data Gates
 
-1. Convert the database contract and repository methods to asynchronous,
-   parameterized operations while retaining the SQLite test provider.
-2. Isolate transaction modes, identity retrieval, JSON access, and DDL behind
-   explicit dialect operations.
-3. Add a pooled PostgreSQL adapter and a PostgreSQL-native ordered migration set.
-4. Run repository, concurrency, migration, and full HTTP suites against a real
-   pinned PostgreSQL container in CI.
-5. Add SQLite-to-PostgreSQL migration, reconciliation, backup, restore, rollback,
-   and deployment evidence before selecting PostgreSQL in production.
+1. Add SQLite-to-PostgreSQL transfer and row-level reconciliation tooling.
+2. Prove managed PostgreSQL backup, point-in-time recovery, restore, and rollback.
+3. Run the full repository, concurrency, migration, HTTP, and browser suites against
+   the pinned PostgreSQL service in CI and the production-like deployment stack.
+4. Complete load, failover, connection exhaustion, and zero-downtime rollout evidence.
 
 ## Integration Smoke
 
