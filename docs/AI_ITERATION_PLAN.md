@@ -2214,8 +2214,16 @@ complete. Follow the same dependency and verification protocol used above.
   applies all PostgreSQL migrations before listening, closes failed pools, and rejects
   production SQLite. Async composition no longer creates a fallback SQLite file, and
   readiness probes the selected PostgreSQL database. Docker Compose now boots the same
-  digest-pinned PostgreSQL service and routes the complete application through it.
-  Production data transfer, backup/restore, rollback, Redis, durable workers, managed
+  digest-pinned PostgreSQL service and routes the complete application through it. A
+  production transfer command now verifies all 33 migration IDs and exact table/column/
+  primary-key parity, rejects non-seed target data, copies SQLite rows in foreign-key
+  order under source and target transactions, restores Identity sequences, and commits
+  only after row-count and canonical SHA-256 reconciliation. The audit report excludes
+  row values and connection secrets; focused tests cover typed normalization, target
+  contamination, seed replacement, and full rollback. The pinned-container transfer
+  smoke is wired into `scripts/postgres-smoke.sh`, but current local Docker daemon
+  availability prevented fresh execution evidence in this slice. Production-like data
+  and object transfer, backup/restore, rollback, Redis, durable workers, managed
   secrets, OpenTelemetry, deployment hardening, and scaling remain open.
 
 ### P23-01 Full Commercial End-To-End Suite

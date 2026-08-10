@@ -6,6 +6,7 @@ RUN_ID="${$}"
 CONTAINER="primalthrum-postgres-smoke-${RUN_ID}"
 PASSWORD="primalthrum-smoke-password"
 DATABASE="primalthrum_smoke"
+TRANSFER_DATABASE="primalthrum_transfer_smoke"
 IMAGE="${POSTGRES_SMOKE_IMAGE:-postgres@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193}"
 
 cleanup() {
@@ -32,9 +33,12 @@ test "$READY" -eq 1
 
 PORT="$(docker port "$CONTAINER" 5432/tcp | sed 's/.*://')"
 test -n "$PORT"
+docker exec "$CONTAINER" createdb --username postgres "$TRANSFER_DATABASE"
 
 (
   cd "$ROOT_DIR/server"
+  DATABASE_URL="postgresql://postgres:${PASSWORD}@127.0.0.1:${PORT}/${TRANSFER_DATABASE}" \
+    pnpm exec ts-node src/commands/postgresDataTransferSmoke.ts
   DATABASE_URL="postgresql://postgres:${PASSWORD}@127.0.0.1:${PORT}/${DATABASE}" \
     pnpm exec ts-node src/commands/postgresSmoke.ts
   DATABASE_URL="postgresql://postgres:${PASSWORD}@127.0.0.1:${PORT}/${DATABASE}" \

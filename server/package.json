@@ -4,6 +4,7 @@
   "description": "Primalthrum Node API server",
   "main": "index.js",
   "scripts": {
+    "data:transfer:postgres": "ts-node src/commands/transferSqliteToPostgres.ts",
     "dev": "nodemon --exec ts-node index.ts",
     "build": "tsc -p tsconfig.build.json",
     "smoke:postgres": "../scripts/postgres-smoke.sh",

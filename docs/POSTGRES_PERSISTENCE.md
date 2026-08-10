@@ -65,9 +65,12 @@ Feature Flag, and incident store; the SQLite fallback remains available for loca
 The PostgreSQL Operator application smoke exercises every route group, proves concurrent
 incident updates have exactly one winner, and rejects any fallback SQLite access.
 The application-level PostgreSQL smoke completes registration and email verification
-over HTTP and asserts that no account lifecycle records leak into local SQLite. PostgreSQL
-must not be selected as the sole application database until the remaining production
-data-transfer, backup, restore, and rollback gates are complete.
+over HTTP and asserts that no account lifecycle records leak into local SQLite.
+`pnpm data:transfer:postgres` now provides maintenance-window SQLite transfer with
+schema parity checks, fresh-target enforcement, foreign-key ordering, transactional
+copy, Identity sequence repair, and exact row-count/SHA-256 reconciliation. The
+production runbook is `docs/SQLITE_TO_POSTGRES_TRANSFER.md`. Production-like transfer,
+managed backup, restore, and rollback evidence remain required for launch.
 
 `server/src/db/postgresMigrations.ts` owns a separate PostgreSQL-native migration
 chain. It applies immutable ordered IDs in one transaction behind a PostgreSQL
@@ -131,7 +134,9 @@ Use Postgres when running multiple server instances, deploying to managed cloud 
 
 ## Remaining Production Data Gates
 
-1. Add SQLite-to-PostgreSQL transfer and row-level reconciliation tooling.
+1. Execute the transfer tool against the pinned PostgreSQL service in CI and a
+   production-like environment, retain the reconciliation report, and reconcile
+   document/object transfer.
 2. Prove managed PostgreSQL backup, point-in-time recovery, restore, and rollback.
 3. Run the full repository, concurrency, migration, HTTP, and browser suites against
    the pinned PostgreSQL service in CI and the production-like deployment stack.

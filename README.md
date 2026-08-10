@@ -212,6 +212,7 @@ web/     React + TypeScript + Vite 研发控制台
 - [Troubleshooting](docs/TROUBLESHOOTING.md): readiness、认证、provider、文档索引、stream 和 metrics 故障排查。
 - [Database Migrations](docs/MIGRATIONS.md): 运行和维护 server SQLite 迁移。
 - [Postgres Persistence Path](docs/POSTGRES_PERSISTENCE.md): SQLite 与 Postgres 部署选择和迁移准备。
+- [SQLite To PostgreSQL Transfer](docs/SQLITE_TO_POSTGRES_TRANSFER.md): 维护窗口、全表事务迁移、逐表摘要核对与切换回退流程。
 - [File Storage](docs/FILE_STORAGE.md): 本地开发与生产 S3-compatible provider、生命周期和真实 smoke。
 - [Backup And Restore](docs/BACKUP_RESTORE.md): 本地及对象存储的备份边界、恢复顺序和验证要求。
 - [Error Taxonomy](docs/ERROR_TAXONOMY.md): run、job、provider config、document API 的标准错误响应和结构化日志规则。

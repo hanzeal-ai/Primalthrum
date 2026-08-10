@@ -47,6 +47,11 @@ applies all ordered migrations, and only then opens its HTTP port. Startup fails
 without PostgreSQL, when migration fails, when production uses local storage, or when
 the object-storage endpoint is HTTP.
 
+Existing SQLite installations must not point the production server at an empty
+PostgreSQL database. Follow `docs/SQLITE_TO_POSTGRES_TRANSFER.md` during a
+maintenance window, retain its reconciliation report, migrate document objects,
+and complete the cutover smoke before reopening traffic.
+
 ## Start
 
 ```bash
