@@ -1,7 +1,13 @@
+import { randomUUID } from 'node:crypto';
+
 import { type DatabaseAdapter } from '../db/adapter';
 import { sqlValue } from '../db/sql';
 import { DEFAULT_WORKSPACE_ID } from '../db/workspaceDefaults';
-import { type CreateUniqueJobInput } from './jobStore';
+import {
+  DEFAULT_JOB_LEASE_DURATION_MS,
+  type CreateUniqueJobInput,
+  type JobRepositoryOptions,
+} from './jobStore';
 
 export type JobStatus = 'queued' | 'running' | 'retrying' | 'succeeded' | 'failed';
 
@@ -43,12 +49,24 @@ interface JobRow {
   run_at: string;
   started_at: string | null;
   completed_at: string | null;
+  lease_owner: string | null;
+  lease_expires_at: string | null;
   created_at: string;
   updated_at: string;
 }
 
 export class JobRepository {
-  constructor(private readonly db: DatabaseAdapter) {
+  private readonly leaseDurationSeconds: string;
+  private readonly leaseOwner: string;
+
+  constructor(
+    private readonly db: DatabaseAdapter,
+    options: JobRepositoryOptions = {},
+  ) {
+    this.leaseOwner = normalizeLeaseOwner(options.leaseOwner ?? randomUUID());
+    this.leaseDurationSeconds = (normalizeLeaseDuration(
+      options.leaseDurationMs ?? DEFAULT_JOB_LEASE_DURATION_MS,
+    ) / 1_000).toFixed(3);
   }
 
   create(input: CreateJobInput): JobRecord {
@@ -166,6 +184,10 @@ export class JobRepository {
         attempts = attempts + 1,
         error = '',
         started_at = CURRENT_TIMESTAMP,
+        lease_owner = ${sqlValue(this.leaseOwner)},
+        lease_expires_at = strftime(
+          '%Y-%m-%dT%H:%M:%fZ', 'now', ${sqlValue(`+${this.leaseDurationSeconds} seconds`)}
+        ),
         updated_at = CURRENT_TIMESTAMP
       WHERE id = (
         SELECT id FROM jobs
@@ -194,10 +216,28 @@ export class JobRepository {
           WHEN attempts < max_attempts THEN NULL
           ELSE CURRENT_TIMESTAMP
         END,
+        lease_owner = NULL,
+        lease_expires_at = NULL,
         updated_at = CURRENT_TIMESTAMP
       WHERE status = 'running'
+        AND (lease_owner IS NULL OR julianday(lease_expires_at) <= julianday('now'))
         AND type IN (${types.map(sqlValue).join(', ')});
     `);
+  }
+
+  renewLease(id: number): boolean {
+    const rows = this.db.query<{ id: number }>(`
+      UPDATE jobs
+      SET lease_expires_at = strftime(
+            '%Y-%m-%dT%H:%M:%fZ', 'now', ${sqlValue(`+${this.leaseDurationSeconds} seconds`)}
+          ),
+          updated_at = CURRENT_TIMESTAMP
+      WHERE id = ${sqlValue(id)}
+        AND status = 'running'
+        AND lease_owner = ${sqlValue(this.leaseOwner)}
+      RETURNING id;
+    `);
+    return rows.length === 1;
   }
 
   markRunning(id: number): JobRecord {
@@ -215,17 +255,24 @@ export class JobRepository {
   }
 
   markSucceeded(id: number, result: Record<string, unknown>): JobRecord {
-    this.db.run(`
+    const rows = this.db.query<JobRow>(`
       UPDATE jobs
       SET
         status = 'succeeded',
         result_json = ${sqlValue(JSON.stringify(result))},
         error = '',
         completed_at = CURRENT_TIMESTAMP,
+        lease_owner = NULL,
+        lease_expires_at = NULL,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${sqlValue(id)};
+      WHERE id = ${sqlValue(id)}
+        AND status = 'running'
+        AND (lease_owner IS NULL OR lease_owner = ${sqlValue(this.leaseOwner)})
+      RETURNING ${JOB_COLUMNS};
     `);
-    return this.requireJob(id);
+    if (rows[0]) return toJobRecord(rows[0]);
+    this.requireJob(id);
+    throw new Error(`job is not running or lease is not owned: ${id}`);
   }
 
   markFailed(id: number, error: string): JobRecord {
@@ -233,16 +280,23 @@ export class JobRepository {
     const status: JobStatus = job.attempts < job.maxAttempts ? 'retrying' : 'failed';
     const completedAt = status === 'failed' ? 'CURRENT_TIMESTAMP' : 'NULL';
 
-    this.db.run(`
+    const rows = this.db.query<JobRow>(`
       UPDATE jobs
       SET
         status = ${sqlValue(status)},
         error = ${sqlValue(error)},
         completed_at = ${completedAt},
+        lease_owner = NULL,
+        lease_expires_at = NULL,
         updated_at = CURRENT_TIMESTAMP
-      WHERE id = ${sqlValue(id)};
+      WHERE id = ${sqlValue(id)}
+        AND status = 'running'
+        AND (lease_owner IS NULL OR lease_owner = ${sqlValue(this.leaseOwner)})
+      RETURNING ${JOB_COLUMNS};
     `);
-    return this.requireJob(id);
+    if (rows[0]) return toJobRecord(rows[0]);
+    this.requireJob(id);
+    throw new Error(`job is not running or lease is not owned: ${id}`);
   }
 
   private requireJob(id: number): JobRecord {
@@ -267,6 +321,8 @@ const JOB_COLUMNS = [
   'run_at',
   'started_at',
   'completed_at',
+  'lease_owner',
+  'lease_expires_at',
   'created_at',
   'updated_at',
 ].join(', ');
@@ -293,6 +349,19 @@ function normalizeJobInput(input: CreateJobInput): Required<CreateJobInput> {
 function normalizeDedupeKey(value: string): string {
   const normalized = typeof value === 'string' ? value.trim() : '';
   if (!normalized || normalized.length > 200) throw new Error('job dedupeKey is invalid');
+  return normalized;
+}
+
+function normalizeLeaseDuration(value: number): number {
+  if (!Number.isSafeInteger(value) || value < 1_000 || value > 60 * 60_000) {
+    throw new Error('job lease duration is invalid');
+  }
+  return value;
+}
+
+function normalizeLeaseOwner(value: string): string {
+  const normalized = value.trim();
+  if (!normalized || normalized.length > 200) throw new Error('job lease owner is invalid');
   return normalized;
 }
 

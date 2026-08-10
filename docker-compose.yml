@@ -1,3 +1,15 @@
+x-server-environment: &server-environment
+  AGENT_BASE_URL: http://agent:8000
+  DATABASE_URL: postgresql://primalthrum:primalthrum-development-secret@postgres:5432/primalthrum
+  DATABASE_POOL_MAX: "20"
+  DOCUMENT_STORAGE_PROVIDER: s3
+  OBJECT_STORAGE_ENDPOINT: http://object-storage:9000
+  OBJECT_STORAGE_ACCESS_KEY_ID: primalthrum-development
+  OBJECT_STORAGE_SECRET_ACCESS_KEY: primalthrum-development-secret
+  OBJECT_STORAGE_BUCKET: primalthrum-documents
+  OBJECT_STORAGE_REGION: us-east-1
+  OBJECT_STORAGE_PREFIX: development
+
 services:
   postgres:
     image: postgres@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
@@ -56,19 +68,29 @@ services:
       postgres:
         condition: service_healthy
     environment:
-      AGENT_BASE_URL: http://agent:8000
-      DATABASE_URL: postgresql://primalthrum:primalthrum-development-secret@postgres:5432/primalthrum
-      DATABASE_POOL_MAX: "20"
-      DOCUMENT_STORAGE_PROVIDER: s3
-      OBJECT_STORAGE_ENDPOINT: http://object-storage:9000
-      OBJECT_STORAGE_ACCESS_KEY_ID: primalthrum-development
-      OBJECT_STORAGE_SECRET_ACCESS_KEY: primalthrum-development-secret
-      OBJECT_STORAGE_BUCKET: primalthrum-documents
-      OBJECT_STORAGE_REGION: us-east-1
-      OBJECT_STORAGE_PREFIX: development
+      <<: *server-environment
+      BACKGROUND_WORKER_MODE: external
       PORT: "3000"
     ports:
       - "3000:3000"
+    volumes:
+      - .:/app
+
+  worker:
+    image: node:22-alpine
+    working_dir: /app/server
+    command: sh -c "corepack enable && pnpm install && pnpm worker:dev"
+    depends_on:
+      agent:
+        condition: service_started
+      object-storage-init:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    environment:
+      <<: *server-environment
+      JOB_LEASE_DURATION_MS: "300000"
+      JOB_POLL_INTERVAL_MS: "1000"
     volumes:
       - .:/app
 

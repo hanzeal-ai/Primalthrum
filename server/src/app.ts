@@ -82,7 +82,7 @@ import { MetricsRegistry } from './services/metricsRegistry';
 import { hashPassword, verifyPassword, verifyPasswordOrDummy } from './services/passwordHash';
 import { JobRepository } from './services/jobRepository';
 import { AsyncJobRepository } from './services/asyncJobRepository';
-import { type JobStore } from './services/jobStore';
+import { DEFAULT_JOB_LEASE_DURATION_MS, type JobStore } from './services/jobStore';
 import {
   ProviderConfigRepository,
   type CreateProviderConfigInput,
@@ -253,6 +253,9 @@ export interface AppOptions {
   accountDeletionGracePeriodMs?: number;
   accountPrivacyNow?: () => Date;
   accountPrivacySchedulerIntervalMs?: number;
+  backgroundTimersUnref?: boolean;
+  jobLeaseDurationMs?: number;
+  jobPollIntervalMs?: number;
   startBackgroundSchedulers?: boolean;
   agentBaseUrl?: string;
   dbPath?: string;
@@ -633,8 +636,8 @@ export function createApp(options: AppOptions = {}): Koa {
     ? new AsyncToolAuditRepository(runtimeDatabase)
     : new ToolAuditRepository(db);
   const jobRepository: JobStore = runtimeDatabase
-    ? new AsyncJobRepository(runtimeDatabase)
-    : new JobRepository(db);
+    ? new AsyncJobRepository(runtimeDatabase, { leaseDurationMs: options.jobLeaseDurationMs })
+    : new JobRepository(db, { leaseDurationMs: options.jobLeaseDurationMs });
   const jobDispatcher = new DurableJobDispatcher(jobRepository, {
     'document.index': async (payload) => {
       const agentId = Number(payload.agentId);
@@ -743,11 +746,17 @@ export function createApp(options: AppOptions = {}): Koa {
       code: 'JOB_DISPATCH_FAILED',
       message: error instanceof Error ? error.message : 'job dispatcher failed',
     });
-  });
+  }, Math.max(250, Math.floor(
+    (options.jobLeaseDurationMs ?? DEFAULT_JOB_LEASE_DURATION_MS) / 3,
+  )));
+  const backgroundSchedulersEnabled = options.startBackgroundSchedulers !== false;
+  const kickJobDispatcher = backgroundSchedulersEnabled
+    ? () => jobDispatcher.kick()
+    : () => undefined;
   const retentionScheduler = new RetentionScheduler(
     retentionPolicies,
     jobRepository,
-    () => jobDispatcher.kick(),
+    kickJobDispatcher,
     undefined,
     (error) => logger.log({
       level: 'error',
@@ -758,7 +767,7 @@ export function createApp(options: AppOptions = {}): Koa {
   const accountPrivacyScheduler = new AccountPrivacyScheduler(
     accountPrivacyRepository,
     jobRepository,
-    () => jobDispatcher.kick(),
+    kickJobDispatcher,
     options.accountPrivacySchedulerIntervalMs,
     (error) => logger.log({
       level: 'error',
@@ -766,10 +775,18 @@ export function createApp(options: AppOptions = {}): Koa {
       message: error instanceof Error ? error.message : 'account privacy scheduler failed',
     }),
   );
-  if (options.startBackgroundSchedulers !== false) {
-    jobDispatcher.resume();
+  if (backgroundSchedulersEnabled) {
+    jobDispatcher.start(
+      options.jobPollIntervalMs,
+      options.backgroundTimersUnref ?? true,
+    );
     retentionScheduler.start();
     accountPrivacyScheduler.start();
+    registerAppCleanup(app, async () => {
+      accountPrivacyScheduler.stop();
+      retentionScheduler.stop();
+      await jobDispatcher.stop();
+    });
   }
 
   function authorize(ctx: Koa.Context, permission: WorkspacePermission): boolean {
@@ -1797,7 +1814,7 @@ export function createApp(options: AppOptions = {}): Koa {
       payload: { agentId, documentId },
     });
     const indexing = await documentRepository.markStatus(agentId, documentId, 'indexing');
-    jobDispatcher.kick();
+    kickJobDispatcher();
     ctx.status = 202;
     ctx.body = {
       ...indexing,

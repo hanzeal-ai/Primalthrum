@@ -1,3 +1,5 @@
+import { randomUUID } from 'node:crypto';
+
 import { type AsyncDatabaseAdapter } from '../db/asyncAdapter';
 import { databaseTimestamp, nullableDatabaseTimestamp } from '../db/databaseTimestamp';
 import { DEFAULT_WORKSPACE_ID } from '../db/workspaceDefaults';
@@ -6,7 +8,11 @@ import {
   type JobRecord,
   type JobStatus,
 } from './jobRepository';
-import { type CreateUniqueJobInput } from './jobStore';
+import {
+  DEFAULT_JOB_LEASE_DURATION_MS,
+  type CreateUniqueJobInput,
+  type JobRepositoryOptions,
+} from './jobStore';
 
 interface JobRow {
   id: number;
@@ -21,6 +27,8 @@ interface JobRow {
   run_at: string | Date;
   started_at: string | Date | null;
   completed_at: string | Date | null;
+  lease_owner: string | null;
+  lease_expires_at: string | Date | null;
   created_at: string | Date;
   updated_at: string | Date;
 }
@@ -36,11 +44,22 @@ interface NormalizedJobInput {
 const JOB_COLUMNS = [
   'id', 'workspace_id', 'type', 'status', 'attempts', 'max_attempts',
   'payload_json', 'result_json', 'error', 'run_at', 'started_at',
-  'completed_at', 'created_at', 'updated_at',
+  'completed_at', 'lease_owner', 'lease_expires_at', 'created_at', 'updated_at',
 ].join(', ');
 
 export class AsyncJobRepository {
-  constructor(private readonly database: AsyncDatabaseAdapter) {}
+  private readonly leaseDurationMs: number;
+  private readonly leaseOwner: string;
+
+  constructor(
+    private readonly database: AsyncDatabaseAdapter,
+    options: JobRepositoryOptions = {},
+  ) {
+    this.leaseOwner = normalizeLeaseOwner(options.leaseOwner ?? randomUUID());
+    this.leaseDurationMs = normalizeLeaseDuration(
+      options.leaseDurationMs ?? DEFAULT_JOB_LEASE_DURATION_MS,
+    );
+  }
 
   async create(input: CreateJobInput): Promise<JobRecord> {
     const rows = await this.insert(normalizeJobInput(input), null, false);
@@ -90,6 +109,8 @@ export class AsyncJobRepository {
     const normalizedTypes = normalizeJobTypes(types);
     if (!normalizedTypes.length) return null;
     const typePlaceholders = placeholders(normalizedTypes.length);
+    const ownerPlaceholder = `$${normalizedTypes.length + 1}`;
+    const durationPlaceholder = `$${normalizedTypes.length + 2}`;
     const text = this.database.dialect === 'postgres'
       ? `
           WITH next_job AS (
@@ -103,7 +124,10 @@ export class AsyncJobRepository {
           )
           UPDATE jobs AS job
           SET status = 'running', attempts = job.attempts + 1, error = '',
-              started_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+              started_at = CURRENT_TIMESTAMP, lease_owner = ${ownerPlaceholder},
+              lease_expires_at = CURRENT_TIMESTAMP
+                + (${durationPlaceholder} * INTERVAL '1 millisecond'),
+              updated_at = CURRENT_TIMESTAMP
           FROM next_job
           WHERE job.id = next_job.id
           RETURNING ${qualifiedColumns('job')};
@@ -111,7 +135,10 @@ export class AsyncJobRepository {
       : `
           UPDATE jobs
           SET status = 'running', attempts = attempts + 1, error = '',
-              started_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+              started_at = CURRENT_TIMESTAMP, lease_owner = ${ownerPlaceholder},
+              lease_expires_at = strftime(
+                '%Y-%m-%dT%H:%M:%fZ', 'now', '+' || ${durationPlaceholder} || ' seconds'
+              ), updated_at = CURRENT_TIMESTAMP
           WHERE id = (
             SELECT id FROM jobs
             WHERE status IN ('queued', 'retrying')
@@ -121,7 +148,13 @@ export class AsyncJobRepository {
           )
           RETURNING ${JOB_COLUMNS};
         `;
-    const rows = await this.database.query<JobRow>({ text, values: normalizedTypes });
+    const leaseDuration = this.database.dialect === 'postgres'
+      ? this.leaseDurationMs
+      : (this.leaseDurationMs / 1_000).toFixed(3);
+    const rows = await this.database.query<JobRow>({
+      text,
+      values: [...normalizedTypes, this.leaseOwner, leaseDuration],
+    });
     return rows[0] ? toJobRecord(rows[0]) : null;
   }
 
@@ -134,11 +167,37 @@ export class AsyncJobRepository {
         SET status = CASE WHEN attempts < max_attempts THEN 'retrying' ELSE 'failed' END,
             error = 'job interrupted by process restart',
             completed_at = CASE WHEN attempts < max_attempts THEN NULL ELSE CURRENT_TIMESTAMP END,
+            lease_owner = NULL, lease_expires_at = NULL,
             updated_at = CURRENT_TIMESTAMP
-        WHERE status = 'running' AND type IN (${placeholders(normalizedTypes.length)});
+        WHERE status = 'running'
+          AND (
+            lease_owner IS NULL
+            OR ${this.database.dialect === 'postgres'
+              ? 'lease_expires_at <= CURRENT_TIMESTAMP'
+              : "julianday(lease_expires_at) <= julianday('now')"}
+          )
+          AND type IN (${placeholders(normalizedTypes.length)});
       `,
       values: normalizedTypes,
     });
+  }
+
+  async renewLease(id: number): Promise<boolean> {
+    const leaseExpression = this.database.dialect === 'postgres'
+      ? "CURRENT_TIMESTAMP + ($3 * INTERVAL '1 millisecond')"
+      : "strftime('%Y-%m-%dT%H:%M:%fZ', 'now', '+' || $3 || ' seconds')";
+    const leaseDuration = this.database.dialect === 'postgres'
+      ? this.leaseDurationMs
+      : (this.leaseDurationMs / 1_000).toFixed(3);
+    const result = await this.database.execute({
+      text: `
+        UPDATE jobs
+        SET lease_expires_at = ${leaseExpression}, updated_at = CURRENT_TIMESTAMP
+        WHERE id = $1 AND status = 'running' AND lease_owner = $2;
+      `,
+      values: [id, this.leaseOwner, leaseDuration],
+    });
+    return result.rowCount === 1;
   }
 
   markRunning(id: number): Promise<JobRecord> {
@@ -159,12 +218,14 @@ export class AsyncJobRepository {
       text: `
         UPDATE jobs
         SET status = 'succeeded', result_json = $2, error = '',
-            completed_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
+            completed_at = CURRENT_TIMESTAMP, lease_owner = NULL,
+            lease_expires_at = NULL, updated_at = CURRENT_TIMESTAMP
         WHERE id = $1 AND status = 'running'
+          AND (lease_owner IS NULL OR lease_owner = $3)
         RETURNING ${JOB_COLUMNS};
       `,
-      values: [id, JSON.stringify(result)],
-    }, id, 'job is not running');
+      values: [id, JSON.stringify(result), this.leaseOwner],
+    }, id, 'job is not running or lease is not owned');
   }
 
   markFailed(id: number, error: string): Promise<JobRecord> {
@@ -174,12 +235,14 @@ export class AsyncJobRepository {
         SET status = CASE WHEN attempts < max_attempts THEN 'retrying' ELSE 'failed' END,
             error = $2,
             completed_at = CASE WHEN attempts < max_attempts THEN NULL ELSE CURRENT_TIMESTAMP END,
+            lease_owner = NULL, lease_expires_at = NULL,
             updated_at = CURRENT_TIMESTAMP
         WHERE id = $1 AND status = 'running'
+          AND (lease_owner IS NULL OR lease_owner = $3)
         RETURNING ${JOB_COLUMNS};
       `,
-      values: [id, error],
-    }, id, 'job is not running');
+      values: [id, error, this.leaseOwner],
+    }, id, 'job is not running or lease is not owned');
   }
 
   private insert(
@@ -253,6 +316,19 @@ function normalizeDedupeKey(value: string): string {
 
 function normalizeJobTypes(types: string[]): string[] {
   return [...new Set(types.map((type) => type.trim()).filter(Boolean))];
+}
+
+function normalizeLeaseDuration(value: number): number {
+  if (!Number.isSafeInteger(value) || value < 1_000 || value > 60 * 60_000) {
+    throw new Error('job lease duration is invalid');
+  }
+  return value;
+}
+
+function normalizeLeaseOwner(value: string): string {
+  const normalized = value.trim();
+  if (!normalized || normalized.length > 200) throw new Error('job lease owner is invalid');
+  return normalized;
 }
 
 function placeholders(count: number): string {

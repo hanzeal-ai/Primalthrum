@@ -15,4 +15,18 @@ export const POSTGRES_JOB_RELIABILITY_MIGRATIONS: readonly PostgresMigration[] =
       });
     },
   },
+  {
+    id: '034_job_leases',
+    up: async (database) => {
+      await database.execute({
+        text: `
+          ALTER TABLE jobs ADD COLUMN IF NOT EXISTS lease_owner TEXT;
+          ALTER TABLE jobs ADD COLUMN IF NOT EXISTS lease_expires_at TIMESTAMPTZ;
+          CREATE INDEX IF NOT EXISTS jobs_lease_expiry_idx
+          ON jobs (lease_expires_at)
+          WHERE status = 'running';
+        `,
+      });
+    },
+  },
 ];

@@ -96,3 +96,44 @@ test('async jobs recover interrupted attempts without exceeding the retry limit'
     rmSync(root, { recursive: true, force: true });
   }
 });
+
+test('async jobs recover only expired leases and reject stale worker completion', async () => {
+  const { database, root } = createDatabase();
+  const firstWorker = new AsyncJobRepository(database, {
+    leaseDurationMs: 1_000,
+    leaseOwner: 'worker-first',
+  });
+  const secondWorker = new AsyncJobRepository(database, {
+    leaseDurationMs: 1_000,
+    leaseOwner: 'worker-second',
+  });
+  try {
+    const created = await firstWorker.create({ type: 'lease.test', maxAttempts: 2 });
+    const claimed = await firstWorker.claimNext(['lease.test']);
+    assert.equal(claimed?.id, created.id);
+    assert.equal(await firstWorker.renewLease(created.id), true);
+    assert.equal(await secondWorker.renewLease(created.id), false);
+
+    await secondWorker.recoverInterrupted(['lease.test']);
+    assert.equal((await secondWorker.findById(created.id))?.status, 'running');
+    assert.equal(await secondWorker.claimNext(['lease.test']), null);
+
+    await database.execute({
+      text: `UPDATE jobs SET lease_expires_at = '2000-01-01T00:00:00.000Z' WHERE id = $1;`,
+      values: [created.id],
+    });
+    await secondWorker.recoverInterrupted(['lease.test']);
+    const reclaimed = await secondWorker.claimNext(['lease.test']);
+    assert.equal(reclaimed?.id, created.id);
+    await assert.rejects(
+      firstWorker.markSucceeded(created.id, { worker: 'first' }),
+      /lease is not owned/,
+    );
+    const completed = await secondWorker.markSucceeded(created.id, { worker: 'second' });
+    assert.equal(completed.status, 'succeeded');
+    assert.deepEqual(completed.result, { worker: 'second' });
+  } finally {
+    await database.close();
+    rmSync(root, { recursive: true, force: true });
+  }
+});

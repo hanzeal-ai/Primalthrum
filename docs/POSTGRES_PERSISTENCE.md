@@ -64,6 +64,17 @@ composition selects it for every Operator identity, audit, support, legal-hold, 
 Feature Flag, and incident store; the SQLite fallback remains available for local mode.
 The PostgreSQL Operator application smoke exercises every route group, proves concurrent
 incident updates have exactly one winner, and rejects any fallback SQLite access.
+
+`server/worker.ts` now runs the durable document-index, retention, and account-deletion
+Job handlers without opening an HTTP port. HTTP replicas use
+`BACKGROUND_WORKER_MODE=external`; the Worker polls for cross-process inserts and
+gracefully stops after its active Job. Migration `034_job_leases` adds ownership,
+expiry, and heartbeat renewal so a new Worker only recovers genuinely expired work.
+Surviving Workers also recover expired leases during polling, so takeover does not
+depend on another process restart.
+Embedded mode remains the default for local single-process development. PostgreSQL
+`SKIP LOCKED` and leases make Worker replicas independently scalable without startup
+recovery stealing another replica's active Job.
 The application-level PostgreSQL smoke completes registration and email verification
 over HTTP and asserts that no account lifecycle records leak into local SQLite.
 `pnpm data:transfer:postgres` now provides maintenance-window SQLite transfer with
@@ -97,7 +108,7 @@ Migrations `026` through `032` complete schema parity for Workspace invitation
 email, the Operator control plane and change control, upload security, account
 privacy rights, ownership transfer, and legal holds. Migration `033` adds active
 Job deduplication for multi-worker scheduling and atomic claims. PostgreSQL-native
-schema coverage is now `33/33`; runtime cutover remains blocked by the remaining
+schema coverage is now `34/34`; runtime cutover remains blocked by the remaining
 asynchronous repository migration and production data-transfer evidence.
 
 ## SQLite Assumption Audit
@@ -155,7 +166,7 @@ scripts/postgres-smoke.sh
 The script starts an isolated, digest-pinned PostgreSQL 17.10 container and verifies pooled
 connectivity, positional parameter binding, commit, rollback, health queries,
 concurrent migration locking, migration idempotency, core tables, and identity
-sequence behavior. It also executes all 33 migrations and exercises billing
+sequence behavior. It also executes all 34 migrations and exercises billing
 invariants, immutable security evidence, Operator revision guards, invitation
 targets, two-operator legal-hold release, atomic Job claims, Capability settings,
 and idempotent Tool audit persistence. The same run verifies Account registration,

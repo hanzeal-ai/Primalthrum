@@ -12,7 +12,9 @@
     "smoke:postgres": "../scripts/postgres-smoke.sh",
     "start": "node dist/index.js",
     "test": "node --test --test-concurrency=1 --require ts-node/register tests/*.test.ts",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "worker": "node dist/worker.js",
+    "worker:dev": "nodemon --exec ts-node worker.ts"
   },
   "keywords": [],
   "author": "",

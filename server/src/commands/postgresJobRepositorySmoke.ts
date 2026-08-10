@@ -52,9 +52,14 @@ async function main(): Promise<void> {
     ) {
       throw new Error('PostgreSQL Job atomic claim or tenant state is inconsistent');
     }
-    await Promise.all(claims.map((job) => (
-      job ? firstWorker.markSucceeded(job.id, { marker, completed: true }) : Promise.resolve()
-    )));
+    await Promise.all([
+      claims[0]
+        ? firstWorker.markSucceeded(claims[0].id, { marker, completed: true })
+        : Promise.resolve(),
+      claims[1]
+        ? secondWorker.markSucceeded(claims[1].id, { marker, completed: true })
+        : Promise.resolve(),
+    ]);
 
     const retry = await firstWorker.createUnique({
       type,
@@ -67,6 +72,13 @@ async function main(): Promise<void> {
     createdIds.push(retry.id);
     const firstAttempt = await firstWorker.claimNext([type]);
     if (!firstAttempt || firstAttempt.id !== retry.id) throw new Error('PostgreSQL Job retry was not claimed');
+    await secondWorker.recoverInterrupted([type]);
+    if (
+      (await secondWorker.findById(retry.id))?.status !== 'running'
+      || await secondWorker.claimNext([type]) !== null
+    ) {
+      throw new Error('PostgreSQL Job active lease was recovered by another worker');
+    }
     await firstWorker.markFailed(firstAttempt.id, 'retry smoke');
     const secondAttempt = await secondWorker.claimNext([type]);
     if (!secondAttempt || secondAttempt.attempts !== 2) {
@@ -76,6 +88,30 @@ async function main(): Promise<void> {
     if (failed.status !== 'failed' || !failed.completedAt?.endsWith('Z')) {
       throw new Error('PostgreSQL Job terminal failure state is inconsistent');
     }
+
+    const expired = await firstWorker.create({
+      type,
+      workspaceId: DEFAULT_WORKSPACE_ID,
+      payload: { marker, order: 4 },
+      maxAttempts: 2,
+    });
+    createdIds.push(expired.id);
+    await firstWorker.claimNext([type]);
+    await database.execute({
+      text: `UPDATE jobs SET lease_expires_at = CURRENT_TIMESTAMP - INTERVAL '1 second' WHERE id = $1;`,
+      values: [expired.id],
+    });
+    await secondWorker.recoverInterrupted([type]);
+    const reclaimed = await secondWorker.claimNext([type]);
+    if (!reclaimed || reclaimed.id !== expired.id || reclaimed.attempts !== 2) {
+      throw new Error('PostgreSQL Job expired lease was not recovered');
+    }
+    await firstWorker.markSucceeded(expired.id, { marker, worker: 'stale' })
+      .then(() => { throw new Error('PostgreSQL Job accepted a stale lease completion'); })
+      .catch((error) => {
+        if (!(error instanceof Error) || !error.message.includes('lease is not owned')) throw error;
+      });
+    await secondWorker.markSucceeded(expired.id, { marker, worker: 'recovered' });
     process.stdout.write('postgres Job repository smoke passed\n');
   } finally {
     if (createdIds.length) {

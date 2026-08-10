@@ -144,6 +144,10 @@ export const MIGRATIONS: Migration[] = [
     id: '033_job_reliability',
     up: applyJobReliability,
   },
+  {
+    id: '034_job_leases',
+    up: applyJobLeases,
+  },
 ];
 
 export function runMigrations(db: DatabaseAdapter): void {
@@ -363,6 +367,16 @@ function applyJobReliability(db: DatabaseAdapter): void {
     ON jobs (workspace_id, type, dedupe_key)
     WHERE dedupe_key IS NOT NULL
       AND status IN ('queued', 'running', 'retrying');
+  `);
+}
+
+function applyJobLeases(db: DatabaseAdapter): void {
+  ensureColumn(db, 'jobs', 'lease_owner', 'TEXT');
+  ensureColumn(db, 'jobs', 'lease_expires_at', 'TEXT');
+  db.run(`
+    CREATE INDEX IF NOT EXISTS jobs_lease_expiry_idx
+    ON jobs (lease_expires_at)
+    WHERE status = 'running';
   `);
 }
 

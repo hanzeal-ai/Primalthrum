@@ -2144,7 +2144,7 @@ complete. Follow the same dependency and verification protocol used above.
   migration domains remain open. The tenth P22 slice completes PostgreSQL-native
   schema parity through `026`-`032`. An eleventh slice adds `033_job_reliability`
   with active Job deduplication and atomic multi-worker claims. A digest-pinned
-  real PostgreSQL run now applies all 33 migrations and verifies invitation
+  real PostgreSQL run now applies the first 33 migrations and verifies invitation
   targeting, Operator revision guards, upload and privacy evidence, ownership
   history, legal-hold dual control, blocked retention evidence, Job concurrency,
   Capability settings, Tool audit idempotency, and immutable minimized upload
@@ -2215,7 +2215,7 @@ complete. Follow the same dependency and verification protocol used above.
   production SQLite. Async composition no longer creates a fallback SQLite file, and
   readiness probes the selected PostgreSQL database. Docker Compose now boots the same
   digest-pinned PostgreSQL service and routes the complete application through it. A
-  production transfer command now verifies all 33 migration IDs and exact table/column/
+  production transfer command now verifies all migration IDs and exact table/column/
   primary-key parity, rejects non-seed target data, copies SQLite rows in foreign-key
   order under source and target transactions, restores Identity sequences, and commits
   only after row-count and canonical SHA-256 reconciliation. The audit report excludes
@@ -2231,8 +2231,16 @@ complete. Follow the same dependency and verification protocol used above.
   success/failure evidence before changing the target. Unit tests cover credential
   isolation, cleanup, archive tampering, target safety, and mismatch evidence. Matching
   PostgreSQL client binaries are unavailable locally, so production-like logical restore
-  execution and provider-managed PITR/RPO/RTO evidence remain open. Redis, durable workers, managed
-  secrets, OpenTelemetry, deployment hardening, and scaling remain open.
+  execution and provider-managed PITR/RPO/RTO evidence remain open. A standalone Node
+  Worker now polls the durable PostgreSQL Job queue, shuts down after its active Job,
+  and can scale separately from HTTP replicas through the Compose topology. Migration
+  `034_job_leases` adds Worker ownership, expiry, heartbeat renewal, and expired-only
+  periodic recovery so replicas cannot steal an active Job and surviving Workers can
+  take over after lease expiry without restarting. Embedded mode preserves local
+  development compatibility, while external mode prevents HTTP replicas from claiming
+  durable Jobs. Redis, managed
+  secrets, OpenTelemetry, deployment hardening, production Worker load/failover evidence,
+  and broader asynchronous Outbox separation remain open.
 
 ### P23-01 Full Commercial End-To-End Suite
 
