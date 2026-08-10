@@ -137,7 +137,9 @@ Use Postgres when running multiple server instances, deploying to managed cloud 
 1. Execute the transfer tool against the pinned PostgreSQL service in CI and a
    production-like environment, retain the reconciliation report, and reconcile
    document/object transfer.
-2. Prove managed PostgreSQL backup, point-in-time recovery, restore, and rollback.
+2. Execute the snapshot-consistent logical backup and empty-target verified restore
+   commands in the production-like stack, then prove provider-managed PostgreSQL
+   point-in-time recovery and rollback with measured RPO/RTO.
 3. Run the full repository, concurrency, migration, HTTP, and browser suites against
    the pinned PostgreSQL service in CI and the production-like deployment stack.
 4. Complete load, failover, connection exhaustion, and zero-downtime rollout evidence.

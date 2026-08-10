@@ -4,9 +4,11 @@
   "description": "Primalthrum Node API server",
   "main": "index.js",
   "scripts": {
+    "backup:postgres": "ts-node src/commands/backupPostgres.ts",
     "data:transfer:postgres": "ts-node src/commands/transferSqliteToPostgres.ts",
     "dev": "nodemon --exec ts-node index.ts",
     "build": "tsc -p tsconfig.build.json",
+    "restore:postgres": "ts-node src/commands/restorePostgres.ts",
     "smoke:postgres": "../scripts/postgres-smoke.sh",
     "start": "node dist/index.js",
     "test": "node --test --test-concurrency=1 --require ts-node/register tests/*.test.ts",

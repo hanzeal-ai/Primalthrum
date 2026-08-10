@@ -214,7 +214,7 @@ web/     React + TypeScript + Vite 研发控制台
 - [Postgres Persistence Path](docs/POSTGRES_PERSISTENCE.md): SQLite 与 Postgres 部署选择和迁移准备。
 - [SQLite To PostgreSQL Transfer](docs/SQLITE_TO_POSTGRES_TRANSFER.md): 维护窗口、全表事务迁移、逐表摘要核对与切换回退流程。
 - [File Storage](docs/FILE_STORAGE.md): 本地开发与生产 S3-compatible provider、生命周期和真实 smoke。
-- [Backup And Restore](docs/BACKUP_RESTORE.md): 本地及对象存储的备份边界、恢复顺序和验证要求。
+- [Backup And Restore](docs/BACKUP_RESTORE.md): SQLite、PostgreSQL、对象存储的一致备份、恢复核对和托管 PITR 门禁。
 - [Error Taxonomy](docs/ERROR_TAXONOMY.md): run、job、provider config、document API 的标准错误响应和结构化日志规则。
 - [Health And Metrics](docs/HEALTH_METRICS.md): 生产健康检查、readiness 探针和 Prometheus 指标导出。
 - [Operator Setup](docs/OPERATOR_SETUP.md): 首次运营者从创建管理员到完成首个 Agent 运行的检查清单。

@@ -2223,7 +2223,15 @@ complete. Follow the same dependency and verification protocol used above.
   contamination, seed replacement, and full rollback. The pinned-container transfer
   smoke is wired into `scripts/postgres-smoke.sh`, but current local Docker daemon
   availability prevented fresh execution evidence in this slice. Production-like data
-  and object transfer, backup/restore, rollback, Redis, durable workers, managed
+  and object transfer remain open. PostgreSQL logical backup now exports a shared
+  repeatable-read snapshot to `pg_dump`, fingerprints every application table from that
+  same snapshot, and writes an exclusive integrity manifest with archive SHA-256 and
+  external recovery references. Restore requires a separate empty database, verifies
+  the archive before a single transaction, recomputes exact fingerprints, and reserves
+  success/failure evidence before changing the target. Unit tests cover credential
+  isolation, cleanup, archive tampering, target safety, and mismatch evidence. Matching
+  PostgreSQL client binaries are unavailable locally, so production-like logical restore
+  execution and provider-managed PITR/RPO/RTO evidence remain open. Redis, durable workers, managed
   secrets, OpenTelemetry, deployment hardening, and scaling remain open.
 
 ### P23-01 Full Commercial End-To-End Suite

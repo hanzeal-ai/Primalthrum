@@ -6,7 +6,8 @@ This guide installs Primalthrum for a local or single-node commercial pilot.
 
 - Node.js and pnpm.
 - Python 3.11 or newer.
-- PostgreSQL 17 for production, or `sqlite3` on `PATH` for local development.
+- PostgreSQL 17 for production, including matching `pg_dump` and `pg_restore` client
+  tools for backup drills; or `sqlite3` on `PATH` for local development.
 - A private ClamAV service for every production deployment.
 - A private, versioned S3-compatible bucket for production document storage.
 - Docker when running the object-storage integration smoke locally.
