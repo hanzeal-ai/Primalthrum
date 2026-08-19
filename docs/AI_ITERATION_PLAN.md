@@ -2243,8 +2243,16 @@ complete. Follow the same dependency and verification protocol used above.
   writes, and stops new claims before shutdown waits for in-flight delivery. HTTP replicas
   in external mode no longer construct either Dispatcher. Deterministic Outbox test clocks
   remove date-sensitive release-gate failures, and the complete server suite passes 214/214.
-  Redis, managed secrets, OpenTelemetry, deployment hardening, production Worker
-  load/failover evidence, and separation of remaining asynchronous producers remain open.
+  The following slice adds immutable multi-stage Agent, Server, and Web image definitions,
+  a source-mount-free production Compose topology, required managed-service configuration,
+  non-root read-only containers, dropped capabilities, health-gated startup, and a
+  no-dependency Web static server that safely proxies streaming API requests. Structured
+  release smoke rejects missing hardening, host mounts, unversioned images, and excess
+  host ports. Local Server and Web image builds plus a read-only Web container smoke pass;
+  the Agent image build remains unverified because Docker Hub twice returned corrupted
+  Python image metadata. Redis, managed secrets, OpenTelemetry, full production startup,
+  production Worker load/failover evidence, and separation of remaining asynchronous
+  producers remain open.
 
 ### P23-01 Full Commercial End-To-End Suite
 

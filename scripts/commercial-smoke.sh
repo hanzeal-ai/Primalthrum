@@ -30,6 +30,9 @@ echo "[commercial-smoke] Server tests, typecheck, build"
 echo "[commercial-smoke] Web lint and build"
 (cd "$ROOT/web" && "$PNPM_BIN" lint && "$PNPM_BIN" build)
 
+echo "[commercial-smoke] Production deployment artifacts"
+bash "$ROOT/scripts/production-deployment-smoke.sh"
+
 echo "[commercial-smoke] Demo research agent package"
 bash "$ROOT/examples/research-agent/smoke.sh"
 

@@ -35,6 +35,17 @@ signed bucket `HEAD`; failed authentication, timeout, or bucket access returns 5
 | `GET /health` | Lightweight liveness check for the Python Agent process. |
 | `GET /ready` | Validates the runtime registry and LangGraph graph availability. |
 
+## Web And Worker Probes
+
+The production Web image exposes `GET /healthz` from its no-dependency static
+server. This checks the serving process; API readiness remains authoritative at
+the Server `/ready` endpoint proxied through `/api` routes.
+
+The standalone Worker has no public HTTP listener. Its production Compose health
+check runs inside the Worker container and succeeds only while the Worker process
+is alive and PostgreSQL accepts `SELECT 1`. Worker startup already applies and
+validates database migrations before the process is considered running.
+
 ## Metrics
 
 `/metrics` exports:

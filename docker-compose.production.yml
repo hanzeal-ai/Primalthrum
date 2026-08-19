@@ -1,0 +1,200 @@
+name: primalthrum
+
+x-application-environment: &application-environment
+  NODE_ENV: production
+  AGENT_BASE_URL: http://agent:8000
+  DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+  DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-20}
+  DATABASE_CONNECTION_TIMEOUT_MS: ${DATABASE_CONNECTION_TIMEOUT_MS:-10000}
+  DATABASE_IDLE_TIMEOUT_MS: ${DATABASE_IDLE_TIMEOUT_MS:-30000}
+  PUBLIC_APP_URL: ${PUBLIC_APP_URL:?PUBLIC_APP_URL is required}
+  PRIMALTHRUM_SECRET_KEY: ${PRIMALTHRUM_SECRET_KEY:?PRIMALTHRUM_SECRET_KEY is required}
+  DOCUMENT_STORAGE_PROVIDER: s3
+  OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:?OBJECT_STORAGE_ENDPOINT is required}
+  OBJECT_STORAGE_ACCESS_KEY_ID: ${OBJECT_STORAGE_ACCESS_KEY_ID:?OBJECT_STORAGE_ACCESS_KEY_ID is required}
+  OBJECT_STORAGE_SECRET_ACCESS_KEY: ${OBJECT_STORAGE_SECRET_ACCESS_KEY:?OBJECT_STORAGE_SECRET_ACCESS_KEY is required}
+  OBJECT_STORAGE_SESSION_TOKEN: ${OBJECT_STORAGE_SESSION_TOKEN:-}
+  OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:?OBJECT_STORAGE_BUCKET is required}
+  OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:?OBJECT_STORAGE_REGION is required}
+  OBJECT_STORAGE_PREFIX: ${OBJECT_STORAGE_PREFIX:-production}
+  OBJECT_STORAGE_TIMEOUT_MS: ${OBJECT_STORAGE_TIMEOUT_MS:-10000}
+  STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:?STRIPE_SECRET_KEY is required}
+  STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:?STRIPE_WEBHOOK_SECRET is required}
+  STRIPE_PRICE_PRO: ${STRIPE_PRICE_PRO:?STRIPE_PRICE_PRO is required}
+  STRIPE_PRICE_TEAM: ${STRIPE_PRICE_TEAM:?STRIPE_PRICE_TEAM is required}
+  STRIPE_PRICE_BUSINESS: ${STRIPE_PRICE_BUSINESS:?STRIPE_PRICE_BUSINESS is required}
+  STRIPE_PRICE_ENTERPRISE: ${STRIPE_PRICE_ENTERPRISE:?STRIPE_PRICE_ENTERPRISE is required}
+  TRANSACTIONAL_EMAIL_PROVIDER: ${TRANSACTIONAL_EMAIL_PROVIDER:?TRANSACTIONAL_EMAIL_PROVIDER is required}
+  TRANSACTIONAL_EMAIL_FROM: ${TRANSACTIONAL_EMAIL_FROM:?TRANSACTIONAL_EMAIL_FROM is required}
+  TRANSACTIONAL_EMAIL_API_KEY: ${TRANSACTIONAL_EMAIL_API_KEY:-}
+  TRANSACTIONAL_EMAIL_URL: ${TRANSACTIONAL_EMAIL_URL:-}
+  TRANSACTIONAL_EMAIL_TOKEN: ${TRANSACTIONAL_EMAIL_TOKEN:-}
+  TRANSACTIONAL_EMAIL_WEBHOOK_SECRET: ${TRANSACTIONAL_EMAIL_WEBHOOK_SECRET:?TRANSACTIONAL_EMAIL_WEBHOOK_SECRET is required}
+  ABUSE_HASH_SECRET: ${ABUSE_HASH_SECRET:?ABUSE_HASH_SECRET is required}
+  BOT_CHALLENGE_PROVIDER: turnstile
+  TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:?TURNSTILE_SECRET_KEY is required}
+  TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:?TURNSTILE_SITE_KEY is required}
+  TURNSTILE_HOSTNAMES: ${TURNSTILE_HOSTNAMES:?TURNSTILE_HOSTNAMES is required}
+  TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:?TRUSTED_PROXY_HOPS is required}
+  CLAMAV_HOST: ${CLAMAV_HOST:?CLAMAV_HOST is required}
+  CLAMAV_PORT: ${CLAMAV_PORT:-3310}
+  JOB_LEASE_DURATION_MS: ${JOB_LEASE_DURATION_MS:-300000}
+  JOB_POLL_INTERVAL_MS: ${JOB_POLL_INTERVAL_MS:-1000}
+  USAGE_METER_EXPORT_URL: ${USAGE_METER_EXPORT_URL:-}
+  USAGE_METER_EXPORT_TOKEN: ${USAGE_METER_EXPORT_TOKEN:-}
+  OPERATOR_BOOTSTRAP_TOKEN: ${OPERATOR_BOOTSTRAP_TOKEN:-}
+
+x-service-hardening: &service-hardening
+  init: true
+  restart: unless-stopped
+  read_only: true
+  security_opt:
+    - no-new-privileges:true
+  cap_drop:
+    - ALL
+
+services:
+  agent:
+    <<: *service-hardening
+    image: ${IMAGE_PREFIX:-primalthrum}/agent:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: agent/Dockerfile
+      args:
+        VERSION: ${IMAGE_TAG:-latest}
+    expose:
+      - "8000"
+    healthcheck:
+      test:
+        - CMD
+        - python
+        - -c
+        - >-
+          import json,urllib.request;
+          data=json.load(urllib.request.urlopen('http://127.0.0.1:8000/ready', timeout=3));
+          assert data['status']=='ready'
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 20s
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    networks:
+      - backend
+
+  server:
+    <<: *service-hardening
+    image: ${IMAGE_PREFIX:-primalthrum}/server:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+      args:
+        VERSION: ${IMAGE_TAG:-latest}
+    depends_on:
+      agent:
+        condition: service_healthy
+    environment:
+      <<: *application-environment
+      BACKGROUND_WORKER_MODE: external
+      PORT: "3000"
+    expose:
+      - "3000"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch('http://127.0.0.1:3000/ready')
+          .then(async response => { if (!response.ok) throw new Error(await response.text()); })
+          .catch(() => process.exit(1))
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    volumes:
+      - generated-agents:/app/generated-agents
+    networks:
+      - backend
+      - frontend
+
+  worker:
+    <<: *service-hardening
+    image: ${IMAGE_PREFIX:-primalthrum}/server:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: server/Dockerfile
+      args:
+        VERSION: ${IMAGE_TAG:-latest}
+    command: ["node", "dist/worker.js"]
+    depends_on:
+      agent:
+        condition: service_healthy
+    environment:
+      <<: *application-environment
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          const {Client}=require('pg');
+          const client=new Client({connectionString:process.env.DATABASE_URL});
+          client.connect().then(()=>client.query('SELECT 1')).then(()=>client.end())
+          .catch(()=>process.exit(1))
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 30s
+    tmpfs:
+      - /tmp:size=128m,mode=1777
+    volumes:
+      - generated-agents:/app/generated-agents
+    networks:
+      - backend
+
+  web:
+    <<: *service-hardening
+    image: ${IMAGE_PREFIX:-primalthrum}/web:${IMAGE_TAG:-latest}
+    build:
+      context: .
+      dockerfile: web/Dockerfile
+      args:
+        VERSION: ${IMAGE_TAG:-latest}
+    depends_on:
+      server:
+        condition: service_healthy
+    environment:
+      HOST: 0.0.0.0
+      PORT: "8080"
+      SERVER_PROXY_TARGET: http://server:3000
+      FORWARDED_PROTO: ${FORWARDED_PROTO:-https}
+      PROXY_TIMEOUT_MS: ${PROXY_TIMEOUT_MS:-120000}
+    ports:
+      - "${WEB_BIND_ADDRESS:-127.0.0.1}:${WEB_PORT:-8080}:8080"
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch('http://127.0.0.1:8080/healthz')
+          .then(response => { if (!response.ok) process.exit(1); })
+          .catch(()=>process.exit(1))
+      interval: 15s
+      timeout: 5s
+      retries: 10
+      start_period: 10s
+    tmpfs:
+      - /tmp:size=32m,mode=1777
+    networks:
+      - frontend
+
+networks:
+  backend:
+  frontend:
+
+volumes:
+  generated-agents:
