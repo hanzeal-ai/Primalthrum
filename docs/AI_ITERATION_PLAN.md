@@ -2265,10 +2265,13 @@ complete. Follow the same dependency and verification protocol used above.
   retry. Worker zero-downtime rollout behavior is therefore covered locally. A Web
   replacement-instance test now proves the new instance becomes healthy and serves API
   traffic while the old instance drains a proxied stream, with the old instance closing
-  only after the final chunk is delivered. The
+  only after the final chunk is delivered. Server shutdown is now a separately tested
+  lifecycle that rejects new connections, drains the active HTTP response, then closes App
+  resources and the database in order, including database cleanup after an App cleanup
+  failure. The
   digest-pinned aggregate rerun remains blocked by the missing cached image and unavailable
   external registry. Redis, managed secrets, OpenTelemetry, full production startup,
-  and Server/API plus external-ingress rolling traffic evidence remain open.
+  and external-ingress rolling traffic evidence remain open.
 
 ### P23-01 Full Commercial End-To-End Suite
 

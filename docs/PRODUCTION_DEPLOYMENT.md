@@ -96,8 +96,11 @@ responses finish before it exits.
 `pnpm --dir web test:production-server` includes an in-process rolling handoff: a
 replacement Web instance becomes healthy and serves an API request while the old
 instance drains an unfinished proxied stream, and the old instance closes only after
-the final stream chunk is delivered. Production acceptance must repeat this through
-the selected external load balancer and include Server/API request draining.
+the final stream chunk is delivered. The Server lifecycle has a matching request-drain
+test: it stops accepting connections, waits for the active HTTP response, then runs App
+cleanup and closes the database in order; database closure still runs when App cleanup
+fails. Production acceptance must repeat both handoffs through the selected external
+load balancer.
 
 ## Rollback
 

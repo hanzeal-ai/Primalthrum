@@ -1,7 +1,7 @@
 import 'dotenv/config';
 
 import { createApplicationRuntime, usesExternalWorker } from './src/applicationRuntime';
-import { closeApp } from './src/services/appLifecycle';
+import { HttpServerLifecycle } from './src/services/httpServerLifecycle';
 
 const port = Number(process.env.PORT ?? 3000);
 
@@ -17,33 +17,11 @@ async function main(): Promise<void> {
     console.log(`Database provider: ${databaseProvider}`);
   });
 
-  let shuttingDown = false;
+  const lifecycle = new HttpServerLifecycle({ app, database, server });
   const shutdown = (signal: NodeJS.Signals): void => {
-    if (shuttingDown) return;
-    shuttingDown = true;
-    console.log(`Received ${signal}; shutting down Primalthrum Node server`);
-    const forceExit = setTimeout(() => {
-      console.error('Primalthrum Node server shutdown timed out');
-      process.exit(1);
-    }, 10_000);
-    forceExit.unref();
-    server.close(async (serverError) => {
-      let closeError: unknown = serverError;
-      try {
-        await closeApp(app);
-      } catch (error) {
-        closeError ??= error;
-      }
-      try {
-        await database?.close();
-      } catch (error) {
-        closeError ??= error;
-      }
-      if (closeError) {
-        console.error(closeError);
-        process.exitCode = 1;
-      }
-      clearTimeout(forceExit);
+    void lifecycle.shutdown(signal).catch((error) => {
+      console.error(error);
+      process.exitCode = 1;
     });
   };
 
