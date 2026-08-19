@@ -4,6 +4,7 @@ import { createServer, request } from 'node:http';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import test from 'node:test';
+import { setTimeout as delay } from 'node:timers/promises';
 
 import { createProductionServer } from './productionServer.mjs';
 
@@ -99,6 +100,73 @@ test('production server rejects unsafe configuration and encoded traversal', asy
     assert.equal(await rawStatus(origin, '//attacker.invalid/api/runs'), 400);
   } finally {
     await close(server);
+    await rm(root, { recursive: true, force: true });
+  }
+});
+
+test('replacement Web instance serves traffic while the old instance drains an API stream', async () => {
+  const root = await createWebRoot();
+  let releaseStream = () => undefined;
+  let markStreamStarted = () => undefined;
+  const streamReleased = new Promise((resolve) => { releaseStream = resolve; });
+  const streamStarted = new Promise((resolve) => { markStreamStarted = resolve; });
+  const upstream = createServer((request, response) => {
+    if (request.url === '/api/stream') {
+      response.writeHead(200, { 'content-type': 'text/plain; charset=utf-8' });
+      response.write('first\n');
+      markStreamStarted();
+      void streamReleased.then(() => response.end('last\n'));
+      return;
+    }
+    response.writeHead(200, { 'content-type': 'application/json' });
+    response.end(JSON.stringify({ servedBy: 'replacement' }));
+  });
+  const upstreamOrigin = await listen(upstream);
+  const oldServer = createProductionServer({
+    distDir: root,
+    proxyTarget: upstreamOrigin,
+    logger: silentLogger,
+  });
+  const replacementServer = createProductionServer({
+    distDir: root,
+    proxyTarget: upstreamOrigin,
+    logger: silentLogger,
+  });
+  const oldOrigin = await listen(oldServer);
+  const replacementOrigin = await listen(replacementServer);
+
+  try {
+    const oldResponsePromise = fetch(`${oldOrigin}/api/stream`);
+    await streamStarted;
+    const oldResponse = await oldResponsePromise;
+    assert.equal(oldResponse.status, 200);
+    assert.ok(oldResponse.body);
+    const reader = oldResponse.body.getReader();
+    const firstChunk = await reader.read();
+    assert.equal(Buffer.from(firstChunk.value ?? []).toString('utf8'), 'first\n');
+
+    const replacementHealth = await fetch(`${replacementOrigin}/healthz`);
+    assert.equal(replacementHealth.status, 200);
+    let oldClosed = false;
+    const closeOld = close(oldServer).then(() => { oldClosed = true; });
+    await delay(25);
+    assert.equal(oldClosed, false);
+
+    const replacementApi = await fetch(`${replacementOrigin}/api/replacement`);
+    assert.equal(replacementApi.status, 200);
+    assert.deepEqual(await replacementApi.json(), { servedBy: 'replacement' });
+
+    releaseStream();
+    const finalChunk = await reader.read();
+    assert.equal(Buffer.from(finalChunk.value ?? []).toString('utf8'), 'last\n');
+    assert.equal((await reader.read()).done, true);
+    await closeOld;
+    assert.equal(oldClosed, true);
+  } finally {
+    releaseStream();
+    if (oldServer.listening) await close(oldServer);
+    await close(replacementServer);
+    await close(upstream);
     await rm(root, { recursive: true, force: true });
   }
 });

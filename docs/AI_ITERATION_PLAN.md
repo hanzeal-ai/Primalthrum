@@ -2262,10 +2262,13 @@ complete. Follow the same dependency and verification protocol used above.
   PostgreSQL 16 rolling-handoff smoke also starts a replacement Worker while the old Worker
   holds an active Job, proves the replacement is processing before shutdown, continues
   enqueueing during the old Worker drain, and completes 65 Jobs exactly once without a
-  retry. Worker zero-downtime rollout behavior is therefore covered locally. The
+  retry. Worker zero-downtime rollout behavior is therefore covered locally. A Web
+  replacement-instance test now proves the new instance becomes healthy and serves API
+  traffic while the old instance drains a proxied stream, with the old instance closing
+  only after the final chunk is delivered. The
   digest-pinned aggregate rerun remains blocked by the missing cached image and unavailable
   external registry. Redis, managed secrets, OpenTelemetry, full production startup,
-  and API/Web zero-downtime traffic rollout evidence remain open.
+  and Server/API plus external-ingress rolling traffic evidence remain open.
 
 ### P23-01 Full Commercial End-To-End Suite
 

@@ -84,6 +84,21 @@ Durable Job leases and Outbox claims prevent concurrent Workers from completing
 the same record. During shutdown, Workers stop new claims and wait for in-flight
 delivery before the container exits.
 
+## Rolling Deployments
+
+Bring up replacement Web and Server replicas with the new immutable image before
+removing old replicas. The external load balancer must wait for `/healthz` and the
+proxied Server `/ready` check before routing traffic, then stop assigning new traffic
+to an old Web instance before sending its termination signal. The Web process stops
+accepting connections on shutdown but lets active static and proxied streaming
+responses finish before it exits.
+
+`pnpm --dir web test:production-server` includes an in-process rolling handoff: a
+replacement Web instance becomes healthy and serves an API request while the old
+instance drains an unfinished proxied stream, and the old instance closes only after
+the final stream chunk is delivered. Production acceptance must repeat this through
+the selected external load balancer and include Server/API request draining.
+
 ## Rollback
 
 Keep the previous immutable `IMAGE_TAG` available. Before changing application
