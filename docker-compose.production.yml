@@ -43,6 +43,12 @@ x-application-environment: &application-environment
   USAGE_METER_EXPORT_URL: ${USAGE_METER_EXPORT_URL:-}
   USAGE_METER_EXPORT_TOKEN: ${USAGE_METER_EXPORT_TOKEN:-}
   OPERATOR_BOOTSTRAP_TOKEN: ${OPERATOR_BOOTSTRAP_TOKEN:-}
+  OTEL_TRACES_EXPORTER: otlp
+  OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:?OTEL_EXPORTER_OTLP_TRACES_ENDPOINT is required}
+  OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+  OTEL_EXPORTER_OTLP_TIMEOUT: ${OTEL_EXPORTER_OTLP_TIMEOUT:-5000}
+  OTEL_SERVICE_VERSION: ${IMAGE_TAG:?IMAGE_TAG is required}
+  OTEL_DEPLOYMENT_ENVIRONMENT: ${OTEL_DEPLOYMENT_ENVIRONMENT:-production}
 
 x-service-hardening: &service-hardening
   init: true
@@ -96,6 +102,7 @@ services:
     environment:
       <<: *application-environment
       BACKGROUND_WORKER_MODE: external
+      OTEL_SERVICE_NAME: ${OTEL_SERVER_SERVICE_NAME:-primalthrum-server}
       PORT: "3000"
     expose:
       - "3000"
@@ -134,6 +141,7 @@ services:
         condition: service_healthy
     environment:
       <<: *application-environment
+      OTEL_SERVICE_NAME: ${OTEL_WORKER_SERVICE_NAME:-primalthrum-worker}
     healthcheck:
       test:
         - CMD

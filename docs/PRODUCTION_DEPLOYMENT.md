@@ -11,6 +11,7 @@ Provision these services before deployment:
 - PostgreSQL with TLS, automated backups, and point-in-time recovery.
 - S3-compatible object storage exposed through HTTPS with bucket versioning.
 - ClamAV reachable from the Server and Worker network.
+- An OpenTelemetry collector with an HTTPS OTLP/HTTP traces endpoint and retained access controls.
 - Stripe, transactional email, and Cloudflare Turnstile production credentials.
 - A TLS reverse proxy or load balancer in front of the Web container.
 
@@ -34,7 +35,8 @@ bash scripts/production-deployment-smoke.sh
 ```
 
 It rejects host source mounts, writable application roots, missing health checks,
-unversioned images, excess host ports, or absent process hardening.
+unversioned images, excess host ports, absent process hardening, disabled OTLP tracing,
+an insecure collector endpoint, or duplicate Server/Worker service identities.
 
 Build immutable images with the release version:
 

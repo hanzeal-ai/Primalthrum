@@ -9,6 +9,7 @@ import {
 import { createDocumentFileStorage } from './services/documentStorageConfiguration';
 import { StripePaymentAdapter } from './services/stripePaymentAdapter';
 import { HttpUsageMeterExporter } from './services/usageMeterExporter';
+import { createTraceExporter } from './services/tracingConfiguration';
 
 export interface ApplicationRuntimeOptions {
   backgroundTimersUnref?: boolean;
@@ -92,6 +93,7 @@ export function createApplicationAppOptions(environment: NodeJS.ProcessEnv): App
     botChallengeSiteKey: abuseProtection.botChallengeSiteKey,
     trustedProxyHops: abuseProtection.trustedProxyHops,
     operatorBootstrapToken: environment.OPERATOR_BOOTSTRAP_TOKEN,
+    traceExporter: createTraceExporter(environment),
     jobLeaseDurationMs: optionalBoundedInteger(
       environment.JOB_LEASE_DURATION_MS,
       1_000,

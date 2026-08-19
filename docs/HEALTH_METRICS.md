@@ -61,6 +61,29 @@ validates database migrations before the process is considered running.
 
 Numeric path segments are normalized to `/:id` to avoid unbounded metric labels.
 
+## Distributed Tracing
+
+The Server accepts W3C `traceparent`, continues a valid incoming trace with a new
+server Span, and returns the resulting `traceparent` plus `X-Request-ID`. Unsampled
+incoming traces preserve their sampling decision and are not exported. Invalid or
+all-zero identifiers start a new sampled root trace.
+
+Production exports OpenTelemetry OTLP/HTTP JSON to the required HTTPS collector
+configured by `OTEL_EXPORTER_OTLP_TRACES_ENDPOINT`. `OTEL_EXPORTER_OTLP_HEADERS`
+accepts comma-separated URL-encoded `key=value` entries for collector authentication;
+`OTEL_EXPORTER_OTLP_TIMEOUT`, `OTEL_SERVICE_NAME`, `OTEL_SERVICE_VERSION`, and
+`OTEL_DEPLOYMENT_ENVIRONMENT` provide bounded delivery and resource identity.
+
+The exporter batches up to 64 Spans, bounds its in-memory queue at 2,048, reports
+overflow or collector failures through structured warning logs, and flushes queued
+Spans during application shutdown. Export failure never fails a customer request.
+HTTP attributes contain only method, matched Router template, status, and error type;
+raw URL paths, query strings, request bodies, credentials, and user identifiers are
+not exported. Cross-service Server-to-Agent propagation and live collector/dashboard
+acceptance remain production launch gates. Worker Job/Outbox Span instrumentation is
+also still required; the production Worker service identity is reserved now so those
+future Spans cannot be merged with Server request traces.
+
 ## Deployment Probes
 
 Use `/health` for process liveness and `/ready` for traffic routing readiness. Example Kubernetes-style split:

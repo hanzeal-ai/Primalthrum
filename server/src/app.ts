@@ -77,6 +77,8 @@ import {
   LocalDocumentStorage,
 } from './services/fileStorage';
 import { checkServerReadiness } from './services/healthReadiness';
+import { type HttpTraceExporter } from './services/httpTraceExporter';
+import { createHttpTracingMiddleware } from './services/httpTracingMiddleware';
 import { JsonConsoleLogger, type StructuredLogger } from './services/logger';
 import { MetricsRegistry } from './services/metricsRegistry';
 import { hashPassword, verifyPassword, verifyPasswordOrDummy } from './services/passwordHash';
@@ -269,6 +271,7 @@ export interface AppOptions {
   generatedAgentsDir?: string;
   logger?: StructuredLogger;
   metrics?: MetricsRegistry;
+  traceExporter?: HttpTraceExporter;
   paymentAdapter?: PaymentProviderAdapter;
   paymentPriceRefs?: Record<string, string>;
   publicAppUrl?: string;
@@ -369,6 +372,7 @@ export function createApp(options: AppOptions = {}): Koa {
   const agentBaseUrl = options.agentBaseUrl ?? DEFAULT_AGENT_BASE_URL;
   const logger = options.logger ?? new JsonConsoleLogger();
   const metrics = options.metrics ?? new MetricsRegistry();
+  const traceExporter = options.traceExporter;
   const databasePath = options.dbPath ?? DEFAULT_DB_PATH;
   const injectedAsyncDatabase = options.identityDatabase ?? options.runtimeDatabase;
   const db = options.database
@@ -797,6 +801,7 @@ export function createApp(options: AppOptions = {}): Koa {
       ]);
     });
   }
+  if (traceExporter) registerAppCleanup(app, () => traceExporter.shutdown());
 
   function authorize(ctx: Koa.Context, permission: WorkspacePermission): boolean {
     if (ctx.state.apiKey) {
@@ -1100,17 +1105,18 @@ export function createApp(options: AppOptions = {}): Koa {
     logger,
   });
 
+  if (traceExporter) app.use(createHttpTracingMiddleware(traceExporter));
   app.use(async (ctx, next) => {
     const origin = ctx.get('origin');
     ctx.set('Access-Control-Allow-Origin', origin || '*');
     ctx.set('Access-Control-Allow-Credentials', 'true');
     ctx.set(
       'Access-Control-Allow-Headers',
-      'Content-Type, Accept, Authorization, Idempotency-Key, Last-Event-ID, X-Bot-Challenge-Token, X-Operator-Bootstrap-Token',
+      'Content-Type, Accept, Authorization, Idempotency-Key, Last-Event-ID, Traceparent, X-Bot-Challenge-Token, X-Operator-Bootstrap-Token',
     );
     ctx.set(
       'Access-Control-Expose-Headers',
-      'X-Primalthrum-Run-Id, X-Primalthrum-Conversation-Id, X-Primalthrum-Idempotency-Key, Retry-After, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset',
+      'Traceparent, X-Request-ID, X-Primalthrum-Run-Id, X-Primalthrum-Conversation-Id, X-Primalthrum-Idempotency-Key, Retry-After, X-RateLimit-Limit, X-RateLimit-Remaining, X-RateLimit-Reset',
     );
     ctx.set('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS');
     ctx.set('Vary', 'Origin');

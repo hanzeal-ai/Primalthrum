@@ -2242,7 +2242,8 @@ complete. Follow the same dependency and verification protocol used above.
   the same standalone Worker ownership boundary, continuously discovers cross-process
   writes, and stops new claims before shutdown waits for in-flight delivery. HTTP replicas
   in external mode no longer construct either Dispatcher. Deterministic Outbox test clocks
-  remove date-sensitive release-gate failures, and the complete server suite passes 214/214.
+  remove date-sensitive release-gate failures. After the tracing and lifecycle slices, the
+  complete Server suite passes 224/224.
   The following slice adds immutable multi-stage Agent, Server, and Web image definitions,
   a source-mount-free production Compose topology, required managed-service configuration,
   non-root read-only containers, dropped capabilities, health-gated startup, and a
@@ -2268,10 +2269,14 @@ complete. Follow the same dependency and verification protocol used above.
   only after the final chunk is delivered. Server shutdown is now a separately tested
   lifecycle that rejects new connections, drains the active HTTP response, then closes App
   resources and the database in order, including database cleanup after an App cleanup
-  failure. The
+  failure. Server requests now continue valid W3C trace context, return correlation headers,
+  and emit privacy-minimized OTLP/HTTP JSON Spans through a bounded batch queue that flushes
+  during shutdown. Production Compose requires an HTTPS collector endpoint and distinct
+  Server/Worker resource identities. The
   digest-pinned aggregate rerun remains blocked by the missing cached image and unavailable
-  external registry. Redis, managed secrets, OpenTelemetry, full production startup,
-  and external-ingress rolling traffic evidence remain open.
+  external registry. Redis, managed secrets, Server-to-Agent trace propagation, Worker
+  Job/Outbox Span instrumentation, live collector/dashboard evidence, full production
+  startup, and external-ingress rolling traffic evidence remain open.
 
 ### P23-01 Full Commercial End-To-End Suite
 

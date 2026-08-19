@@ -48,6 +48,14 @@ export function verifyProductionCompose(config) {
 
   assert.equal(config.services.server.environment.NODE_ENV, 'production');
   assert.equal(config.services.server.environment.BACKGROUND_WORKER_MODE, 'external');
+  assert.equal(config.services.server.environment.OTEL_TRACES_EXPORTER, 'otlp');
+  assert.equal(config.services.server.environment.OTEL_SERVICE_NAME, 'primalthrum-server');
+  assert.equal(config.services.worker.environment.OTEL_SERVICE_NAME, 'primalthrum-worker');
+  assert.match(config.services.server.environment.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT, /^https:\/\//);
+  assert.equal(
+    config.services.worker.environment.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
+    config.services.server.environment.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
+  );
   assert.equal(config.services.worker.command?.join(' '), 'node dist/worker.js');
   assert.equal(config.services.web.environment.SERVER_PROXY_TARGET, 'http://server:3000');
   assert.match(config.services.server.environment.DATABASE_URL, /^postgres(ql)?:\/\//);
