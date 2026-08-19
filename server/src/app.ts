@@ -158,6 +158,7 @@ import { AsyncUsageExportOutboxRepository } from './services/asyncUsageExportOut
 import { type UsageExportOutboxStore } from './services/usageExportOutboxStore';
 import { UsageExportDispatcher } from './services/usageExportDispatcher';
 import { type UsageMeterExporter } from './services/usageMeterExporter';
+import { OutboxDispatcherLifecycle } from './services/outboxDispatcherLifecycle';
 import { AsyncCreditLedgerRepository } from './services/asyncCreditLedgerRepository';
 import { CreditLedgerRepository } from './services/creditLedgerRepository';
 import { type CreditLedgerStore } from './services/creditLedgerStore';
@@ -363,6 +364,8 @@ export function createApp(options: AppOptions = {}): Koa {
   const app = new Koa();
   const router = new Router();
   const operatorRouter = new Router();
+  const backgroundSchedulersEnabled = options.startBackgroundSchedulers !== false;
+  const outboxDispatchers = new OutboxDispatcherLifecycle(backgroundSchedulersEnabled);
   const agentBaseUrl = options.agentBaseUrl ?? DEFAULT_AGENT_BASE_URL;
   const logger = options.logger ?? new JsonConsoleLogger();
   const metrics = options.metrics ?? new MetricsRegistry();
@@ -523,9 +526,9 @@ export function createApp(options: AppOptions = {}): Koa {
     ? new AsyncUsageRatingRepository(
         runtimeDatabase,
         undefined,
-        () => usageExportDispatcher?.kick(),
+        outboxDispatchers.kickUsageExport,
       )
-    : new UsageRatingRepository(db, undefined, () => usageExportDispatcher?.kick());
+    : new UsageRatingRepository(db, undefined, outboxDispatchers.kickUsageExport);
   const runtimeCreditLedger: CreditLedgerStore = runtimeDatabase
     ? new AsyncCreditLedgerRepository(runtimeDatabase)
     : new CreditLedgerRepository(db, () => new Date());
@@ -533,13 +536,13 @@ export function createApp(options: AppOptions = {}): Koa {
     paymentRepository,
     billingRepository,
   );
-  if (options.usageMeterExporter) {
+  if (outboxDispatchers.enabled && options.usageMeterExporter) {
     usageExportDispatcher = new UsageExportDispatcher(
-      usageExportOutboxRepository,
+      outboxDispatchers.guardUsageExportStore(usageExportOutboxRepository),
       options.usageMeterExporter,
       logger,
     );
-    usageExportDispatcher.kick();
+    outboxDispatchers.attachUsageExport(usageExportDispatcher);
   }
   const runUsageService = new RunUsageService(usageRatingRepository, runtimeCreditLedger);
   const meteredOperationService = new MeteredOperationService(
@@ -552,12 +555,12 @@ export function createApp(options: AppOptions = {}): Koa {
     ? new AsyncAccountEmailOutboxRepository(
         identityDatabase,
         undefined,
-        () => accountEmailDispatcher?.kick(),
+        outboxDispatchers.kickAccountEmail,
       )
     : new AccountEmailOutboxRepository(
         db,
         undefined,
-        () => accountEmailDispatcher?.kick(),
+        outboxDispatchers.kickAccountEmail,
       );
   const accountIdentityService = new AccountIdentityService(
     userRepository,
@@ -610,13 +613,13 @@ export function createApp(options: AppOptions = {}): Koa {
     ? new AsyncRetentionPolicyRepository(runtimeDatabase)
     : new RetentionPolicyRepository(db);
   const retentionService = new RetentionService(retentionPolicies, documentStorage);
-  if (options.accountEmailSender) {
+  if (outboxDispatchers.enabled && options.accountEmailSender) {
     accountEmailDispatcher = new AccountEmailDispatcher(
-      accountEmailOutbox,
+      outboxDispatchers.guardAccountEmailStore(accountEmailOutbox),
       options.accountEmailSender,
       logger,
     );
-    accountEmailDispatcher.kick();
+    outboxDispatchers.attachAccountEmail(accountEmailDispatcher);
   }
   const paymentReady = Promise.all(
     Object.entries(options.paymentPriceRefs ?? {})
@@ -749,7 +752,6 @@ export function createApp(options: AppOptions = {}): Koa {
   }, Math.max(250, Math.floor(
     (options.jobLeaseDurationMs ?? DEFAULT_JOB_LEASE_DURATION_MS) / 3,
   )));
-  const backgroundSchedulersEnabled = options.startBackgroundSchedulers !== false;
   const kickJobDispatcher = backgroundSchedulersEnabled
     ? () => jobDispatcher.kick()
     : () => undefined;
@@ -782,10 +784,17 @@ export function createApp(options: AppOptions = {}): Koa {
     );
     retentionScheduler.start();
     accountPrivacyScheduler.start();
+    outboxDispatchers.start(
+      options.jobPollIntervalMs,
+      options.backgroundTimersUnref ?? true,
+    );
     registerAppCleanup(app, async () => {
       accountPrivacyScheduler.stop();
       retentionScheduler.stop();
-      await jobDispatcher.stop();
+      await Promise.all([
+        jobDispatcher.stop(),
+        outboxDispatchers.stop(),
+      ]);
     });
   }
 
