@@ -2238,9 +2238,13 @@ complete. Follow the same dependency and verification protocol used above.
   periodic recovery so replicas cannot steal an active Job and surviving Workers can
   take over after lease expiry without restarting. Embedded mode preserves local
   development compatibility, while external mode prevents HTTP replicas from claiming
-  durable Jobs. Redis, managed
-  secrets, OpenTelemetry, deployment hardening, production Worker load/failover evidence,
-  and broader asynchronous Outbox separation remain open.
+  durable Jobs. The next slice moves account email and usage export Outbox polling into
+  the same standalone Worker ownership boundary, continuously discovers cross-process
+  writes, and stops new claims before shutdown waits for in-flight delivery. HTTP replicas
+  in external mode no longer construct either Dispatcher. Deterministic Outbox test clocks
+  remove date-sensitive release-gate failures, and the complete server suite passes 214/214.
+  Redis, managed secrets, OpenTelemetry, deployment hardening, production Worker
+  load/failover evidence, and separation of remaining asynchronous producers remain open.
 
 ### P23-01 Full Commercial End-To-End Suite
 

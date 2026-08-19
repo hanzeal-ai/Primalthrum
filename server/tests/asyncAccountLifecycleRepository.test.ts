@@ -14,7 +14,7 @@ import { AccountEmailDeliveryError } from '../src/services/accountEmailSender';
 import { AsyncUserRepository } from '../src/services/asyncUserRepository';
 import { AsyncWorkspaceRepository } from '../src/services/asyncWorkspaceRepository';
 
-const NOW = new Date('2026-08-15T12:00:00.000Z');
+const NOW = new Date(Date.now() + 60_000);
 const logger = { log: () => undefined };
 
 function createDatabase(): { database: AsyncSqliteDatabase; root: string } {
@@ -61,7 +61,7 @@ test('async account tokens and onboarding preserve one-time lifecycle semantics'
       purpose: 'reset_password',
       ttlMs: 1000,
     });
-    now = new Date('2026-08-15T12:00:01.001Z');
+    now = new Date(now.getTime() + 1_001);
     assert.equal(await tokens.consume(expiring, 'reset_password'), null);
     await onboarding.activate(workspace.id, now.toISOString());
     assert.equal((await onboarding.findForUser(owner.id))?.state, 'active');

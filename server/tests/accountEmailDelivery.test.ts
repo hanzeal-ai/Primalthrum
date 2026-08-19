@@ -26,7 +26,7 @@ before(async () => {
   dbPath = join(rootDir, 'platform.sqlite');
   const db = createSqliteDatabase(dbPath);
   const user = new UserRepository(db).createUser('webhook@example.com', 'hash');
-  const outbox = new AccountEmailOutboxRepository(db, () => NOW);
+  const outbox = new AccountEmailOutboxRepository(db);
   outbox.enqueue({ template: 'verify_email', recipientEmail: user.email,
     payload: { userId: user.id, actionUrl: 'https://app.test/verify' } });
   const claimed = outbox.claimNext();

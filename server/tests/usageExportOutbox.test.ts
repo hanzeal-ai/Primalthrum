@@ -16,7 +16,7 @@ import {
 } from '../src/services/usageMeterExporter';
 import { UsageRatingRepository } from '../src/services/usageRatingRepository';
 
-const NOW = new Date('2026-08-15T12:00:00.000Z');
+const NOW = new Date(Date.now() + 60_000);
 const silentLogger: StructuredLogger = { log: () => undefined };
 
 let rootDir = '';
@@ -102,7 +102,7 @@ test('dispatcher retains failures with exponential retry evidence', async () => 
   assert.equal(row?.status, 'failed');
   assert.equal(row?.attempts, 1);
   assert.equal(row?.last_error, 'sink unavailable');
-  assert.equal(row?.next_attempt_at, '2026-08-15T12:00:01.000Z');
+  assert.equal(row?.next_attempt_at, new Date(NOW.getTime() + 1_000).toISOString());
   assert.ok((outbox.nextAttemptDelayMs('primary') ?? 0) >= 999);
 });
 

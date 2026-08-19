@@ -25,7 +25,7 @@ let now: Date;
 beforeEach(() => {
   rootDir = mkdtempSync(join(tmpdir(), 'primalthrum-account-identity-'));
   db = createSqliteDatabase(join(rootDir, 'platform.sqlite'));
-  now = new Date('2026-08-15T12:00:00.000Z');
+  now = new Date(Date.now() + 60_000);
 });
 
 afterEach(() => rmSync(rootDir, { recursive: true, force: true }));
@@ -39,7 +39,7 @@ test('account action tokens expire and can only be consumed once', () => {
   assert.equal(tokens.consume(oneTime, 'verify_email'), null);
 
   const expiring = tokens.create({ userId: user.id, purpose: 'reset_password', ttlMs: 1000 });
-  now = new Date('2026-08-15T12:00:01.001Z');
+  now = new Date(now.getTime() + 1_001);
   assert.equal(tokens.consume(expiring, 'reset_password'), null);
 });
 

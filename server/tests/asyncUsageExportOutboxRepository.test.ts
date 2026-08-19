@@ -13,7 +13,7 @@ import { AsyncWorkspaceRepository } from '../src/services/asyncWorkspaceReposito
 import { UsageExportDispatcher } from '../src/services/usageExportDispatcher';
 import { type UsageMeterExportPayload } from '../src/services/usageMeterExporter';
 
-const NOW = new Date('2026-08-15T12:00:00.000Z');
+const NOW = new Date(Date.now() + 60_000);
 const logger = { log: () => undefined };
 
 function createDatabase(): { database: AsyncSqliteDatabase; root: string } {
@@ -98,7 +98,10 @@ test('async usage export retains bounded retry evidence', async () => {
     assert.equal(rows[0]?.status, 'failed');
     assert.equal(rows[0]?.attempts, 1);
     assert.equal(rows[0]?.last_error, 'sink unavailable');
-    assert.equal(rows[0]?.next_attempt_at, '2026-08-15T12:00:01.000Z');
+    assert.equal(
+      rows[0]?.next_attempt_at,
+      new Date(NOW.getTime() + 1_000).toISOString(),
+    );
     assert.equal(await outbox.nextAttemptDelayMs('primary'), 1000);
   } finally {
     await database.close();
