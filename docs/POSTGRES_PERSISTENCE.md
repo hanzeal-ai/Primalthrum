@@ -75,6 +75,13 @@ depend on another process restart.
 Embedded mode remains the default for local single-process development. PostgreSQL
 `SKIP LOCKED` and leases make Worker replicas independently scalable without startup
 recovery stealing another replica's active Job.
+`postgresWorkerFailoverSmoke.ts` runs two production Dispatcher implementations against
+PostgreSQL, proves both Workers share a 64-Job load without duplicate execution, abandons
+an owned lease to model a process crash, and verifies that the surviving Worker neither
+steals the active lease nor requires a restart before recovering it after expiry. The
+focused local PostgreSQL 16 run passed with a 32/32 split and one successful second-attempt
+takeover. The digest-pinned aggregate smoke still requires a connected environment because
+that exact image was not available in the local Docker cache.
 The application-level PostgreSQL smoke completes registration and email verification
 over HTTP and asserts that no account lifecycle records leak into local SQLite.
 `pnpm data:transfer:postgres` now provides maintenance-window SQLite transfer with
@@ -153,7 +160,8 @@ Use Postgres when running multiple server instances, deploying to managed cloud 
    point-in-time recovery and rollback with measured RPO/RTO.
 3. Run the full repository, concurrency, migration, HTTP, and browser suites against
    the pinned PostgreSQL service in CI and the production-like deployment stack.
-4. Complete load, failover, connection exhaustion, and zero-downtime rollout evidence.
+4. Repeat the Worker load/failover smoke in the digest-pinned CI stack, then complete
+   connection exhaustion and zero-downtime rollout evidence.
 
 ## Integration Smoke
 

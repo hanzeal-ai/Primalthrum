@@ -2250,8 +2250,12 @@ complete. Follow the same dependency and verification protocol used above.
   release smoke rejects missing hardening, host mounts, unversioned images, and excess
   host ports. Local Server and Web image builds plus a read-only Web container smoke pass;
   the Agent image build remains unverified because Docker Hub twice returned corrupted
-  Python image metadata. Redis, managed secrets, OpenTelemetry, full production startup,
-  production Worker load/failover evidence, and separation of remaining asynchronous
+  Python image metadata. A focused PostgreSQL 16 smoke now proves two production
+  Dispatchers share a 64-Job load exactly once and that a surviving Worker waits for lease
+  expiry, recovers an abandoned Job without restart, and rejects stale completion. The
+  digest-pinned aggregate rerun remains blocked by the missing cached image and unavailable
+  external registry. Redis, managed secrets, OpenTelemetry, full production startup,
+  connection-exhaustion/rollout evidence, and separation of remaining asynchronous
   producers remain open.
 
 ### P23-01 Full Commercial End-To-End Suite
