@@ -68,6 +68,11 @@ Set `TRUSTED_PROXY_HOPS` to the exact number of trusted proxies between the publ
 client and Server. The supplied topology expects a TLS proxy followed by the Web
 proxy, so the example uses `2`. `FORWARDED_PROTO` must match the public scheme.
 
+With the required production tracing configuration, Server requests propagate W3C
+`traceparent` only to the internal Agent capability, Embedding, speech, and stream
+endpoints. Keep `AGENT_BASE_URL` on a trusted private network; external provider calls
+do not receive this internal correlation header.
+
 Verify from outside the deployment boundary:
 
 ```bash

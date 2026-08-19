@@ -1,5 +1,6 @@
 import { type Middleware } from 'koa';
 
+import { runWithActiveTraceContext } from './activeTraceContext';
 import { type HttpServerTraceSpan, type HttpTraceExporter } from './httpTraceExporter';
 import { createServerTraceContext, formatTraceparent } from './traceContext';
 
@@ -13,32 +14,34 @@ export function createHttpTracingMiddleware(exporter: HttpTraceExporter): Middle
     ctx.state.spanId = trace.spanId;
     ctx.set('traceparent', formatTraceparent(trace));
     ctx.set('x-request-id', trace.traceId);
-    try {
-      await next();
-    } catch (error) {
-      requestError = error;
-      throw error;
-    } finally {
-      if (trace.sampled) {
-        const route = matchedRoute(ctx);
-        const span: HttpServerTraceSpan = {
-          traceId: trace.traceId,
-          spanId: trace.spanId,
-          traceFlags: trace.traceFlags,
-          ...(trace.parentSpanId ? { parentSpanId: trace.parentSpanId } : {}),
-          name: `${ctx.method} ${route}`,
-          method: ctx.method,
-          route,
-          statusCode: requestError ? 500 : ctx.status,
-          startTimeUnixNano: startTimeUnixNano.toString(),
-          endTimeUnixNano: (startTimeUnixNano + (process.hrtime.bigint() - startedAt)).toString(),
-          ...(requestError
-            ? { errorType: requestError instanceof Error ? requestError.name : 'Error' }
-            : {}),
-        };
-        exporter.record(span);
+    return runWithActiveTraceContext(trace, async () => {
+      try {
+        await next();
+      } catch (error) {
+        requestError = error;
+        throw error;
+      } finally {
+        if (trace.sampled) {
+          const route = matchedRoute(ctx);
+          const span: HttpServerTraceSpan = {
+            traceId: trace.traceId,
+            spanId: trace.spanId,
+            traceFlags: trace.traceFlags,
+            ...(trace.parentSpanId ? { parentSpanId: trace.parentSpanId } : {}),
+            name: `${ctx.method} ${route}`,
+            method: ctx.method,
+            route,
+            statusCode: requestError ? 500 : ctx.status,
+            startTimeUnixNano: startTimeUnixNano.toString(),
+            endTimeUnixNano: (startTimeUnixNano + (process.hrtime.bigint() - startedAt)).toString(),
+            ...(requestError
+              ? { errorType: requestError instanceof Error ? requestError.name : 'Error' }
+              : {}),
+          };
+          exporter.record(span);
+        }
       }
-    }
+    });
   };
 }
 

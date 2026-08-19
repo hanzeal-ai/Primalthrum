@@ -52,6 +52,7 @@ import {
 import { AsyncDocumentRepository } from './services/asyncDocumentRepository';
 import { type DocumentStore } from './services/documentStore';
 import { AgentEmbeddingClient } from './services/agentEmbeddingClient';
+import { fetchAgent } from './services/agentHttpClient';
 import { AgentSpeechClient } from './services/agentSpeechClient';
 import { chunkDocumentText } from './services/documentChunker';
 import { DocumentIndexRepository } from './services/documentIndexRepository';
@@ -2439,7 +2440,7 @@ export function createApp(options: AppOptions = {}): Koa {
 
       ctx.res.writeHead(200, streamHeaders);
 
-      const upstream = await fetch(`${agentBaseUrl}/stream`, {
+      const upstream = await fetchAgent(agentBaseUrl, '/stream', {
         method: 'POST',
         headers: {
           Accept: 'text/event-stream',

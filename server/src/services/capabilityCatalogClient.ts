@@ -1,3 +1,5 @@
+import { fetchAgent } from './agentHttpClient';
+
 export interface RuntimeCapabilityManifest {
   kind: string;
   name: string;
@@ -19,7 +21,7 @@ export interface RuntimeCapabilityCatalog {
 export async function fetchCapabilityCatalog(
   agentBaseUrl: string,
 ): Promise<RuntimeCapabilityCatalog> {
-  const response = await fetch(`${agentBaseUrl}/capabilities`, {
+  const response = await fetchAgent(agentBaseUrl, '/capabilities', {
     headers: { Accept: 'application/json' },
   });
   if (!response.ok) {

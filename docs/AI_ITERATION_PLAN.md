@@ -2272,11 +2272,14 @@ complete. Follow the same dependency and verification protocol used above.
   failure. Server requests now continue valid W3C trace context, return correlation headers,
   and emit privacy-minimized OTLP/HTTP JSON Spans through a bounded batch queue that flushes
   during shutdown. Production Compose requires an HTTPS collector endpoint and distinct
-  Server/Worker resource identities. The
+  Server/Worker resource identities. Active W3C context now propagates through a dedicated
+  trusted transport boundary to Agent capability, Embedding, speech, and streaming calls;
+  concurrent requests remain isolated and ordinary external provider fetches receive no
+  trace header. The
   digest-pinned aggregate rerun remains blocked by the missing cached image and unavailable
-  external registry. Redis, managed secrets, Server-to-Agent trace propagation, Worker
-  Job/Outbox Span instrumentation, live collector/dashboard evidence, full production
-  startup, and external-ingress rolling traffic evidence remain open.
+  external registry. Redis, managed secrets, Worker Job/Outbox Span instrumentation, live
+  collector/dashboard evidence, full production startup, and external-ingress rolling
+  traffic evidence remain open.
 
 ### P23-01 Full Commercial End-To-End Suite
 

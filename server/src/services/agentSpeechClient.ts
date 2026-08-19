@@ -1,3 +1,4 @@
+import { fetchAgent } from './agentHttpClient';
 import { type RuntimeModelEndpoint } from './runtimeProviderResolver';
 import { type ParsedAudioPayload } from './speechPayload';
 
@@ -43,7 +44,7 @@ export class AgentSpeechClient {
   }
 
   private async post<Result>(path: string, body: Record<string, unknown>): Promise<Result> {
-    const response = await fetch(`${this.agentBaseUrl.replace(/\/$/, '')}${path}`, {
+    const response = await fetchAgent(this.agentBaseUrl, path, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(body),

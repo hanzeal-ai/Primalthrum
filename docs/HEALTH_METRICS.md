@@ -79,10 +79,14 @@ overflow or collector failures through structured warning logs, and flushes queu
 Spans during application shutdown. Export failure never fails a customer request.
 HTTP attributes contain only method, matched Router template, status, and error type;
 raw URL paths, query strings, request bodies, credentials, and user identifiers are
-not exported. Cross-service Server-to-Agent propagation and live collector/dashboard
-acceptance remain production launch gates. Worker Job/Outbox Span instrumentation is
-also still required; the production Worker service identity is reserved now so those
-future Spans cannot be merged with Server request traces.
+not exported. While tracing is enabled, the active W3C context propagates only to the
+trusted Agent capability, Embedding, speech, and streaming endpoints. Request-local
+async context keeps concurrent traces isolated; ordinary external provider requests do
+not inherit the header, and caller-supplied trace headers are stripped outside an active
+Server request. Live collector/dashboard acceptance remains a production launch gate.
+Worker Job/Outbox Span instrumentation is also still required; the production Worker
+service identity is reserved now so those future Spans cannot be merged with Server
+request traces.
 
 ## Deployment Probes
 

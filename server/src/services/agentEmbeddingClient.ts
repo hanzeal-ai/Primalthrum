@@ -1,3 +1,4 @@
+import { fetchAgent } from './agentHttpClient';
 import { type RuntimeModelEndpoint } from './runtimeProviderResolver';
 
 export interface EmbeddingBatchResult {
@@ -24,8 +25,9 @@ export class AgentEmbeddingClient {
       };
     }
 
-    const response = await fetch(
-      `${this.agentBaseUrl.replace(/\/$/, '')}/internal/embeddings`,
+    const response = await fetchAgent(
+      this.agentBaseUrl,
+      '/internal/embeddings',
       {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
