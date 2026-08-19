@@ -6,9 +6,11 @@ import test from 'node:test';
 
 import { createApp } from '../src/app';
 import { createSqliteDatabase } from '../src/db/databaseFactory';
+import { AccountPrivacyRepository } from '../src/services/accountPrivacyRepository';
 import { AccountEmailOutboxRepository } from '../src/services/accountEmailOutboxRepository';
 import { closeApp } from '../src/services/appLifecycle';
 import { JobRepository } from '../src/services/jobRepository';
+import { RetentionPolicyRepository } from '../src/services/retentionPolicyRepository';
 import { UsageRatingRepository } from '../src/services/usageRatingRepository';
 import { UserRepository } from '../src/services/userRepository';
 
@@ -54,7 +56,7 @@ test('application cleanup stops polling before another job can be claimed', asyn
   }
 });
 
-test('external worker owns account email and usage export outbox polling', async () => {
+test('external worker owns job, retention, privacy, and outbox schedulers', async () => {
   const root = mkdtempSync(join(tmpdir(), 'primalthrum-outbox-worker-'));
   const database = createSqliteDatabase(join(root, 'platform.sqlite'));
   const sentEmails: number[] = [];
@@ -92,10 +94,29 @@ test('external worker owns account email and usage export outbox polling', async
   let workerApp: ReturnType<typeof createApp> | undefined;
 
   try {
-    const user = new UserRepository(database).createUser(
+    const users = new UserRepository(database);
+    const user = users.createUser(
       'worker-owner@example.com',
       'password-hash',
     );
+    const deletionUser = users.createUser(
+      'worker-deletion@example.com',
+      'password-hash',
+    );
+    const privacy = new AccountPrivacyRepository(database);
+    const deletionRequest = privacy.requestDeletion(
+      deletionUser.id,
+      deletionUser.workspaceId,
+      new Date(Date.now() - 1_000).toISOString(),
+    );
+    new RetentionPolicyRepository(database).update({
+      workspaceId: user.workspaceId,
+      conversationDays: 90,
+      runDays: null,
+      documentDays: null,
+      actorUserId: user.id,
+    });
+    const jobs = new JobRepository(database);
     const emails = new AccountEmailOutboxRepository(database);
     const usage = new UsageRatingRepository(database);
     usage.configurePrice({
@@ -122,6 +143,8 @@ test('external worker owns account email and usage export outbox polling', async
     await new Promise((resolve) => setTimeout(resolve, 75));
     assert.deepEqual(sentEmails, []);
     assert.deepEqual(exportedUsage, []);
+    assert.equal(jobs.nextRunnable(['retention.enforce', 'account.delete']), null);
+    assert.equal(privacy.findByRequestId(deletionRequest.requestId)?.status, 'scheduled');
 
     await closeApp(httpApp);
     workerApp = createApp({
@@ -133,7 +156,17 @@ test('external worker owns account email and usage export outbox polling', async
       logger: { log: () => undefined },
       startBackgroundSchedulers: true,
     });
-    await waitFor(() => sentEmails.length === 1 && exportedUsage.length === 1);
+    await waitFor(() => {
+      const scheduledJobs = database.query<{ type: string; status: string }>(`
+        SELECT type, status FROM jobs
+        WHERE type IN ('retention.enforce', 'account.delete');
+      `);
+      return sentEmails.length === 1
+        && exportedUsage.length === 1
+        && scheduledJobs.length === 2
+        && scheduledJobs.every((job) => job.status === 'succeeded');
+    }, 2_000);
+    assert.equal(privacy.findByRequestId(deletionRequest.requestId)?.status, 'completed');
 
     queueEmail(2);
     queueUsage(2);

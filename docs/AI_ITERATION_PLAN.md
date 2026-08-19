@@ -2256,10 +2256,12 @@ complete. Follow the same dependency and verification protocol used above.
   production adapter also has a focused PostgreSQL 16 pool-exhaustion smoke: two held
   transaction clients saturate the configured pool, a third acquisition times out at the
   configured boundary, and releasing one client restores queries immediately. The
+  external-Worker composition test now covers durable Jobs, Retention, Account Privacy,
+  account-email Outbox, and usage-export Outbox ownership: HTTP replicas neither produce
+  nor consume scheduled work, while the Worker creates and drains every class. The
   digest-pinned aggregate rerun remains blocked by the missing cached image and unavailable
   external registry. Redis, managed secrets, OpenTelemetry, full production startup,
-  zero-downtime rollout evidence, and separation of remaining asynchronous producers
-  remain open.
+  and zero-downtime rollout evidence remain open.
 
 ### P23-01 Full Commercial End-To-End Suite
 

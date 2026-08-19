@@ -66,7 +66,8 @@ The PostgreSQL Operator application smoke exercises every route group, proves co
 incident updates have exactly one winner, and rejects any fallback SQLite access.
 
 `server/worker.ts` now runs the durable document-index, retention, and account-deletion
-Job handlers without opening an HTTP port. HTTP replicas use
+Job handlers plus account-email and usage-export Outbox delivery without opening an HTTP
+port. HTTP replicas use
 `BACKGROUND_WORKER_MODE=external`; the Worker polls for cross-process inserts and
 gracefully stops after its active Job. Migration `034_job_leases` adds ownership,
 expiry, and heartbeat renewal so a new Worker only recovers genuinely expired work.
@@ -75,6 +76,9 @@ depend on another process restart.
 Embedded mode remains the default for local single-process development. PostgreSQL
 `SKIP LOCKED` and leases make Worker replicas independently scalable without startup
 recovery stealing another replica's active Job.
+The composition test now creates due retention and privacy work alongside both Outbox
+types, proves an external-mode HTTP application neither produces nor consumes any of it,
+and verifies that starting the Worker produces, drains, and completes every owned class.
 `postgresWorkerFailoverSmoke.ts` runs two production Dispatcher implementations against
 PostgreSQL, proves both Workers share a 64-Job load without duplicate execution, abandons
 an owned lease to model a process crash, and verifies that the surviving Worker neither
