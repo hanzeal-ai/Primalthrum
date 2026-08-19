@@ -86,6 +86,12 @@ steals the active lease nor requires a restart before recovering it after expiry
 focused local PostgreSQL 16 run passed with a 32/32 split and one successful second-attempt
 takeover. The digest-pinned aggregate smoke still requires a connected environment because
 that exact image was not available in the local Docker cache.
+`postgresWorkerRollingHandoffSmoke.ts` then models a rolling deployment with an active Job:
+the replacement Worker becomes productive before shutdown begins, the old Worker stops
+claiming but drains its in-flight Job, and Jobs continue to arrive during that drain. The
+focused PostgreSQL 16 run completed all 65 Jobs exactly once; the old Worker completed only
+its active Job while the replacement completed the other 64, including 16 created during
+shutdown.
 `postgresConnectionPoolSmoke.ts` separately saturates the production adapter's two-client
 pool with open transactions, verifies that a third acquisition fails at the configured
 connection timeout, then releases one client and proves the pool immediately serves new
@@ -169,8 +175,9 @@ Use Postgres when running multiple server instances, deploying to managed cloud 
    point-in-time recovery and rollback with measured RPO/RTO.
 3. Run the full repository, concurrency, migration, HTTP, and browser suites against
    the pinned PostgreSQL service in CI and the production-like deployment stack.
-4. Repeat the Worker load/failover and connection-pool exhaustion smokes in the
-   digest-pinned CI stack, then complete zero-downtime rollout evidence.
+4. Repeat the Worker load/failover, rolling-handoff, and connection-pool exhaustion
+   smokes in the digest-pinned CI stack, then complete API/Web zero-downtime traffic
+   rollout evidence.
 
 ## Integration Smoke
 

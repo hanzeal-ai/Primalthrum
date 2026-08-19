@@ -2259,9 +2259,13 @@ complete. Follow the same dependency and verification protocol used above.
   external-Worker composition test now covers durable Jobs, Retention, Account Privacy,
   account-email Outbox, and usage-export Outbox ownership: HTTP replicas neither produce
   nor consume scheduled work, while the Worker creates and drains every class. The
+  PostgreSQL 16 rolling-handoff smoke also starts a replacement Worker while the old Worker
+  holds an active Job, proves the replacement is processing before shutdown, continues
+  enqueueing during the old Worker drain, and completes 65 Jobs exactly once without a
+  retry. Worker zero-downtime rollout behavior is therefore covered locally. The
   digest-pinned aggregate rerun remains blocked by the missing cached image and unavailable
   external registry. Redis, managed secrets, OpenTelemetry, full production startup,
-  and zero-downtime rollout evidence remain open.
+  and API/Web zero-downtime traffic rollout evidence remain open.
 
 ### P23-01 Full Commercial End-To-End Suite
 

@@ -62,6 +62,8 @@ docker exec "$CONTAINER" createdb --username postgres "$TRANSFER_DATABASE"
   DATABASE_URL="postgresql://postgres:${PASSWORD}@127.0.0.1:${PORT}/${DATABASE}" \
     pnpm exec ts-node src/commands/postgresWorkerFailoverSmoke.ts
   DATABASE_URL="postgresql://postgres:${PASSWORD}@127.0.0.1:${PORT}/${DATABASE}" \
+    pnpm exec ts-node src/commands/postgresWorkerRollingHandoffSmoke.ts
+  DATABASE_URL="postgresql://postgres:${PASSWORD}@127.0.0.1:${PORT}/${DATABASE}" \
     pnpm exec ts-node src/commands/postgresRuntimeControlsRepositorySmoke.ts
   DATABASE_URL="postgresql://postgres:${PASSWORD}@127.0.0.1:${PORT}/${DATABASE}" \
     pnpm exec ts-node src/commands/postgresUploadSecurityRepositorySmoke.ts
