@@ -2253,10 +2253,13 @@ complete. Follow the same dependency and verification protocol used above.
   Python image metadata. A focused PostgreSQL 16 smoke now proves two production
   Dispatchers share a 64-Job load exactly once and that a surviving Worker waits for lease
   expiry, recovers an abandoned Job without restart, and rejects stale completion. The
+  production adapter also has a focused PostgreSQL 16 pool-exhaustion smoke: two held
+  transaction clients saturate the configured pool, a third acquisition times out at the
+  configured boundary, and releasing one client restores queries immediately. The
   digest-pinned aggregate rerun remains blocked by the missing cached image and unavailable
   external registry. Redis, managed secrets, OpenTelemetry, full production startup,
-  connection-exhaustion/rollout evidence, and separation of remaining asynchronous
-  producers remain open.
+  zero-downtime rollout evidence, and separation of remaining asynchronous producers
+  remain open.
 
 ### P23-01 Full Commercial End-To-End Suite
 

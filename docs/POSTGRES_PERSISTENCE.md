@@ -82,6 +82,11 @@ steals the active lease nor requires a restart before recovering it after expiry
 focused local PostgreSQL 16 run passed with a 32/32 split and one successful second-attempt
 takeover. The digest-pinned aggregate smoke still requires a connected environment because
 that exact image was not available in the local Docker cache.
+`postgresConnectionPoolSmoke.ts` separately saturates the production adapter's two-client
+pool with open transactions, verifies that a third acquisition fails at the configured
+connection timeout, then releases one client and proves the pool immediately serves new
+queries without a restart. The focused PostgreSQL 16 run timed out at 302ms for a 300ms
+limit and recovered in 2ms.
 The application-level PostgreSQL smoke completes registration and email verification
 over HTTP and asserts that no account lifecycle records leak into local SQLite.
 `pnpm data:transfer:postgres` now provides maintenance-window SQLite transfer with
@@ -160,8 +165,8 @@ Use Postgres when running multiple server instances, deploying to managed cloud 
    point-in-time recovery and rollback with measured RPO/RTO.
 3. Run the full repository, concurrency, migration, HTTP, and browser suites against
    the pinned PostgreSQL service in CI and the production-like deployment stack.
-4. Repeat the Worker load/failover smoke in the digest-pinned CI stack, then complete
-   connection exhaustion and zero-downtime rollout evidence.
+4. Repeat the Worker load/failover and connection-pool exhaustion smokes in the
+   digest-pinned CI stack, then complete zero-downtime rollout evidence.
 
 ## Integration Smoke
 
