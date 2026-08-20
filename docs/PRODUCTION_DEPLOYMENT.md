@@ -73,6 +73,10 @@ With the required production tracing configuration, Server requests propagate W3
 endpoints. Keep `AGENT_BASE_URL` on a trusted private network; external provider calls
 do not receive this internal correlation header.
 
+The Worker service exports Durable Job, account-email Outbox, and usage-export Outbox
+Consumer Spans using `OTEL_WORKER_SERVICE_NAME`. Shutdown drains in-flight deliveries
+before flushing the shared bounded exporter queue.
+
 Verify from outside the deployment boundary:
 
 ```bash

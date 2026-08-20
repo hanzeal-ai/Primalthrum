@@ -52,6 +52,7 @@ export async function createApplicationRuntime(
 }
 
 export function createApplicationAppOptions(environment: NodeJS.ProcessEnv): AppOptions {
+  const traceExporter = createTraceExporter(environment);
   const stripeSecretKey = environment.STRIPE_SECRET_KEY?.trim();
   const paymentAdapter = stripeSecretKey
     ? new StripePaymentAdapter(
@@ -93,7 +94,8 @@ export function createApplicationAppOptions(environment: NodeJS.ProcessEnv): App
     botChallengeSiteKey: abuseProtection.botChallengeSiteKey,
     trustedProxyHops: abuseProtection.trustedProxyHops,
     operatorBootstrapToken: environment.OPERATOR_BOOTSTRAP_TOKEN,
-    traceExporter: createTraceExporter(environment),
+    traceExporter,
+    workerTraceExporter: traceExporter,
     jobLeaseDurationMs: optionalBoundedInteger(
       environment.JOB_LEASE_DURATION_MS,
       1_000,

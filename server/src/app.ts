@@ -161,6 +161,7 @@ import { AsyncUsageExportOutboxRepository } from './services/asyncUsageExportOut
 import { type UsageExportOutboxStore } from './services/usageExportOutboxStore';
 import { UsageExportDispatcher } from './services/usageExportDispatcher';
 import { type UsageMeterExporter } from './services/usageMeterExporter';
+import { type WorkerTraceExporter } from './services/workerTraceExporter';
 import { OutboxDispatcherLifecycle } from './services/outboxDispatcherLifecycle';
 import { AsyncCreditLedgerRepository } from './services/asyncCreditLedgerRepository';
 import { CreditLedgerRepository } from './services/creditLedgerRepository';
@@ -273,6 +274,7 @@ export interface AppOptions {
   logger?: StructuredLogger;
   metrics?: MetricsRegistry;
   traceExporter?: HttpTraceExporter;
+  workerTraceExporter?: WorkerTraceExporter;
   paymentAdapter?: PaymentProviderAdapter;
   paymentPriceRefs?: Record<string, string>;
   publicAppUrl?: string;
@@ -546,6 +548,8 @@ export function createApp(options: AppOptions = {}): Koa {
       outboxDispatchers.guardUsageExportStore(usageExportOutboxRepository),
       options.usageMeterExporter,
       logger,
+      undefined,
+      options.workerTraceExporter,
     );
     outboxDispatchers.attachUsageExport(usageExportDispatcher);
   }
@@ -623,6 +627,8 @@ export function createApp(options: AppOptions = {}): Koa {
       outboxDispatchers.guardAccountEmailStore(accountEmailOutbox),
       options.accountEmailSender,
       logger,
+      undefined,
+      options.workerTraceExporter,
     );
     outboxDispatchers.attachAccountEmail(accountEmailDispatcher);
   }
@@ -756,7 +762,7 @@ export function createApp(options: AppOptions = {}): Koa {
     });
   }, Math.max(250, Math.floor(
     (options.jobLeaseDurationMs ?? DEFAULT_JOB_LEASE_DURATION_MS) / 3,
-  )));
+  )), options.workerTraceExporter);
   const kickJobDispatcher = backgroundSchedulersEnabled
     ? () => jobDispatcher.kick()
     : () => undefined;
@@ -782,6 +788,7 @@ export function createApp(options: AppOptions = {}): Koa {
       message: error instanceof Error ? error.message : 'account privacy scheduler failed',
     }),
   );
+  if (traceExporter) registerAppCleanup(app, () => traceExporter.shutdown());
   if (backgroundSchedulersEnabled) {
     jobDispatcher.start(
       options.jobPollIntervalMs,
@@ -802,7 +809,6 @@ export function createApp(options: AppOptions = {}): Koa {
       ]);
     });
   }
-  if (traceExporter) registerAppCleanup(app, () => traceExporter.shutdown());
 
   function authorize(ctx: Koa.Context, permission: WorkspacePermission): boolean {
     if (ctx.state.apiKey) {

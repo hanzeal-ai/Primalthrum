@@ -84,9 +84,11 @@ trusted Agent capability, Embedding, speech, and streaming endpoints. Request-lo
 async context keeps concurrent traces isolated; ordinary external provider requests do
 not inherit the header, and caller-supplied trace headers are stripped outside an active
 Server request. Live collector/dashboard acceptance remains a production launch gate.
-Worker Job/Outbox Span instrumentation is also still required; the production Worker
-service identity is reserved now so those future Spans cannot be merged with Server
-request traces.
+The Worker exports Consumer Spans for Durable Jobs, account-email Outbox deliveries,
+and usage-export Outbox deliveries under its distinct service identity. Worker Span
+attributes are limited to queue, operation, internal message ID, attempt, outcome, and
+error type; payloads, recipients, model inputs, and error details are excluded. Exporter
+errors never change delivery state, and shutdown drains workers before flushing traces.
 
 ## Deployment Probes
 

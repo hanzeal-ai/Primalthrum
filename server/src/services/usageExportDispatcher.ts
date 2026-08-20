@@ -1,6 +1,8 @@
 import { type StructuredLogger } from './logger';
 import { type UsageExportOutboxStore } from './usageExportOutboxStore';
 import { type UsageMeterExporter } from './usageMeterExporter';
+import { type WorkerTraceExporter } from './workerTraceExporter';
+import { traceWorkerOperation } from './workerTracing';
 
 export class UsageExportDispatcher {
   private activeDrain: Promise<void> | null = null;
@@ -11,6 +13,7 @@ export class UsageExportDispatcher {
     private readonly exporter: UsageMeterExporter,
     private readonly logger: StructuredLogger,
     private readonly batchSize = 50,
+    private readonly traceExporter?: WorkerTraceExporter,
   ) {}
 
   kick(): void {
@@ -46,8 +49,15 @@ export class UsageExportDispatcher {
       const item = await this.outbox.claimNext(this.exporter.destination);
       if (!item) return false;
       try {
-        await this.exporter.send(item.payload);
-        await this.outbox.markDelivered(item.id);
+        await traceWorkerOperation(this.traceExporter, {
+          queue: 'usage_export_outbox',
+          operation: item.payload.meter,
+          messageId: String(item.id),
+          attempt: item.attempts,
+        }, async () => {
+          await this.exporter.send(item.payload);
+          await this.outbox.markDelivered(item.id);
+        });
       } catch (error) {
         const message = error instanceof Error ? error.message : 'usage meter export failed';
         await this.outbox.markFailed(item.id, item.attempts, message);

@@ -1,7 +1,12 @@
 import { type HttpTraceExporter } from './httpTraceExporter';
 import { OtlpHttpTraceExporter } from './otlpHttpTraceExporter';
+import { type WorkerTraceExporter } from './workerTraceExporter';
 
-export function createTraceExporter(environment: NodeJS.ProcessEnv): HttpTraceExporter | undefined {
+type ApplicationTraceExporter = HttpTraceExporter & WorkerTraceExporter;
+
+export function createTraceExporter(
+  environment: NodeJS.ProcessEnv,
+): ApplicationTraceExporter | undefined {
   const mode = environment.OTEL_TRACES_EXPORTER?.trim().toLowerCase();
   if (mode === 'none') return undefined;
   if (mode && mode !== 'otlp') throw new Error('OTEL_TRACES_EXPORTER must be otlp or none');

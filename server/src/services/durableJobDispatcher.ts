@@ -1,5 +1,7 @@
 import { type JobRecord } from './jobRepository';
 import { type JobStore } from './jobStore';
+import { type WorkerTraceExporter } from './workerTraceExporter';
+import { traceWorkerOperation } from './workerTracing';
 
 type JobHandler = (
   payload: Record<string, unknown>,
@@ -20,6 +22,7 @@ export class DurableJobDispatcher {
     private readonly handlers: Record<string, JobHandler>,
     private readonly onDispatchError: DispatchErrorHandler = () => undefined,
     private readonly heartbeatIntervalMs = 30_000,
+    private readonly traceExporter?: WorkerTraceExporter,
   ) {}
 
   resume(): void {
@@ -100,8 +103,15 @@ export class DurableJobDispatcher {
     }, this.heartbeatIntervalMs);
     heartbeat.unref();
     try {
-      const result = await handler(job.payload);
-      await this.jobs.markSucceeded(job.id, result);
+      await traceWorkerOperation(this.traceExporter, {
+        queue: 'durable_job',
+        operation: job.type,
+        messageId: String(job.id),
+        attempt: job.attempts,
+      }, async () => {
+        const result = await handler(job.payload);
+        await this.jobs.markSucceeded(job.id, result);
+      });
     } catch (error) {
       await this.jobs.markFailed(
         job.id,

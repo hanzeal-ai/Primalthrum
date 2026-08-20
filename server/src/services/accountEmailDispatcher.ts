@@ -4,6 +4,8 @@ import {
   AccountEmailDeliveryError,
   type AccountEmailSender,
 } from './accountEmailSender';
+import { type WorkerTraceExporter } from './workerTraceExporter';
+import { traceWorkerOperation } from './workerTracing';
 
 export class AccountEmailDispatcher {
   private activeDrain: Promise<void> | null = null;
@@ -14,6 +16,7 @@ export class AccountEmailDispatcher {
     private readonly sender: AccountEmailSender,
     private readonly logger: StructuredLogger,
     private readonly batchSize = 25,
+    private readonly traceExporter?: WorkerTraceExporter,
   ) {}
 
   kick(): void {
@@ -42,8 +45,16 @@ export class AccountEmailDispatcher {
       const message = await this.outbox.claimNext();
       if (!message) return false;
       try {
-        const receipt = await this.sender.send(message);
-        await this.outbox.markDelivered(message.id, receipt);
+        const receipt = await traceWorkerOperation(this.traceExporter, {
+          queue: 'account_email_outbox',
+          operation: message.template,
+          messageId: String(message.id),
+          attempt: message.attempts,
+        }, async () => {
+          const accepted = await this.sender.send(message);
+          await this.outbox.markDelivered(message.id, accepted);
+          return accepted;
+        });
         this.logger.log({
           level: 'info',
           code: 'ACCOUNT_EMAIL_ACCEPTED',

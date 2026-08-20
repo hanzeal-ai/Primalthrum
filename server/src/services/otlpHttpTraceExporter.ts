@@ -1,5 +1,6 @@
 import { JsonConsoleLogger, type StructuredLogger } from './logger';
 import { type HttpServerTraceSpan, type HttpTraceExporter } from './httpTraceExporter';
+import { type WorkerTraceExporter, type WorkerTraceSpan } from './workerTraceExporter';
 
 type FetchLike = typeof fetch;
 
@@ -17,7 +18,9 @@ export interface OtlpHttpTraceExporterOptions {
   timeoutMs?: number;
 }
 
-export class OtlpHttpTraceExporter implements HttpTraceExporter {
+type ExportedTraceSpan = HttpServerTraceSpan | WorkerTraceSpan;
+
+export class OtlpHttpTraceExporter implements HttpTraceExporter, WorkerTraceExporter {
   private readonly endpoint: string;
   private readonly fetchImpl: FetchLike;
   private readonly flushIntervalMs: number;
@@ -30,7 +33,7 @@ export class OtlpHttpTraceExporter implements HttpTraceExporter {
   private accepting = true;
   private activeFlush: Promise<void> | undefined;
   private flushTimer: NodeJS.Timeout | undefined;
-  private queue: HttpServerTraceSpan[] = [];
+  private queue: ExportedTraceSpan[] = [];
 
   constructor(options: OtlpHttpTraceExporterOptions) {
     this.endpoint = validatedEndpoint(options.endpoint);
@@ -50,7 +53,7 @@ export class OtlpHttpTraceExporter implements HttpTraceExporter {
     };
   }
 
-  record(span: HttpServerTraceSpan): void {
+  record(span: ExportedTraceSpan): void {
     if (!this.accepting) return;
     if (this.queue.length >= this.maxQueueSize) {
       this.queue.shift();
@@ -133,39 +136,77 @@ export class OtlpHttpTraceExporter implements HttpTraceExporter {
 }
 
 function otlpPayload(
-  spans: HttpServerTraceSpan[],
+  spans: ExportedTraceSpan[],
   resourceAttributes: Record<string, string>,
 ): Record<string, unknown> {
+  const httpSpans = spans.filter((span): span is HttpServerTraceSpan => !isWorkerSpan(span));
+  const workerSpans = spans.filter(isWorkerSpan);
   return {
     resourceSpans: [{
       resource: { attributes: stringAttributes(resourceAttributes) },
-      scopeSpans: [{
-        scope: { name: 'primalthrum.http.server' },
-        spans: spans.map((span) => ({
-          traceId: span.traceId,
-          spanId: span.spanId,
-          ...(span.parentSpanId ? { parentSpanId: span.parentSpanId } : {}),
-          flags: Number.parseInt(span.traceFlags, 16),
-          name: span.name,
-          kind: 2,
-          startTimeUnixNano: span.startTimeUnixNano,
-          endTimeUnixNano: span.endTimeUnixNano,
-          attributes: [
-            ...stringAttributes({
-              'http.request.method': span.method,
-              'http.route': span.route,
-              ...(span.errorType ? { 'error.type': span.errorType } : {}),
-            }),
-            {
-              key: 'http.response.status_code',
-              value: { intValue: String(span.statusCode) },
-            },
-          ],
-          status: { code: span.statusCode >= 500 || span.errorType ? 2 : 1 },
-        })),
-      }],
+      scopeSpans: [
+        ...(httpSpans.length ? [{
+          scope: { name: 'primalthrum.http.server' },
+          spans: httpSpans.map(httpOtlpSpan),
+        }] : []),
+        ...(workerSpans.length ? [{
+          scope: { name: 'primalthrum.worker' },
+          spans: workerSpans.map(workerOtlpSpan),
+        }] : []),
+      ],
     }],
   };
+}
+
+function httpOtlpSpan(span: HttpServerTraceSpan): Record<string, unknown> {
+  return {
+    traceId: span.traceId,
+    spanId: span.spanId,
+    ...(span.parentSpanId ? { parentSpanId: span.parentSpanId } : {}),
+    flags: Number.parseInt(span.traceFlags, 16),
+    name: span.name,
+    kind: 2,
+    startTimeUnixNano: span.startTimeUnixNano,
+    endTimeUnixNano: span.endTimeUnixNano,
+    attributes: [
+      ...stringAttributes({
+        'http.request.method': span.method,
+        'http.route': span.route,
+        ...(span.errorType ? { 'error.type': span.errorType } : {}),
+      }),
+      integerAttribute('http.response.status_code', span.statusCode),
+    ],
+    status: { code: span.statusCode >= 500 || span.errorType ? 2 : 1 },
+  };
+}
+
+function workerOtlpSpan(span: WorkerTraceSpan): Record<string, unknown> {
+  return {
+    traceId: span.traceId,
+    spanId: span.spanId,
+    flags: Number.parseInt(span.traceFlags, 16),
+    name: span.name,
+    kind: 4,
+    startTimeUnixNano: span.startTimeUnixNano,
+    endTimeUnixNano: span.endTimeUnixNano,
+    attributes: [
+      ...stringAttributes({
+        'messaging.system': 'primalthrum',
+        'messaging.destination.name': span.queue,
+        'messaging.operation.name': 'process',
+        'messaging.message.id': span.messageId,
+        'primalthrum.worker.operation': span.operation,
+        'primalthrum.worker.outcome': span.outcome,
+        ...(span.errorType ? { 'error.type': span.errorType } : {}),
+      }),
+      integerAttribute('messaging.message.receive_count', span.attempt),
+    ],
+    status: { code: span.outcome === 'failed' ? 2 : 1 },
+  };
+}
+
+function isWorkerSpan(span: ExportedTraceSpan): span is WorkerTraceSpan {
+  return 'queue' in span;
 }
 
 function stringAttributes(attributes: Record<string, string>) {
@@ -173,6 +214,10 @@ function stringAttributes(attributes: Record<string, string>) {
     key,
     value: { stringValue: value },
   }));
+}
+
+function integerAttribute(key: string, value: number) {
+  return { key, value: { intValue: String(value) } };
 }
 
 function validatedEndpoint(value: string): string {

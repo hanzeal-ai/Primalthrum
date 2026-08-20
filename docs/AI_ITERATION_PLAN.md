@@ -2275,11 +2275,13 @@ complete. Follow the same dependency and verification protocol used above.
   Server/Worker resource identities. Active W3C context now propagates through a dedicated
   trusted transport boundary to Agent capability, Embedding, speech, and streaming calls;
   concurrent requests remain isolated and ordinary external provider fetches receive no
-  trace header. The
+  trace header. Durable Jobs, account-email Outbox deliveries, and usage-export Outbox
+  deliveries now emit privacy-minimized Worker Consumer Spans under the separate Worker
+  service identity. Telemetry failures cannot change delivery state, and shutdown drains
+  in-flight work before the final trace flush. The
   digest-pinned aggregate rerun remains blocked by the missing cached image and unavailable
-  external registry. Redis, managed secrets, Worker Job/Outbox Span instrumentation, live
-  collector/dashboard evidence, full production startup, and external-ingress rolling
-  traffic evidence remain open.
+  external registry. Redis, managed secrets, live collector/dashboard evidence, full
+  production startup, and external-ingress rolling traffic evidence remain open.
 
 ### P23-01 Full Commercial End-To-End Suite
 
