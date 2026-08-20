@@ -53,6 +53,16 @@ unversioned images, excess host ports, absent process hardening, disabled OTLP t
 an insecure collector endpoint, duplicate Server/Worker service identities, direct
 secret environment values, or missing external secret mounts.
 
+Build the release images and verify their version labels, non-root users, read-only
+runtime roots, and Agent/Web health endpoints:
+
+```bash
+bash scripts/production-image-smoke.sh
+```
+
+Set `SKIP_BUILD=1` only when the exact images rendered by the production Compose
+configuration have already been built in the same release job.
+
 Build immutable images with the release version:
 
 ```bash

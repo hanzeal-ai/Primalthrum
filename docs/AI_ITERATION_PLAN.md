@@ -2283,7 +2283,10 @@ complete. Follow the same dependency and verification protocol used above.
   validates file type, size, permissions, and single-value content, rejects direct/file
   conflicts, and leaves Agent and Web without secret mounts. The release smoke enforces
   those boundaries. Provider-native secret provisioning, rotation, and audit evidence
-  remain open. The
+  remain open. All four release images now build successfully from their locked
+  dependencies. A repeatable image smoke verifies release labels, declared non-root
+  users, read-only runtime roots, and live Agent/Web health endpoints under dropped
+  capabilities and `no-new-privileges`. The
   digest-pinned aggregate rerun remains blocked by the missing cached image and unavailable
   external registry. Redis, provider-native secret operations, live collector/dashboard evidence, full
   production startup, and external-ingress rolling traffic evidence remain open.
