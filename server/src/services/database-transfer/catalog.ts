@@ -49,6 +49,10 @@ function sameValues(left: readonly string[], right: readonly string[]): boolean 
   return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
+function sameMembers(left: readonly string[], right: readonly string[]): boolean {
+  return sameValues(sorted(left), sorted(right));
+}
+
 function sorted(values: Iterable<string>): string[] {
   return [...values].sort((left, right) => left.localeCompare(right));
 }
@@ -225,7 +229,7 @@ export async function inspectDatabaseTransferCatalog(
     const postgresColumns = targetColumnRows.filter((column) => column.table_name === tableName);
     const sourceNames = sqliteColumns.map((column) => column.name);
     const targetNames = postgresColumns.map((column) => column.name);
-    if (!sameValues(sourceNames, targetNames)) {
+    if (!sameMembers(sourceNames, targetNames)) {
       throw new Error(`database transfer column mismatch for table ${tableName}`);
     }
 

@@ -66,8 +66,8 @@ function isExpectedBootstrapRow(tableName: string, row: Record<string, unknown>)
   if (tableName === 'meter_prices') {
     return row.pricing_version_key === '2026-08-default'
       && METER_KEYS.has(String(row.meter))
-      && row.provider === ''
-      && row.model === '';
+      && row.provider === '*'
+      && row.model === '*';
   }
   return false;
 }

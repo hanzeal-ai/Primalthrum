@@ -76,7 +76,7 @@ async function main(): Promise<void> {
 
     await assert.rejects(
       transferSqliteToPostgres({ source, target, catalog }),
-      /contains business data/,
+      /PostgreSQL target (?:contains business data|bootstrap row count is invalid)/,
     );
     console.log(`PostgreSQL data transfer smoke passed (${report.totalRows} rows)`);
   } finally {

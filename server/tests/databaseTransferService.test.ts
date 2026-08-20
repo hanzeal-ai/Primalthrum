@@ -12,6 +12,7 @@ import {
   type DatabaseTransferCatalog,
   type TransferTable,
 } from '../src/services/database-transfer/types';
+import { assertFreshTransferTarget } from '../src/services/database-transfer/preflight';
 
 type Row = Record<string, unknown>;
 
@@ -148,6 +149,30 @@ const catalog: DatabaseTransferCatalog = {
 };
 const tableMap = new Map(catalog.tables.map((table) => [table.name, table]));
 
+const meterPrices: TransferTable = {
+  name: 'meter_prices',
+  columns: [
+    { name: 'id', targetType: 'int4', primaryKeyPosition: 1, identity: true },
+    { name: 'pricing_version_key', targetType: 'text', primaryKeyPosition: 0, identity: false },
+    { name: 'meter', targetType: 'text', primaryKeyPosition: 0, identity: false },
+    { name: 'provider', targetType: 'text', primaryKeyPosition: 0, identity: false },
+    { name: 'model', targetType: 'text', primaryKeyPosition: 0, identity: false },
+  ],
+  primaryKey: ['id'],
+  dependencies: [],
+};
+const meterRows = [
+  'api.runs', 'embedding.tokens', 'file.storage_bytes', 'hosted.runs', 'llm.input_tokens',
+  'llm.output_tokens', 'rag.retrievals', 'rag.storage_bytes', 'speech.synthesis_characters',
+  'speech.transcription_seconds', 'tool.calls',
+].map((meter, index) => ({
+  id: index + 1,
+  pricing_version_key: '2026-08-default',
+  meter,
+  provider: '*',
+  model: '*',
+}));
+
 function sourceDatabase(): MemoryTransferDatabase {
   return new MemoryTransferDatabase('sqlite', new Map([
     ['workspaces', [{ id: 1, name: 'Source', slug: 'local', created_at: '2026-08-10 12:00:00' }]],
@@ -197,6 +222,22 @@ test('database transfer rejects non-bootstrap target data before inserting', asy
     /contains business data in table users/,
   );
   assert.deepEqual(target.table('users'), [existingUser]);
+});
+
+test('database transfer accepts the wildcard meter price bootstrap catalog', async () => {
+  const tables = new Map([[meterPrices.name, meterPrices]]);
+  const source = new MemoryTransferDatabase(
+    'sqlite',
+    new Map([[meterPrices.name, structuredClone(meterRows)]]),
+    tables,
+  );
+  const target = new MemoryTransferDatabase(
+    'postgres',
+    new Map([[meterPrices.name, structuredClone(meterRows)]]),
+    tables,
+  );
+
+  await assert.doesNotReject(assertFreshTransferTarget(source, target, [meterPrices], 25));
 });
 
 test('database transfer rolls back the target when exact reconciliation fails', async () => {

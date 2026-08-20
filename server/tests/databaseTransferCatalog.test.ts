@@ -108,6 +108,24 @@ test('database transfer catalog proves schema parity and orders foreign-key pare
   assert.deepEqual(catalog.tables[0]?.primaryKey, ['id']);
 });
 
+test('database transfer catalog accepts equivalent columns in different physical order', async () => {
+  const source = new CatalogDatabase('sqlite', sourceFixture);
+  const target = new CatalogDatabase('postgres', {
+    ...sourceFixture,
+    columns: {
+      ...sourceFixture.columns,
+      children: [...sourceFixture.columns.children].reverse(),
+    },
+  });
+
+  const catalog = await inspectDatabaseTransferCatalog(source, target);
+
+  assert.deepEqual(
+    catalog.tables.find((table) => table.name === 'children')?.columns.map((column) => column.name),
+    ['parent_id', 'id'],
+  );
+});
+
 test('database transfer catalog rejects different table sets before copying data', async () => {
   const source = new CatalogDatabase('sqlite', sourceFixture);
   const target = new CatalogDatabase('postgres', {

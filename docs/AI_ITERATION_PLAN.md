@@ -2288,9 +2288,15 @@ complete. Follow the same dependency and verification protocol used above.
   users, read-only runtime roots, and live Agent/Web health endpoints under dropped
   capabilities and `no-new-privileges`. The fixed-version MinIO smoke now runs the
   S3 provider in production mode over a verified ephemeral TLS connection and proves
-  health, write, read, delete, object-version, and delete-marker behavior. The
-  digest-pinned aggregate rerun remains blocked by the missing cached image and unavailable
-  external registry. Redis, provider-native secret operations, live collector/dashboard evidence, full
+  health, write, read, delete, object-version, and delete-marker behavior. Server
+  readiness now requires an exact ClamAV `PONG`, so traffic cannot reach a production
+  instance whose required upload scanner is unavailable. The digest-pinned PostgreSQL
+  aggregate smoke now passes all 34 migrations, a reconciled 65-row SQLite transfer,
+  connection-pool exhaustion/recovery, Worker failover and rolling handoff, commercial
+  repositories, privacy, security, and Operator application composition. Transfer
+  parity accepts non-semantic physical column order differences while preserving exact
+  column sets and ordered primary keys, and validates the wildcard meter-price seed catalog.
+  Redis, provider-native secret operations, live collector/dashboard evidence, full
   production startup, and external-ingress rolling traffic evidence remain open.
 
 ### P23-01 Full Commercial End-To-End Suite

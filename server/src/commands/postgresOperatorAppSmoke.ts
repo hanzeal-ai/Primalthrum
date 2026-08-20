@@ -31,7 +31,18 @@ async function main(): Promise<void> {
     await identities.updatePassword(root.id, hashPassword(PASSWORD));
 
     const markerEmail = `operator-app-marker-${suffix}@example.com`;
-    await new AsyncUserRepository(postgres).createUser(markerEmail, hashPassword(PASSWORD), true);
+    const markerUser = await new AsyncUserRepository(postgres).createUser(
+      markerEmail,
+      hashPassword(PASSWORD),
+      true,
+    );
+    await postgres.execute({
+      text: `
+        INSERT INTO workspace_memberships (workspace_id, user_id, role, status)
+        VALUES (1, $1, 'member', 'active');
+      `,
+      values: [markerUser.id],
+    });
     const markerAgent = await new AsyncAgentRepository(postgres, join(rootDir, 'agents')).create({
       name: `Operator App Marker ${suffix}`,
       description: 'PostgreSQL Operator composition marker',
@@ -87,8 +98,8 @@ async function main(): Promise<void> {
     }
 
     const customers = await request(baseUrl, '/api/operator/customer-users', 'GET', undefined, headers);
-    const customerRows = await customers.json() as Array<{ email: string }>;
-    if (!customerRows.some((row) => row.email === markerEmail)) {
+    const customerRows = await customers.json() as Array<{ userId: number }>;
+    if (!customerRows.some((row) => row.userId === markerUser.id)) {
       throw new Error('Operator customer reads did not use PostgreSQL');
     }
     const agents = await request(baseUrl, '/api/operator/agents', 'GET', undefined, headers);

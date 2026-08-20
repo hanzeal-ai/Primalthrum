@@ -17,10 +17,12 @@ has the same row count and SHA-256 row digest.
 - Migrate document objects separately. This command transfers database metadata,
   not files or S3 objects.
 
-The command fails before copying when the source and target migration IDs,
-tables, columns, or primary keys differ. It also rejects target business data.
-Only the exact catalog/default-Workspace rows created by the current migrations
-are accepted in the target before transfer.
+The command fails before copying when the source and target migration IDs, table
+sets, column-name sets, or ordered primary keys differ. Physical column order may
+differ because SQLite table rebuilds and PostgreSQL `ALTER TABLE` migrations place
+columns differently. It also rejects target business data. Only the exact catalog
+and default-Workspace rows created by the current migrations are accepted before
+transfer.
 
 ## Prerequisites
 
