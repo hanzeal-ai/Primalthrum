@@ -425,8 +425,9 @@ export function createApp(options: AppOptions = {}): Koa {
   const documentUploadSecurityRepository: DocumentUploadSecurityStore = runtimeDatabase
     ? new AsyncDocumentUploadSecurityRepository(runtimeDatabase)
     : new DocumentUploadSecurityRepository(db);
+  const documentMalwareScanner = options.documentMalwareScanner ?? createDocumentMalwareScanner();
   const documentUploadSecurity = new DocumentUploadSecurityService(
-    options.documentMalwareScanner ?? createDocumentMalwareScanner(),
+    documentMalwareScanner,
     documentUploadSecurityRepository,
   );
   const conversationRepository: ConversationStore = runtimeDatabase
@@ -438,6 +439,7 @@ export function createApp(options: AppOptions = {}): Koa {
   const readiness = () => checkServerReadiness({
     ...(runtimeDatabase ? { asyncDatabase: runtimeDatabase } : { db }),
     agentBaseUrl,
+    documentMalwareScanner,
     documentStorage,
   });
   const syncUserRepository = new UserRepository(db);

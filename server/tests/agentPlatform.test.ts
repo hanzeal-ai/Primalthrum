@@ -641,6 +641,7 @@ test('readiness checks dependencies and metrics exports counters', async () => {
         [
           ['database', 'ok'],
           ['agent_runtime', 'ok'],
+          ['malware_scanner', 'ok'],
           ['document_storage', 'ok'],
         ],
       );

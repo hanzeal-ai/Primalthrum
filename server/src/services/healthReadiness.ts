@@ -1,5 +1,6 @@
 import { type DatabaseAdapter } from '../db/adapter';
 import { type AsyncDatabaseAdapter } from '../db/asyncAdapter';
+import { type DocumentMalwareScanner } from './documentMalwareScanner';
 import { type DocumentFileStorage } from './fileStorage';
 
 export type ReadinessCheckStatus = 'ok' | 'failed';
@@ -23,12 +24,16 @@ export async function checkServerReadiness(input: {
   asyncDatabase?: AsyncDatabaseAdapter;
   agentBaseUrl: string;
   agentTimeoutMs?: number;
+  documentMalwareScanner?: DocumentMalwareScanner;
   documentStorage?: DocumentFileStorage;
 }): Promise<ReadinessReport> {
   const checks: ReadinessCheck[] = [
     await checkDatabase(input),
     await checkAgentRuntime(input.agentBaseUrl, input.agentTimeoutMs ?? 1500),
   ];
+  if (input.documentMalwareScanner) {
+    checks.push(await checkDocumentMalwareScanner(input.documentMalwareScanner));
+  }
   if (input.documentStorage) checks.push(await checkDocumentStorage(input.documentStorage));
 
   return {
@@ -36,6 +41,23 @@ export async function checkServerReadiness(input: {
     service: 'server',
     checks,
   };
+}
+
+async function checkDocumentMalwareScanner(
+  scanner: DocumentMalwareScanner,
+): Promise<ReadinessCheck> {
+  const startedAt = Date.now();
+  try {
+    await scanner.healthCheck();
+    return { name: 'malware_scanner', status: 'ok', latencyMs: Date.now() - startedAt };
+  } catch (error) {
+    return {
+      name: 'malware_scanner',
+      status: 'failed',
+      latencyMs: Date.now() - startedAt,
+      message: error instanceof Error ? error.message : 'malware scanner probe failed',
+    };
+  }
 }
 
 async function checkDocumentStorage(storage: DocumentFileStorage): Promise<ReadinessCheck> {

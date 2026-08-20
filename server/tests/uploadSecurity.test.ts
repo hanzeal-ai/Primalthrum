@@ -22,6 +22,8 @@ import { DocumentUploadSecurityRepository } from '../src/services/documentUpload
 class ControlledScanner implements DocumentMalwareScanner {
   readonly name = 'controlled-test';
 
+  async healthCheck(): Promise<void> {}
+
   async scan(upload: ParsedDocumentUpload) {
     if (upload.content.includes('infected')) {
       throw new DocumentThreatDetectedError(this.name, 'Test.Signature');
@@ -116,6 +118,18 @@ test('ClamAV INSTREAM scanner accepts clean content and rejects a signature', as
   });
 });
 
+test('ClamAV readiness requires an exact PONG response', async () => {
+  await withClamResponse('PONG\0', async (port, received) => {
+    const scanner = new ClamAvDocumentMalwareScanner('127.0.0.1', port, 2_000);
+    await scanner.healthCheck();
+    assert.equal(received().toString(), 'zPING\0');
+  });
+  await withClamResponse('ERROR\0', async (port) => {
+    const scanner = new ClamAvDocumentMalwareScanner('127.0.0.1', port, 2_000);
+    await assert.rejects(scanner.healthCheck(), DocumentScanUnavailableError);
+  });
+});
+
 test('HTTP uploads fail before persistence and retain minimized immutable scan evidence', async () => {
   const clean = await uploadRequest('clean.txt', 'approved knowledge content');
   assert.equal(clean.status, 201);
@@ -183,7 +197,10 @@ async function withClamResponse(
   const clam: TcpServer = createTcpServer((socket) => {
     socket.on('data', (chunk) => {
       payload = Buffer.concat([payload, Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)]);
-      if (payload.length >= 14 && payload.subarray(-4).equals(Buffer.alloc(4))) {
+      if (
+        payload.equals(Buffer.from('zPING\0'))
+        || (payload.length >= 14 && payload.subarray(-4).equals(Buffer.alloc(4)))
+      ) {
         socket.end(response);
       }
     });
