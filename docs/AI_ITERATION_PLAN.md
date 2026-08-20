@@ -2278,9 +2278,14 @@ complete. Follow the same dependency and verification protocol used above.
   trace header. Durable Jobs, account-email Outbox deliveries, and usage-export Outbox
   deliveries now emit privacy-minimized Worker Consumer Spans under the separate Worker
   service identity. Telemetry failures cannot change delivery state, and shutdown drains
-  in-flight work before the final trace flush. The
+  in-flight work before the final trace flush. Production Server and Worker now receive
+  an allowlisted set of external secrets only through `/run/secrets`. Startup atomically
+  validates file type, size, permissions, and single-value content, rejects direct/file
+  conflicts, and leaves Agent and Web without secret mounts. The release smoke enforces
+  those boundaries. Provider-native secret provisioning, rotation, and audit evidence
+  remain open. The
   digest-pinned aggregate rerun remains blocked by the missing cached image and unavailable
-  external registry. Redis, managed secrets, live collector/dashboard evidence, full
+  external registry. Redis, provider-native secret operations, live collector/dashboard evidence, full
   production startup, and external-ingress rolling traffic evidence remain open.
 
 ### P23-01 Full Commercial End-To-End Suite

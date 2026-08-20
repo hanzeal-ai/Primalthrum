@@ -3,36 +3,34 @@ name: primalthrum
 x-application-environment: &application-environment
   NODE_ENV: production
   AGENT_BASE_URL: http://agent:8000
-  DATABASE_URL: ${DATABASE_URL:?DATABASE_URL is required}
+  DATABASE_URL_FILE: /run/secrets/database_url
   DATABASE_POOL_MAX: ${DATABASE_POOL_MAX:-20}
   DATABASE_CONNECTION_TIMEOUT_MS: ${DATABASE_CONNECTION_TIMEOUT_MS:-10000}
   DATABASE_IDLE_TIMEOUT_MS: ${DATABASE_IDLE_TIMEOUT_MS:-30000}
   PUBLIC_APP_URL: ${PUBLIC_APP_URL:?PUBLIC_APP_URL is required}
-  PRIMALTHRUM_SECRET_KEY: ${PRIMALTHRUM_SECRET_KEY:?PRIMALTHRUM_SECRET_KEY is required}
+  PRIMALTHRUM_SECRET_KEY_FILE: /run/secrets/primalthrum_secret_key
   DOCUMENT_STORAGE_PROVIDER: s3
   OBJECT_STORAGE_ENDPOINT: ${OBJECT_STORAGE_ENDPOINT:?OBJECT_STORAGE_ENDPOINT is required}
-  OBJECT_STORAGE_ACCESS_KEY_ID: ${OBJECT_STORAGE_ACCESS_KEY_ID:?OBJECT_STORAGE_ACCESS_KEY_ID is required}
-  OBJECT_STORAGE_SECRET_ACCESS_KEY: ${OBJECT_STORAGE_SECRET_ACCESS_KEY:?OBJECT_STORAGE_SECRET_ACCESS_KEY is required}
-  OBJECT_STORAGE_SESSION_TOKEN: ${OBJECT_STORAGE_SESSION_TOKEN:-}
+  OBJECT_STORAGE_ACCESS_KEY_ID_FILE: /run/secrets/object_storage_access_key_id
+  OBJECT_STORAGE_SECRET_ACCESS_KEY_FILE: /run/secrets/object_storage_secret_access_key
   OBJECT_STORAGE_BUCKET: ${OBJECT_STORAGE_BUCKET:?OBJECT_STORAGE_BUCKET is required}
   OBJECT_STORAGE_REGION: ${OBJECT_STORAGE_REGION:?OBJECT_STORAGE_REGION is required}
   OBJECT_STORAGE_PREFIX: ${OBJECT_STORAGE_PREFIX:-production}
   OBJECT_STORAGE_TIMEOUT_MS: ${OBJECT_STORAGE_TIMEOUT_MS:-10000}
-  STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:?STRIPE_SECRET_KEY is required}
-  STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:?STRIPE_WEBHOOK_SECRET is required}
+  STRIPE_SECRET_KEY_FILE: /run/secrets/stripe_secret_key
+  STRIPE_WEBHOOK_SECRET_FILE: /run/secrets/stripe_webhook_secret
   STRIPE_PRICE_PRO: ${STRIPE_PRICE_PRO:?STRIPE_PRICE_PRO is required}
   STRIPE_PRICE_TEAM: ${STRIPE_PRICE_TEAM:?STRIPE_PRICE_TEAM is required}
   STRIPE_PRICE_BUSINESS: ${STRIPE_PRICE_BUSINESS:?STRIPE_PRICE_BUSINESS is required}
   STRIPE_PRICE_ENTERPRISE: ${STRIPE_PRICE_ENTERPRISE:?STRIPE_PRICE_ENTERPRISE is required}
   TRANSACTIONAL_EMAIL_PROVIDER: ${TRANSACTIONAL_EMAIL_PROVIDER:?TRANSACTIONAL_EMAIL_PROVIDER is required}
   TRANSACTIONAL_EMAIL_FROM: ${TRANSACTIONAL_EMAIL_FROM:?TRANSACTIONAL_EMAIL_FROM is required}
-  TRANSACTIONAL_EMAIL_API_KEY: ${TRANSACTIONAL_EMAIL_API_KEY:-}
+  TRANSACTIONAL_EMAIL_API_KEY_FILE: /run/secrets/transactional_email_api_key
   TRANSACTIONAL_EMAIL_URL: ${TRANSACTIONAL_EMAIL_URL:-}
-  TRANSACTIONAL_EMAIL_TOKEN: ${TRANSACTIONAL_EMAIL_TOKEN:-}
-  TRANSACTIONAL_EMAIL_WEBHOOK_SECRET: ${TRANSACTIONAL_EMAIL_WEBHOOK_SECRET:?TRANSACTIONAL_EMAIL_WEBHOOK_SECRET is required}
-  ABUSE_HASH_SECRET: ${ABUSE_HASH_SECRET:?ABUSE_HASH_SECRET is required}
+  TRANSACTIONAL_EMAIL_WEBHOOK_SECRET_FILE: /run/secrets/transactional_email_webhook_secret
+  ABUSE_HASH_SECRET_FILE: /run/secrets/abuse_hash_secret
   BOT_CHALLENGE_PROVIDER: turnstile
-  TURNSTILE_SECRET_KEY: ${TURNSTILE_SECRET_KEY:?TURNSTILE_SECRET_KEY is required}
+  TURNSTILE_SECRET_KEY_FILE: /run/secrets/turnstile_secret_key
   TURNSTILE_SITE_KEY: ${TURNSTILE_SITE_KEY:?TURNSTILE_SITE_KEY is required}
   TURNSTILE_HOSTNAMES: ${TURNSTILE_HOSTNAMES:?TURNSTILE_HOSTNAMES is required}
   TRUSTED_PROXY_HOPS: ${TRUSTED_PROXY_HOPS:?TRUSTED_PROXY_HOPS is required}
@@ -41,14 +39,27 @@ x-application-environment: &application-environment
   JOB_LEASE_DURATION_MS: ${JOB_LEASE_DURATION_MS:-300000}
   JOB_POLL_INTERVAL_MS: ${JOB_POLL_INTERVAL_MS:-1000}
   USAGE_METER_EXPORT_URL: ${USAGE_METER_EXPORT_URL:-}
-  USAGE_METER_EXPORT_TOKEN: ${USAGE_METER_EXPORT_TOKEN:-}
-  OPERATOR_BOOTSTRAP_TOKEN: ${OPERATOR_BOOTSTRAP_TOKEN:-}
+  OPERATOR_BOOTSTRAP_TOKEN_FILE: /run/secrets/operator_bootstrap_token
   OTEL_TRACES_EXPORTER: otlp
   OTEL_EXPORTER_OTLP_TRACES_ENDPOINT: ${OTEL_EXPORTER_OTLP_TRACES_ENDPOINT:?OTEL_EXPORTER_OTLP_TRACES_ENDPOINT is required}
-  OTEL_EXPORTER_OTLP_HEADERS: ${OTEL_EXPORTER_OTLP_HEADERS:-}
+  OTEL_EXPORTER_OTLP_HEADERS_FILE: /run/secrets/otel_exporter_otlp_headers
   OTEL_EXPORTER_OTLP_TIMEOUT: ${OTEL_EXPORTER_OTLP_TIMEOUT:-5000}
   OTEL_SERVICE_VERSION: ${IMAGE_TAG:?IMAGE_TAG is required}
   OTEL_DEPLOYMENT_ENVIRONMENT: ${OTEL_DEPLOYMENT_ENVIRONMENT:-production}
+
+x-application-secrets: &application-secrets
+  - database_url
+  - primalthrum_secret_key
+  - object_storage_access_key_id
+  - object_storage_secret_access_key
+  - stripe_secret_key
+  - stripe_webhook_secret
+  - transactional_email_api_key
+  - transactional_email_webhook_secret
+  - abuse_hash_secret
+  - turnstile_secret_key
+  - operator_bootstrap_token
+  - otel_exporter_otlp_headers
 
 x-service-hardening: &service-hardening
   init: true
@@ -123,6 +134,7 @@ services:
       - /tmp:size=128m,mode=1777
     volumes:
       - generated-agents:/app/generated-agents
+    secrets: *application-secrets
     networks:
       - backend
       - frontend
@@ -148,8 +160,9 @@ services:
         - node
         - -e
         - >-
-          const {Client}=require('pg');
-          const client=new Client({connectionString:process.env.DATABASE_URL});
+          const fs=require('fs');const {Client}=require('pg');
+          const connectionString=process.env.DATABASE_URL||fs.readFileSync(process.env.DATABASE_URL_FILE,'utf8').trim();
+          const client=new Client({connectionString});
           client.connect().then(()=>client.query('SELECT 1')).then(()=>client.end())
           .catch(()=>process.exit(1))
       interval: 15s
@@ -160,6 +173,7 @@ services:
       - /tmp:size=128m,mode=1777
     volumes:
       - generated-agents:/app/generated-agents
+    secrets: *application-secrets
     networks:
       - backend
 
@@ -206,3 +220,41 @@ networks:
 
 volumes:
   generated-agents:
+
+secrets:
+  database_url:
+    external: true
+    name: ${DATABASE_URL_SECRET_NAME:-primalthrum_database_url}
+  primalthrum_secret_key:
+    external: true
+    name: ${PRIMALTHRUM_SECRET_KEY_SECRET_NAME:-primalthrum_secret_key}
+  object_storage_access_key_id:
+    external: true
+    name: ${OBJECT_STORAGE_ACCESS_KEY_ID_SECRET_NAME:-primalthrum_object_storage_access_key_id}
+  object_storage_secret_access_key:
+    external: true
+    name: ${OBJECT_STORAGE_SECRET_ACCESS_KEY_SECRET_NAME:-primalthrum_object_storage_secret_access_key}
+  stripe_secret_key:
+    external: true
+    name: ${STRIPE_SECRET_KEY_SECRET_NAME:-primalthrum_stripe_secret_key}
+  stripe_webhook_secret:
+    external: true
+    name: ${STRIPE_WEBHOOK_SECRET_SECRET_NAME:-primalthrum_stripe_webhook_secret}
+  transactional_email_api_key:
+    external: true
+    name: ${TRANSACTIONAL_EMAIL_API_KEY_SECRET_NAME:-primalthrum_transactional_email_api_key}
+  transactional_email_webhook_secret:
+    external: true
+    name: ${TRANSACTIONAL_EMAIL_WEBHOOK_SECRET_SECRET_NAME:-primalthrum_transactional_email_webhook_secret}
+  abuse_hash_secret:
+    external: true
+    name: ${ABUSE_HASH_SECRET_SECRET_NAME:-primalthrum_abuse_hash_secret}
+  turnstile_secret_key:
+    external: true
+    name: ${TURNSTILE_SECRET_KEY_SECRET_NAME:-primalthrum_turnstile_secret_key}
+  operator_bootstrap_token:
+    external: true
+    name: ${OPERATOR_BOOTSTRAP_TOKEN_SECRET_NAME:-primalthrum_operator_bootstrap_token}
+  otel_exporter_otlp_headers:
+    external: true
+    name: ${OTEL_EXPORTER_OTLP_HEADERS_SECRET_NAME:-primalthrum_otel_exporter_otlp_headers}

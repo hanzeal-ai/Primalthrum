@@ -15,9 +15,23 @@ Provision these services before deployment:
 - Stripe, transactional email, and Cloudflare Turnstile production credentials.
 - A TLS reverse proxy or load balancer in front of the Web container.
 
-Copy `deploy/production.env.example` to a secret-managed environment file and
-replace every placeholder. Do not commit the populated file. `DATABASE_URL`
-credentials must be URL-encoded.
+Copy `deploy/production.env.example` to the release environment file and replace
+every non-secret placeholder. The file stores external secret names, not secret
+values. Provision every `*_SECRET_NAME` entry in the deployment platform before
+starting the stack; Compose mounts those values only into Server and Worker under
+`/run/secrets`. Do not commit the populated environment file. The value stored for
+`DATABASE_URL_SECRET_NAME` must be a PostgreSQL URL with URL-encoded credentials.
+
+Mounted secret files must be regular files, no larger than 64 KiB, and not writable
+by group or other users. Each file contains one non-empty value with an optional
+trailing newline. Startup fails when a direct secret environment variable and its
+`*_FILE` variant are both configured, so deployments cannot silently select the
+wrong source.
+
+The base topology omits optional provider credentials such as S3 session tokens,
+custom email bearer tokens, and usage-export tokens. A deployment that enables one
+must add its secret mount and matching `*_FILE` variable in a platform-specific
+Compose override; do not place the value in the release environment file.
 
 ## Validate And Build
 
@@ -36,7 +50,8 @@ bash scripts/production-deployment-smoke.sh
 
 It rejects host source mounts, writable application roots, missing health checks,
 unversioned images, excess host ports, absent process hardening, disabled OTLP tracing,
-an insecure collector endpoint, or duplicate Server/Worker service identities.
+an insecure collector endpoint, duplicate Server/Worker service identities, direct
+secret environment values, or missing external secret mounts.
 
 Build immutable images with the release version:
 

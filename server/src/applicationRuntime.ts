@@ -7,6 +7,7 @@ import {
   type ApplicationDatabaseProvider,
 } from './services/applicationDatabaseConfiguration';
 import { createDocumentFileStorage } from './services/documentStorageConfiguration';
+import { loadManagedSecretEnvironment } from './services/managedSecretEnvironment';
 import { StripePaymentAdapter } from './services/stripePaymentAdapter';
 import { HttpUsageMeterExporter } from './services/usageMeterExporter';
 import { createTraceExporter } from './services/tracingConfiguration';
@@ -27,12 +28,13 @@ export async function createApplicationRuntime(
   environment: NodeJS.ProcessEnv,
   options: ApplicationRuntimeOptions = {},
 ): Promise<ApplicationRuntime> {
-  const databaseSelection = await configureApplicationDatabase(environment);
+  const runtimeEnvironment = await loadManagedSecretEnvironment(environment);
+  const databaseSelection = await configureApplicationDatabase(runtimeEnvironment);
   const database = databaseSelection.database;
-  const agentBaseUrl = environment.AGENT_BASE_URL ?? 'http://127.0.0.1:8000';
+  const agentBaseUrl = runtimeEnvironment.AGENT_BASE_URL ?? 'http://127.0.0.1:8000';
   try {
     const app = createApp({
-      ...createApplicationAppOptions(environment),
+      ...createApplicationAppOptions(runtimeEnvironment),
       agentBaseUrl,
       identityDatabase: database,
       runtimeDatabase: database,
