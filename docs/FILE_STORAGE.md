@@ -98,14 +98,15 @@ maintenance window before switching a deployment that already has documents.
 
 ## Verification
 
-Docker is required for the real S3-compatible smoke test:
+Docker and OpenSSL are required for the real S3-compatible smoke test:
 
 ```bash
 scripts/object-storage-smoke.sh
 ```
 
-The script starts fixed MinIO images on an isolated network, enables bucket
-versioning, verifies health/write/read/delete through the production provider,
+The script starts a fixed MinIO image with an ephemeral TLS certificate on an
+isolated network, enables bucket versioning, and runs the provider with
+`NODE_ENV=production`. It verifies certificate trust plus health/write/read/delete,
 asserts the object version and delete marker, and removes all temporary resources.
 
 Every upload is also parsed and malware-scanned before credit reservation,
