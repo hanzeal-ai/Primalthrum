@@ -2328,8 +2328,11 @@ complete. Follow the same dependency and verification protocol used above.
   SQLite RAG document upload/indexing, hosted SSE chat with persisted sources,
   Billing and Usage readback, and desktop-to-mobile responsive acceptance. The
   existing suites continue to cover all Workspace roles and the Operator console.
-  Provider sandbox payment, physical voice, and the remaining release matrix are
-  still required before this item can move to Done.
+  A separate browser payment journey now covers Free registration, Checkout
+  handoff, signed subscription and invoice Webhooks, Pro activation, and invoice
+  readback through the replaceable payment contract. Provider sandbox payment,
+  physical voice, and the remaining release matrix are still required before this
+  item can move to Done.
 
 ### P24-01 Commercial Launch Gate
 
