@@ -2330,8 +2330,10 @@ complete. Follow the same dependency and verification protocol used above.
   existing suites continue to cover all Workspace roles and the Operator console.
   A separate browser payment journey now covers Free registration, Checkout
   handoff, signed subscription and invoice Webhooks, Pro activation, and invoice
-  readback through the replaceable payment contract. A version lifecycle journey
-  now creates an Agent, opens its preview deployment,
+  readback through the replaceable payment contract. The same journey continues
+  through failed renewal, successful recovery, scheduled cancellation, completed
+  cancellation, and full refund with customer-visible Billing states. A version
+  lifecycle journey now creates an Agent, opens its preview deployment,
   publishes version 2, and rolls production back to version 1 through the customer
   UI. A two-Workspace browser journey proves Agent list and slug isolation in both
   directions, including an unavailable direct page for a cross-tenant slug.

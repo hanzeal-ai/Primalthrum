@@ -6,7 +6,7 @@ import { BROWSER_E2E_WEBHOOK_SECRET } from '../../server/tests/support/browserE2
 
 const PASSWORD = 'commercial payment password'
 
-test('@desktop customer upgrades from Free after signed payment webhooks', async ({ page }) => {
+test('@desktop customer completes the signed payment lifecycle', async ({ page }) => {
   const email = `payment-${Date.now()}@commercial-e2e.test`
 
   await page.goto('/signup?plan=free')
@@ -65,6 +65,73 @@ test('@desktop customer upgrades from Free after signed payment webhooks', async
   await expect(page.getByRole('heading', { name: 'Pro', level: 2 })).toBeVisible()
   await expect(page.getByText('正常', { exact: true })).toBeVisible()
   await expect(page.getByText(invoiceRef, { exact: true })).toBeVisible()
+
+  const recoveryInvoiceRef = `in_e2e_recovery_${workspaceId}`
+  await sendWebhook(page, webhookEvent(
+    `evt_e2e_invoice_failed_${workspaceId}`,
+    'invoice.payment_failed',
+    now + 2,
+    invoiceObject(workspaceId, recoveryInvoiceRef, now, false),
+  ))
+  await page.reload()
+  await expect(page.getByText('待付款', { exact: true })).toBeVisible()
+  await expect(page.getByText(recoveryInvoiceRef, { exact: true })).toBeVisible()
+
+  await sendWebhook(page, webhookEvent(
+    `evt_e2e_invoice_recovered_${workspaceId}`,
+    'invoice.paid',
+    now + 3,
+    invoiceObject(workspaceId, recoveryInvoiceRef, now, true),
+  ))
+  await page.reload()
+  await expect(page.getByText('正常', { exact: true })).toBeVisible()
+
+  await page.getByRole('button', { name: '取消订阅' }).click()
+  await page.getByRole('button', { name: '确认在周期末取消' }).click()
+  await sendWebhook(page, webhookEvent(
+    `evt_e2e_cancel_scheduled_${workspaceId}`,
+    'customer.subscription.updated',
+    now + 4,
+    subscriptionObject(workspaceId, now, true),
+  ))
+  await page.reload()
+  await expect(page.getByText('待取消', { exact: true })).toBeVisible()
+
+  await sendWebhook(page, webhookEvent(
+    `evt_e2e_subscription_deleted_${workspaceId}`,
+    'customer.subscription.deleted',
+    now + 5,
+    subscriptionObject(workspaceId, now, false, 'canceled'),
+  ))
+  await page.reload()
+  await expect(page.getByText('已取消', { exact: true })).toBeVisible()
+
+  await sendWebhook(page, webhookEvent(
+    `evt_e2e_refund_${workspaceId}`,
+    'charge.refunded',
+    now + 6,
+    {
+      id: `ch_e2e_${workspaceId}`,
+      customer: `cus_e2e_${workspaceId}`,
+      invoice: recoveryInvoiceRef,
+      amount: 2900,
+      amount_refunded: 2900,
+      currency: 'usd',
+      refunds: {
+        data: [{
+          id: `re_e2e_${workspaceId}`,
+          amount: 2900,
+          currency: 'usd',
+          status: 'succeeded',
+          reason: 'requested_by_customer',
+          created: now + 6,
+        }],
+      },
+    },
+  ))
+  await page.reload()
+  await expect(page.getByText('已退款', { exact: true })).toBeVisible()
+  await expect(page.getByText('refunded', { exact: true })).toBeVisible()
 })
 
 async function currentWorkspaceId(page: Page): Promise<number> {
@@ -108,5 +175,43 @@ function webhookEvent(
     livemode: false,
     api_version: '2025-06-30.basil',
     data: { object },
+  }
+}
+
+function subscriptionObject(
+  workspaceId: number,
+  now: number,
+  cancelAtPeriodEnd: boolean,
+  status = 'active',
+): Record<string, unknown> {
+  return {
+    id: `sub_e2e_${workspaceId}`,
+    customer: `cus_e2e_${workspaceId}`,
+    status,
+    cancel_at_period_end: cancelAtPeriodEnd,
+    current_period_start: now,
+    current_period_end: now + 2_592_000,
+    metadata: { workspace_id: String(workspaceId), plan_key: 'pro' },
+    items: { data: [{ id: `si_e2e_${workspaceId}`, price: { id: 'price_pro' } }] },
+  }
+}
+
+function invoiceObject(
+  workspaceId: number,
+  invoiceRef: string,
+  now: number,
+  paid: boolean,
+): Record<string, unknown> {
+  return {
+    id: invoiceRef,
+    customer: `cus_e2e_${workspaceId}`,
+    subscription: `sub_e2e_${workspaceId}`,
+    status: paid ? 'paid' : 'open',
+    paid,
+    amount_due: 2900,
+    amount_paid: paid ? 2900 : 0,
+    currency: 'usd',
+    period_start: now,
+    period_end: now + 2_592_000,
   }
 }
