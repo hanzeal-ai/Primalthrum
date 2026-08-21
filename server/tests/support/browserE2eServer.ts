@@ -15,6 +15,7 @@ const server = createApp({
   agentBaseUrl: process.env.AGENT_BASE_URL ?? 'http://127.0.0.1:48100',
   dbPath: resolve(rootDir, 'platform.sqlite'),
   documentStorageDir: resolve(rootDir, 'documents'),
+  exposeAccountEmailPreview: true,
   generatedAgentsDir: resolve(rootDir, 'generated-agents'),
   operatorBootstrapToken: 'browser-e2e-operator-bootstrap-token-0001',
   publicAppUrl: 'http://127.0.0.1:4173',

@@ -2318,11 +2318,18 @@ complete. Follow the same dependency and verification protocol used above.
 
 ### P23-01 Full Commercial End-To-End Suite
 
-- Status: Todo
+- Status: In Progress
 - Goal: Automate website-to-trial-to-Agent-to-payment journeys and all billing,
   tenant, runtime, voice, RAG, team, operator, and responsive acceptance.
 - Dependencies: P22-01
 - Verification: complete evidence matrix with no skipped critical requirement.
+- Current evidence: the first customer-journey scenario covers Pro registration,
+  development email verification, trial activation, conversational Agent creation,
+  SQLite RAG document upload/indexing, hosted SSE chat with persisted sources,
+  Billing and Usage readback, and desktop-to-mobile responsive acceptance. The
+  existing suites continue to cover all Workspace roles and the Operator console.
+  Provider sandbox payment, physical voice, and the remaining release matrix are
+  still required before this item can move to Done.
 
 ### P24-01 Commercial Launch Gate
 

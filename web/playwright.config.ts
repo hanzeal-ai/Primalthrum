@@ -32,7 +32,7 @@ export default defineConfig({
   ],
   webServer: [
     {
-      command: '../agent/.venv/bin/python -m uvicorn main:app --app-dir ../agent --host 127.0.0.1 --port 48100',
+      command: '../agent/.venv/bin/python e2e/startAgent.py',
       url: 'http://127.0.0.1:48100/ready',
       reuseExistingServer: false,
       timeout: 120_000,
