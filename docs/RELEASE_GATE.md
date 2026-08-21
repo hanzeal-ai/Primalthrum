@@ -24,7 +24,7 @@ Before tagging a release:
 3. Complete `docs/SECURITY_RELEASE_CHECKLIST.md`.
 4. Confirm `CHANGELOG.md` includes the target version.
 5. Confirm operator docs include install, upgrade, backup/restore, user workflow, troubleshooting, and release gate paths.
-6. Complete the requirement-by-requirement commercial audit in
+6. Complete `docs/COMMERCIAL_RELEASE_AUDIT.md` requirement by requirement against
    `docs/COMMERCIAL_PRODUCT_SPEC.md`.
 
 `scripts/commercial-smoke.sh` is the local aggregate gate. It runs the complete

@@ -2361,6 +2361,9 @@ complete. Follow the same dependency and verification protocol used above.
 - Dependencies: P23-01
 - Verification: requirement-by-requirement audit, clean deployment, smoke, security,
   billing reconciliation, backup/restore, rollback, and production browser acceptance.
+- Preparation evidence: `docs/COMMERCIAL_RELEASE_AUDIT.md` maps every commercial
+  release requirement to current local evidence and names the remaining external,
+  manual, and hosted-runtime gates. Its overall result remains `Not releasable`.
 
 ## Definition Of Done
 
