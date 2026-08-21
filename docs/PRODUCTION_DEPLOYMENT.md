@@ -157,6 +157,17 @@ cleanup and closes the database in order; database closure still runs when App c
 fails. Production acceptance must repeat both handoffs through the selected external
 load balancer.
 
+The reference external-ingress gate repeats the Web handoff through a hardened,
+fixed-digest Nginx HTTPS proxy:
+
+```bash
+bash scripts/external-ingress-rolling-smoke.sh
+```
+
+It switches new traffic to the replacement Web, stops the old Web, and requires the
+already-open proxied stream to deliver its final chunk. Repeat the same sequence on the
+selected production ingress before release.
+
 ## Rollback
 
 Keep the previous immutable `IMAGE_TAG` available. Before changing application

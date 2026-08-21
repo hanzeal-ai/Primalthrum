@@ -100,6 +100,7 @@ Run:
 ```bash
 scripts/commercial-smoke.sh
 bash scripts/production-startup-smoke.sh
+bash scripts/external-ingress-rolling-smoke.sh
 curl http://127.0.0.1:3000/health
 curl http://127.0.0.1:3000/ready
 ```
@@ -147,6 +148,8 @@ Confirm:
   the server from traffic without exposing credentials or provider response bodies.
 - The production startup smoke reports Agent, Server, Worker, and Web healthy and
   returns the ordered public Plan catalog through the Web proxy.
+- The external HTTPS ingress routes new traffic to the replacement Web while the
+  stopped old Web completes its already-open proxied stream.
 
 ## Known Limitations
 

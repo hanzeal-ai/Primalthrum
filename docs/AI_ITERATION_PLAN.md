@@ -2303,8 +2303,10 @@ complete. Follow the same dependency and verification protocol used above.
   route, queue, and outcome attributes. A full startup smoke now provisions real
   PostgreSQL, TLS object storage, ClamAV, and a TLS Collector, then proves the release
   Agent, Server, Worker, and Web images become healthy and serve the public Plan catalog
-  through the Web proxy. Redis, provider-native secret operations, retained dashboard
-  and alert evidence, and external-ingress rolling traffic evidence remain open.
+  through the Web proxy. A fixed-digest Nginx HTTPS smoke now routes new traffic to a
+  replacement Web while a stopped old Web drains its existing proxied stream through
+  the external ingress. Redis, provider-native secret operations, retained dashboard
+  and alert evidence, and selected-provider live ingress evidence remain open.
 
 ### P23-01 Full Commercial End-To-End Suite
 
