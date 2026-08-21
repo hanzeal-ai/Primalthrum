@@ -2335,8 +2335,10 @@ complete. Follow the same dependency and verification protocol used above.
   publishes version 2, and rolls production back to version 1 through the customer
   UI. A two-Workspace browser journey proves Agent list and slug isolation in both
   directions, including an unavailable direct page for a cross-tenant slug.
-  Provider sandbox payment, physical voice, and the remaining release matrix are
-  still required before this item can move to Done.
+  A hosted-Agent browser journey now proves denied microphone permission produces
+  an actionable error without disabling a subsequent text SSE exchange. Provider
+  sandbox payment, physical voice, and the remaining release matrix are still
+  required before this item can move to Done.
 
 ### P24-01 Commercial Launch Gate
 
