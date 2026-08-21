@@ -82,6 +82,7 @@ for (const access of ROLE_MATRIX) {
     expect(clientErrors).toEqual([])
 
     expect(await apiStatus(page, '/api/agents')).toBe(access.agents ? 200 : 403)
+    expect(await apiStatus(page, '/api/provider-configs')).toBe(access.agents ? 200 : 403)
     expect(await apiStatus(page, '/api/billing/summary')).toBe(access.billingRead ? 200 : 403)
     expect(await apiStatus(page, '/api/workspaces/1/invitations')).toBe(access.membersManage ? 200 : 403)
     expect(await apiStatus(page, '/api/settings/api-keys')).toBe(access.settingsManage ? 200 : 403)

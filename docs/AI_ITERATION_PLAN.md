@@ -2341,6 +2341,15 @@ complete. Follow the same dependency and verification protocol used above.
   an actionable error without disabling a subsequent text SSE exchange. A second
   isolated-Workspace scenario drives browser speech recognition into the composer,
   completes the SSE exchange, and sends the reply through browser speech synthesis.
+  The local commercial smoke now aggregates all Agent, Server, Web, production
+  server, build, browser, deployment-artifact, demo-package, and backup/restore
+  checks instead of relying on the legacy P1-P14 subset. Its browser matrix runs
+  with retries disabled. Read-only Provider metadata now follows `agents.read`,
+  while all Provider writes remain protected by `providers.manage`, eliminating
+  unauthorized discovery requests for Member and Viewer Agent users. A clean
+  zero-retry aggregate run passed 33 Agent tests, 238 Server tests, 76 Web tests,
+  4 production-server tests, all 20 browser scenarios, deployment-artifact checks,
+  the generated demo smoke, and backup/restore.
   Provider sandbox payment, physical voice, and the remaining release matrix are
   still required before this item can move to Done.
 

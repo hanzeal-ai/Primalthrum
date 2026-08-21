@@ -22,13 +22,16 @@ if [ ! -x "$AGENT_PYTHON" ]; then
 fi
 
 echo "[commercial-smoke] Agent tests"
-(cd "$ROOT/agent" && "$AGENT_PYTHON" -m unittest tests/test_runtime_registry.py tests/test_stream_contract.py)
+(cd "$ROOT/agent" && "$AGENT_PYTHON" -m unittest discover -s tests -p 'test_*.py')
 
 echo "[commercial-smoke] Server tests, typecheck, build"
 (cd "$ROOT/server" && "$PNPM_BIN" test && "$PNPM_BIN" typecheck && "$PNPM_BIN" build)
 
-echo "[commercial-smoke] Web lint and build"
-(cd "$ROOT/web" && "$PNPM_BIN" lint && "$PNPM_BIN" build)
+echo "[commercial-smoke] Web tests, lint, and build"
+(cd "$ROOT/web" && "$PNPM_BIN" test && "$PNPM_BIN" test:production-server && "$PNPM_BIN" lint && "$PNPM_BIN" build)
+
+echo "[commercial-smoke] Commercial browser journeys"
+(cd "$ROOT/web" && "$PNPM_BIN" exec playwright test --retries=0)
 
 echo "[commercial-smoke] Production deployment artifacts"
 bash "$ROOT/scripts/production-deployment-smoke.sh"

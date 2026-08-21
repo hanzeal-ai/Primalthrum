@@ -1911,7 +1911,7 @@ export function createApp(options: AppOptions = {}): Koa {
   });
 
   router.get('/api/provider-configs', async (ctx) => {
-    if (!authorize(ctx, 'providers.manage')) return;
+    if (!authorize(ctx, 'agents.read')) return;
     ctx.body = await providerConfigRepository.list(currentWorkspaceId(ctx));
   });
 

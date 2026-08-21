@@ -27,6 +27,14 @@ Before tagging a release:
 6. Complete the requirement-by-requirement commercial audit in
    `docs/COMMERCIAL_PRODUCT_SPEC.md`.
 
+`scripts/commercial-smoke.sh` is the local aggregate gate. It runs the complete
+Agent and Server suites, Web unit and production-server tests, static checks,
+production builds, all desktop/mobile commercial browser journeys, deployment
+artifact checks, the generated demo package, and backup/restore. Environment
+gates that require Docker infrastructure, real Provider credentials, physical
+audio devices, retained monitoring evidence, or human approval remain separate.
+The browser matrix runs with retries disabled so a flaky scenario fails the gate.
+
 ## Commercial Readiness Evidence
 
 The `1.0.0` evidence below proves the legacy self-hosted foundation only:
