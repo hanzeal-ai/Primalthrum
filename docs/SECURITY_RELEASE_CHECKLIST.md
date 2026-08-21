@@ -62,6 +62,13 @@ Use this checklist before tagging or deploying a commercial Primalthrum build.
 - New tools declare name, description, input schema, and danger policy.
 - Dangerous tool behavior is documented in `docs/TOOL_SKILL_AUTHORING_GUIDE.md`.
 
+## Observability Checklist
+
+- `scripts/otel-collector-smoke.sh` exits 0 with TLS Collector evidence for
+  distinct Server and Worker service identities.
+- Production trace storage retention, access control, dashboards, and alerts are
+  verified in the selected observability platform.
+
 ## Backup Checklist
 
 - `scripts/backup-restore-smoke.sh` exits 0.

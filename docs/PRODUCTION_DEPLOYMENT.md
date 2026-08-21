@@ -63,6 +63,13 @@ bash scripts/production-image-smoke.sh
 Set `SKIP_BUILD=1` only when the exact images rendered by the production Compose
 configuration have already been built in the same release job.
 
+Verify that the production OTLP/HTTP JSON emitted for both service identities is
+accepted by a fixed-digest OpenTelemetry Collector over TLS:
+
+```bash
+bash scripts/otel-collector-smoke.sh
+```
+
 Build immutable images with the release version:
 
 ```bash

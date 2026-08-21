@@ -2298,8 +2298,11 @@ complete. Follow the same dependency and verification protocol used above.
   repositories, privacy, security, and Operator application composition. Transfer
   parity accepts non-semantic physical column order differences while preserving exact
   column sets and ordered primary keys, and validates the wildcard meter-price seed catalog.
-  Redis, provider-native secret operations, live collector/dashboard evidence, full
-  production startup, and external-ingress rolling traffic evidence remain open.
+  A fixed-digest OpenTelemetry Collector smoke now accepts production OTLP/HTTP JSON
+  over TLS and verifies distinct Server and Worker service identities plus minimized
+  route, queue, and outcome attributes. Redis, provider-native secret operations,
+  retained dashboard and alert evidence, full production startup, and external-ingress
+  rolling traffic evidence remain open.
 
 ### P23-01 Full Commercial End-To-End Suite
 

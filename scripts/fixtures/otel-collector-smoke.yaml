@@ -1,0 +1,19 @@
+receivers:
+  otlp:
+    protocols:
+      http:
+        endpoint: 0.0.0.0:4318
+        tls:
+          cert_file: /certs/server.crt
+          key_file: /certs/server.key
+
+exporters:
+  file:
+    path: /output/traces.json
+    flush_interval: 100ms
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlp]
+      exporters: [file]
