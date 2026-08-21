@@ -1759,6 +1759,9 @@ complete. Follow the same dependency and verification protocol used above.
   states for all nine capability kinds. Component tests cover switch persistence
   and planned-state protection. Desktop and 390x844 browser acceptance passed for
   catalog loading, disable/restore, responsive scrolling, and zero console errors.
+  The standalone Agent runtime now backs `rag:sqlite` with a persistent local
+  vector store, accepts an explicit `rag_path`, and covers durable upsert, delete,
+  retrieval, runtime selection, and stream configuration in its full test suite.
 
 ### P17-03 Voice, Attachments, And Knowledge Ingestion
 

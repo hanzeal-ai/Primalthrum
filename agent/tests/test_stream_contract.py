@@ -197,6 +197,25 @@ class StreamContractTest(unittest.TestCase):
         self.assertEqual(second_cache_events[0][1]["status"], "hit")
         self.assertEqual(second_cache_events[0][1]["provider"], "sqlite")
 
+    def test_stream_accepts_persistent_sqlite_rag_path(self) -> None:
+        client = TestClient(app)
+
+        with TemporaryDirectory() as temp_dir:
+            rag_path = Path(temp_dir) / "rag.sqlite3"
+            response = client.post(
+                "/stream",
+                json={
+                    "goal": "Use local knowledge",
+                    "agent": "ResearchAgent",
+                    "rag_provider": "sqlite",
+                    "rag_path": str(rag_path),
+                },
+            )
+
+            self.assertEqual(response.status_code, 200)
+            self.assertTrue(rag_path.is_file())
+            self.assertEqual(sse_event_names(response.text)[-1], "agent.run.completed")
+
 
 if __name__ == "__main__":
     unittest.main()

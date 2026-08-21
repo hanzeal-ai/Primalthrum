@@ -221,16 +221,24 @@ class RuntimeRegistryTest(unittest.TestCase):
         self.assertEqual(runtime.skills.names(), [])
         self.assertEqual(runtime.rag.retrieve("anything"), [])
 
-        sqlite_runtime = create_runtime(
-            AgentRuntimeConfig(
-                agent_name="ResearchAgent",
-                enabled_tools=[],
-                enabled_skills=[],
-                rag_provider="sqlite",
+        with TemporaryDirectory() as temp_dir:
+            sqlite_runtime = create_runtime(
+                AgentRuntimeConfig(
+                    agent_name="ResearchAgent",
+                    enabled_tools=[],
+                    enabled_skills=[],
+                    rag_provider="sqlite",
+                    rag_path=str(Path(temp_dir) / "rag.sqlite3"),
+                )
             )
-        )
-        self.assertEqual(sqlite_runtime.rag.name, "sqlite")
-        self.assertEqual(sqlite_runtime.rag.retrieve("server-managed"), [])
+            self.assertEqual(sqlite_runtime.rag.name, "sqlite")
+            sqlite_runtime.rag.upsert("doc-1", "persistent vector retrieval")
+            self.assertEqual(
+                sqlite_runtime.rag.retrieve("persistent vector retrieval")[0][
+                    "document_id"
+                ],
+                "doc-1",
+            )
 
     def test_sqlite_memory_persists_summaries_by_path(self) -> None:
         with TemporaryDirectory() as temp_dir:

@@ -25,6 +25,7 @@ class AgentRuntimeConfig:
     cache_provider: str = "memory"
     cache_path: str | None = None
     rag_provider: str = "null"
+    rag_path: str | None = None
     enabled_tools: list[str] | None = None
     enabled_skills: list[str] | None = None
     allow_dangerous_tools: bool = False

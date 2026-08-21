@@ -40,6 +40,7 @@ class AgentRequest(BaseModel):
     cache_provider: str = "memory"
     cache_path: str | None = None
     rag_provider: str = "null"
+    rag_path: str | None = None
     llm: RuntimeModelRequest = Field(default_factory=RuntimeModelRequest)
     embedding: RuntimeModelRequest = Field(
         default_factory=lambda: RuntimeModelRequest(model="mock-embedding")
@@ -121,6 +122,7 @@ def runtime_config(state: AgentState) -> AgentRuntimeConfig:
         cache_provider=options["cache_provider"],
         cache_path=options.get("cache_path"),
         rag_provider=options["rag_provider"],
+        rag_path=options.get("rag_path"),
         llm_config=options["llm"],
         embedding_config=options["embedding"],
     )
@@ -299,6 +301,7 @@ async def stream_graph(request: AgentRequest) -> AsyncIterator[str]:
             "cache_provider": request.cache_provider,
             "cache_path": request.cache_path,
             "rag_provider": request.rag_provider,
+            "rag_path": request.rag_path,
             "llm": model_provider_config(request.llm),
             "embedding": model_provider_config(request.embedding),
         },

@@ -10,6 +10,7 @@ from .llm import LLMProvider, create_llm_provider
 from .memory import MemoryProvider, NullMemory, SQLiteMemory
 from .rag import InMemoryRagProvider, NullRagProvider, RagProvider
 from .registry import Registry
+from .sqlite_rag import SQLiteRagProvider
 from .skills import SkillDefinition, load_skill_packages
 from .tools import (
     FileReaderTool,
@@ -61,7 +62,8 @@ def create_runtime(config: AgentRuntimeConfig) -> AgentRuntime:
     rag_registry = Registry[RagProvider]()
     rag_registry.register("null", NullRagProvider())
     rag_registry.register("none", NullRagProvider())
-    rag_registry.register("sqlite", NullRagProvider(name="sqlite"))
+    if config.rag_provider == "sqlite":
+        rag_registry.register("sqlite", SQLiteRagProvider(config.rag_path))
     rag_registry.register("in-memory", InMemoryRagProvider())
 
     tools = Registry[ToolDefinition]()
