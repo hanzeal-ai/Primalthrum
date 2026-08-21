@@ -29,6 +29,11 @@ it does not replace `COMMERCIAL_PRODUCT_SPEC.md` or waive a release condition.
 - Browser: 20 desktop/mobile scenarios.
 - Deployment artifact, generated demo Agent, and backup/restore smokes.
 
+The separate production startup gate also passed with immutable Agent, Server,
+Worker, and Web images against real PostgreSQL, TLS object storage, ClamAV, and a
+TLS OpenTelemetry Collector. The Agent runtime SQLite volume is created and mounted
+successfully in that topology.
+
 ## External Inputs Required
 
 - Stripe sandbox account, Price mappings, Webhook secret, and test payment method.

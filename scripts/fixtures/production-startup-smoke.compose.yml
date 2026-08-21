@@ -125,6 +125,7 @@ networks:
   frontend:
 
 volumes:
+  agent-runtime-data:
   generated-agents:
 
 secrets:
