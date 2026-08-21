@@ -2330,11 +2330,13 @@ complete. Follow the same dependency and verification protocol used above.
   existing suites continue to cover all Workspace roles and the Operator console.
   A separate browser payment journey now covers Free registration, Checkout
   handoff, signed subscription and invoice Webhooks, Pro activation, and invoice
-  readback through the replaceable payment contract. Provider sandbox payment,
-  A version lifecycle journey now creates an Agent, opens its preview deployment,
+  readback through the replaceable payment contract. A version lifecycle journey
+  now creates an Agent, opens its preview deployment,
   publishes version 2, and rolls production back to version 1 through the customer
-  UI. Provider sandbox payment, physical voice, and the remaining release matrix
-  are still required before this item can move to Done.
+  UI. A two-Workspace browser journey proves Agent list and slug isolation in both
+  directions, including an unavailable direct page for a cross-tenant slug.
+  Provider sandbox payment, physical voice, and the remaining release matrix are
+  still required before this item can move to Done.
 
 ### P24-01 Commercial Launch Gate
 
