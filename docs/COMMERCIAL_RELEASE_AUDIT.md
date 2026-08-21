@@ -28,6 +28,7 @@ it does not replace `COMMERCIAL_PRODUCT_SPEC.md` or waive a release condition.
 - Web: 76 unit tests, 4 production-server tests, lint, and production build.
 - Browser: 20 desktop/mobile scenarios.
 - Deployment artifact, generated demo Agent, and backup/restore smokes.
+- Server and Web complete dependency audits report no known vulnerabilities.
 
 The separate production startup gate also passed with immutable Agent, Server,
 Worker, and Web images against real PostgreSQL, TLS object storage, ClamAV, and a

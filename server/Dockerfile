@@ -6,11 +6,11 @@ RUN corepack enable
 WORKDIR /app/server
 
 FROM base AS production-dependencies
-COPY server/package.json server/pnpm-lock.yaml ./
+COPY server/package.json server/pnpm-lock.yaml server/pnpm-workspace.yaml ./
 RUN pnpm install --prod --frozen-lockfile
 
 FROM base AS build
-COPY server/package.json server/pnpm-lock.yaml ./
+COPY server/package.json server/pnpm-lock.yaml server/pnpm-workspace.yaml ./
 RUN pnpm install --frozen-lockfile
 COPY server/tsconfig.json server/tsconfig.build.json ./
 COPY server/index.ts server/worker.ts ./
