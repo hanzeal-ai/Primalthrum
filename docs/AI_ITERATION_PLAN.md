@@ -2300,9 +2300,11 @@ complete. Follow the same dependency and verification protocol used above.
   column sets and ordered primary keys, and validates the wildcard meter-price seed catalog.
   A fixed-digest OpenTelemetry Collector smoke now accepts production OTLP/HTTP JSON
   over TLS and verifies distinct Server and Worker service identities plus minimized
-  route, queue, and outcome attributes. Redis, provider-native secret operations,
-  retained dashboard and alert evidence, full production startup, and external-ingress
-  rolling traffic evidence remain open.
+  route, queue, and outcome attributes. A full startup smoke now provisions real
+  PostgreSQL, TLS object storage, ClamAV, and a TLS Collector, then proves the release
+  Agent, Server, Worker, and Web images become healthy and serve the public Plan catalog
+  through the Web proxy. Redis, provider-native secret operations, retained dashboard
+  and alert evidence, and external-ingress rolling traffic evidence remain open.
 
 ### P23-01 Full Commercial End-To-End Suite
 

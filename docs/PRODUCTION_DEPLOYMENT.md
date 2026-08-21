@@ -83,6 +83,18 @@ all Linux capabilities dropped, and `no-new-privileges` enabled.
 
 ## Start And Verify
 
+Before deploying, run the complete production startup smoke. It provisions real
+PostgreSQL, TLS MinIO, ClamAV, and a TLS OpenTelemetry Collector, starts the release
+Agent, Server, Worker, and Web images, waits for every health gate, and verifies the
+Web-proxied public Plan catalog:
+
+```bash
+bash scripts/production-startup-smoke.sh
+```
+
+Set `SKIP_BUILD=1` only when `scripts/production-image-smoke.sh` already verified
+the same `IMAGE_PREFIX` and `IMAGE_TAG` in the current release job.
+
 ```bash
 docker compose --env-file deploy/production.env \
   -f docker-compose.production.yml up -d

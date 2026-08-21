@@ -1,0 +1,154 @@
+name: ${PRODUCTION_SMOKE_PROJECT:?PRODUCTION_SMOKE_PROJECT is required}
+
+services:
+  postgres:
+    image: postgres@sha256:742f40ea20b9ff2ff31db5458d127452988a2164df9e17441e191f3b72252193
+    environment:
+      POSTGRES_DB: primalthrum
+      POSTGRES_USER: primalthrum
+      POSTGRES_PASSWORD: primalthrum-smoke
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U primalthrum -d primalthrum"]
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    tmpfs:
+      - /var/lib/postgresql/data
+    networks:
+      - backend
+
+  minio:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    command: ["server", "/data"]
+    environment:
+      MINIO_ROOT_USER: primalthrum-smoke-access
+      MINIO_ROOT_PASSWORD: primalthrum-smoke-secret-key
+    healthcheck:
+      test:
+        - CMD-SHELL
+        - >-
+          mc alias set --insecure smoke https://127.0.0.1:9000
+          "$${MINIO_ROOT_USER}" "$${MINIO_ROOT_PASSWORD}" >/dev/null 2>&1
+      interval: 2s
+      timeout: 2s
+      retries: 30
+    volumes:
+      - ${PRODUCTION_SMOKE_CERT_DIR:?PRODUCTION_SMOKE_CERT_DIR is required}:/root/.minio/certs:ro
+    tmpfs:
+      - /data
+    networks:
+      - backend
+
+  minio-bootstrap:
+    image: minio/minio:RELEASE.2025-04-22T22-12-26Z
+    entrypoint: ["/bin/sh", "-c"]
+    command:
+      - >-
+        mc alias set --insecure smoke https://minio:9000
+        primalthrum-smoke-access primalthrum-smoke-secret-key >/dev/null &&
+        mc mb --insecure --ignore-existing smoke/primalthrum-smoke >/dev/null &&
+        mc version enable --insecure smoke/primalthrum-smoke >/dev/null
+    depends_on:
+      minio:
+        condition: service_healthy
+    restart: "no"
+    networks:
+      - backend
+
+  clamav:
+    image: clamav/clamav-debian@sha256:2bb8cd7dfe3e87f86e969a2c415f7698583175e46dc2234672be9210c982c144
+    networks:
+      - backend
+
+  otel:
+    image: otel/opentelemetry-collector-contrib@sha256:f2f01157055a9b2aab9df7118e1f1c9abf345e99b23bc7a2bc791db374a7d0f6
+    command: ["--config=/etc/otelcol-contrib/config.yaml"]
+    read_only: true
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    volumes:
+      - ./otel-collector-smoke.yaml:/etc/otelcol-contrib/config.yaml:ro
+      - ${PRODUCTION_SMOKE_CERT_DIR}:/certs:ro
+      - ${PRODUCTION_SMOKE_OTEL_OUTPUT_DIR:?PRODUCTION_SMOKE_OTEL_OUTPUT_DIR is required}:/output
+    networks:
+      - backend
+
+  agent:
+    extends:
+      file: ../../docker-compose.production.yml
+      service: agent
+
+  server:
+    extends:
+      file: ../../docker-compose.production.yml
+      service: server
+    depends_on:
+      agent:
+        condition: service_healthy
+      minio-bootstrap:
+        condition: service_completed_successfully
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_EXTRA_CA_CERTS: /certs/public.crt
+    volumes:
+      - generated-agents:/app/generated-agents
+      - ${PRODUCTION_SMOKE_CERT_DIR}/public.crt:/certs/public.crt:ro
+
+  worker:
+    extends:
+      file: ../../docker-compose.production.yml
+      service: worker
+    depends_on:
+      agent:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    environment:
+      NODE_EXTRA_CA_CERTS: /certs/public.crt
+    volumes:
+      - generated-agents:/app/generated-agents
+      - ${PRODUCTION_SMOKE_CERT_DIR}/public.crt:/certs/public.crt:ro
+
+  web:
+    extends:
+      file: ../../docker-compose.production.yml
+      service: web
+    depends_on:
+      server:
+        condition: service_healthy
+
+networks:
+  backend:
+  frontend:
+
+volumes:
+  generated-agents:
+
+secrets:
+  database_url:
+    file: ${PRODUCTION_SMOKE_SECRET_DIR:?PRODUCTION_SMOKE_SECRET_DIR is required}/database_url
+  primalthrum_secret_key:
+    file: ${PRODUCTION_SMOKE_SECRET_DIR}/primalthrum_secret_key
+  object_storage_access_key_id:
+    file: ${PRODUCTION_SMOKE_SECRET_DIR}/object_storage_access_key_id
+  object_storage_secret_access_key:
+    file: ${PRODUCTION_SMOKE_SECRET_DIR}/object_storage_secret_access_key
+  stripe_secret_key:
+    file: ${PRODUCTION_SMOKE_SECRET_DIR}/stripe_secret_key
+  stripe_webhook_secret:
+    file: ${PRODUCTION_SMOKE_SECRET_DIR}/stripe_webhook_secret
+  transactional_email_api_key:
+    file: ${PRODUCTION_SMOKE_SECRET_DIR}/transactional_email_api_key
+  transactional_email_webhook_secret:
+    file: ${PRODUCTION_SMOKE_SECRET_DIR}/transactional_email_webhook_secret
+  abuse_hash_secret:
+    file: ${PRODUCTION_SMOKE_SECRET_DIR}/abuse_hash_secret
+  turnstile_secret_key:
+    file: ${PRODUCTION_SMOKE_SECRET_DIR}/turnstile_secret_key
+  operator_bootstrap_token:
+    file: ${PRODUCTION_SMOKE_SECRET_DIR}/operator_bootstrap_token
+  otel_exporter_otlp_headers:
+    file: ${PRODUCTION_SMOKE_SECRET_DIR}/otel_exporter_otlp_headers
