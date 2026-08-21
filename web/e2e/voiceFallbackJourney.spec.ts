@@ -8,7 +8,7 @@ test('@desktop denied microphone permission preserves hosted Agent text input', 
   await login(page)
   const pageErrors = capturePageErrors(page)
   const suffix = Date.now().toString(36)
-  const agent = await createVoiceAgent(page, suffix)
+  const agent = await createVoiceAgent(page, suffix, { configureStt: true })
   const providerLoaded = page.waitForResponse((response) => (
     response.request().method() === 'GET'
       && response.url().endsWith('/api/provider-configs')
@@ -33,6 +33,35 @@ test('@desktop denied microphone permission preserves hosted Agent text input', 
   expect(pageErrors).toEqual([])
 })
 
+test('@desktop hosted Agent accepts browser voice input and reads its response', async ({ page }) => {
+  await installBrowserSpeechFakes(page)
+  await login(page)
+  const pageErrors = capturePageErrors(page)
+  const suffix = Date.now().toString(36)
+  const agent = await createVoiceAgent(page, suffix, { isolatedWorkspace: true })
+  const providerLoaded = page.waitForResponse((response) => (
+    response.request().method() === 'GET'
+      && response.url().endsWith('/api/provider-configs')
+      && response.status() === 200
+  ))
+
+  await page.goto(`/a/${agent.slug}`)
+  await providerLoaded
+  await expect(page.getByRole('heading', { name: agent.name })).toBeVisible()
+  const composer = page.getByRole('textbox', { name: '消息', exact: true })
+  await page.getByRole('button', { name: '开始语音输入' }).click()
+  await expect(composer).toHaveValue('Voice interaction is ready.')
+
+  await page.getByRole('button', { name: '发送' }).click()
+  const responseText = 'mock response: Voice interaction is ready.'
+  await expect(page.getByText(responseText, { exact: true })).toBeVisible({ timeout: 30_000 })
+  await page.getByRole('button', { name: '朗读消息' }).last().click()
+  await expect.poll(() => page.evaluate(() => (
+    (window as Window & { __primalthrumSpokenText?: string }).__primalthrumSpokenText
+  ))).toBe(responseText)
+  expect(pageErrors).toEqual([])
+})
+
 async function login(page: Page) {
   await page.goto('/login')
   await page.getByRole('button', { name: '仅必要' }).click()
@@ -44,38 +73,54 @@ async function login(page: Page) {
   ))).not.toBeNull()
 }
 
-async function createVoiceAgent(page: Page, suffix: string) {
-  return page.evaluate(async (uniqueSuffix) => {
+async function createVoiceAgent(
+  page: Page,
+  suffix: string,
+  options: { configureStt?: boolean; isolatedWorkspace?: boolean },
+) {
+  return page.evaluate(async ({ configureStt, isolatedWorkspace, uniqueSuffix }) => {
     const token = localStorage.getItem('primalthrum.sessionToken') ?? ''
     const headers = {
       Authorization: `Bearer ${token}`,
       'Content-Type': 'application/json',
     }
-    const providerResponse = await fetch('/api/provider-configs', {
-      method: 'POST',
-      headers,
-      body: JSON.stringify({
-        name: `voice-fallback-${uniqueSuffix}`,
-        type: 'stt',
-        config: {
-          provider: 'openai-compatible',
-          model: 'gpt-4o-mini-transcribe',
-          baseUrl: 'https://speech.example/v1',
-        },
-        secret: `voice-fallback-secret-${uniqueSuffix}`,
-      }),
-    })
-    if (!providerResponse.ok) {
-      throw new Error(`create STT Provider returned ${providerResponse.status}`)
+    if (isolatedWorkspace) {
+      const workspaceResponse = await fetch('/api/workspaces', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({ name: `Voice Interaction ${uniqueSuffix}` }),
+      })
+      if (!workspaceResponse.ok) {
+        throw new Error(`create Workspace returned ${workspaceResponse.status}`)
+      }
+    }
+    if (configureStt) {
+      const providerResponse = await fetch('/api/provider-configs', {
+        method: 'POST',
+        headers,
+        body: JSON.stringify({
+          name: `voice-fallback-${uniqueSuffix}`,
+          type: 'stt',
+          config: {
+            provider: 'openai-compatible',
+            model: 'gpt-4o-mini-transcribe',
+            baseUrl: 'https://speech.example/v1',
+          },
+          secret: `voice-fallback-secret-${uniqueSuffix}`,
+        }),
+      })
+      if (!providerResponse.ok) {
+        throw new Error(`create STT Provider returned ${providerResponse.status}`)
+      }
     }
 
-    const name = `Voice Fallback Agent ${uniqueSuffix}`
+    const name = `${configureStt ? 'Voice Fallback' : 'Voice Interaction'} Agent ${uniqueSuffix}`
     const createdResponse = await fetch('/api/agents', {
       method: 'POST',
       headers,
       body: JSON.stringify({
         name,
-        description: 'Microphone denial and text fallback acceptance Agent',
+        description: 'Hosted browser voice acceptance Agent',
         memoryProvider: 'sqlite',
         cacheProvider: 'sqlite',
         ragProvider: 'none',
@@ -95,7 +140,61 @@ async function createVoiceAgent(page: Page, suffix: string) {
       throw new Error(`generate Agent returned ${generatedResponse.status}`)
     }
     return agent
-  }, suffix)
+  }, { ...options, uniqueSuffix: suffix })
+}
+
+async function installBrowserSpeechFakes(page: Page) {
+  await page.addInitScript(() => {
+    class FakeSpeechRecognition {
+      continuous = false
+      interimResults = false
+      lang = ''
+      onend: (() => void) | null = null
+      onerror: (() => void) | null = null
+      onresult: ((event: { results: ArrayLike<{ 0: { transcript: string }; isFinal: boolean }> }) => void) | null = null
+
+      start() {
+        queueMicrotask(() => {
+          this.onresult?.({
+            results: [{ 0: { transcript: 'Voice interaction is ready.' }, isFinal: true }],
+          })
+          this.onend?.()
+        })
+      }
+
+      stop() {
+        this.onend?.()
+      }
+    }
+
+    class FakeSpeechSynthesisUtterance {
+      lang = ''
+      onend: (() => void) | null = null
+      onerror: (() => void) | null = null
+
+      constructor(readonly text: string) {}
+    }
+
+    Object.defineProperty(window, 'SpeechRecognition', {
+      configurable: true,
+      value: FakeSpeechRecognition,
+    })
+    Object.defineProperty(window, 'SpeechSynthesisUtterance', {
+      configurable: true,
+      value: FakeSpeechSynthesisUtterance,
+    })
+    Object.defineProperty(window, 'speechSynthesis', {
+      configurable: true,
+      value: {
+        cancel() {},
+        speak(utterance: FakeSpeechSynthesisUtterance) {
+          ;(window as Window & { __primalthrumSpokenText?: string })
+            .__primalthrumSpokenText = utterance.text
+          queueMicrotask(() => utterance.onend?.())
+        },
+      },
+    })
+  })
 }
 
 function capturePageErrors(page: Page): string[] {
