@@ -2067,8 +2067,10 @@ complete. Follow the same dependency and verification protocol used above.
   public/private DNS answers, and disables redirects and environment proxy
   discovery. Unit, protocol, real HTTP, database immutability, and all Agent
   provider tests cover clean, EICAR, scanner failure, literal-address, metadata,
-  and DNS paths. Production infrastructure must still prove the documented
-  ClamAV deployment and egress allowlist. Threat-model signoff, remaining legal
+  and DNS paths. A fixed-digest real ClamAV container smoke now proves protocol
+  readiness, clean-file acceptance, and EICAR rejection through the production
+  scanner implementation. Production infrastructure must still prove the selected
+  deployment topology and egress allowlist. Threat-model signoff, remaining legal
   documents, and independent manual security evidence remain open.
   The second P21 slice adds password-confirmed account and Owner Workspace JSON
   exports, credential redaction, immutable export evidence, and a seven-day

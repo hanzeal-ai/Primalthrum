@@ -69,6 +69,7 @@ Use this checklist before tagging or deploying a commercial Primalthrum build.
 - Restore has been tested on a temporary database and document directory.
 - Document storage location is durable and outside ephemeral build directories.
 - `scripts/object-storage-smoke.sh` exits 0 with object version and delete-marker evidence.
+- `scripts/clamav-smoke.sh` exits 0 with real PING, clean-file, and EICAR evidence.
 - The production bucket restore exercise is paired with its database snapshot and succeeds.
 
 ## Documentation Checklist
