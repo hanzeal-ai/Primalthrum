@@ -950,6 +950,11 @@ Field meanings:
 - Verification:
   - `cd server && pnpm test && pnpm typecheck && pnpm build`
 - Completion update: set `Status: Done`.
+- Current evidence: generated projects retain the standalone CLI and now include
+  a FastAPI Web page, canonical SSE stream, responsive text chat, browser speech
+  input/playback, health/metadata endpoints, and runnable generated-project tests.
+  The generator separates project, runtime, document, style, and interaction
+  templates so each can evolve without expanding the file-writing composition root.
 
 ### P3-01 SQLiteMemory Provider
 

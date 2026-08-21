@@ -744,8 +744,12 @@ test('POST /api/agents/:id/generate writes a standalone agent project', async ()
   const generated = await generateResponse.json() as { path: string; files: string[] };
   assert.equal(generated.path, created.path);
   assert.ok(generated.files.includes('src/graph.py'));
+  assert.ok(generated.files.includes('src/app.py'));
   assert.ok(generated.files.includes('src/nodes/retrieve_optional_rag.py'));
+  assert.ok(generated.files.includes('src/web/index.html'));
+  assert.ok(generated.files.includes('src/web/app.js'));
   assert.ok(generated.files.includes('tests/test_demo.py'));
+  assert.ok(generated.files.includes('tests/test_web_app.py'));
 
   await stat(join(generated.path, 'README.md'));
   const graph = await readFile(join(generated.path, 'src/graph.py'), 'utf8');
@@ -760,6 +764,16 @@ test('POST /api/agents/:id/generate writes a standalone agent project', async ()
     { cwd: generated.path },
   );
   assert.match(stdout, /Planned task: Demo task with file_reader\./);
+
+  await execFileAsync(
+    python,
+    ['-m', 'unittest', 'tests.test_demo', 'tests.test_web_app'],
+    { cwd: generated.path },
+  );
+  await execFileAsync(process.execPath, [
+    '--check',
+    join(generated.path, 'src', 'web', 'app.js'),
+  ]);
 
   const initialVersionsResponse = await fetch(
     `${baseUrl}/api/agents/${created.id}/versions`,
