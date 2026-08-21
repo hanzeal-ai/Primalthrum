@@ -21,6 +21,7 @@ WORKDIR /app/agent
 COPY --from=dependencies /opt/venv /opt/venv
 COPY --chown=primalthrum:primalthrum agent/main.py ./main.py
 COPY --chown=primalthrum:primalthrum agent/runtime ./runtime
+RUN mkdir -p .primalthrum && chown primalthrum:primalthrum .primalthrum
 USER primalthrum
 EXPOSE 8000
 CMD ["python", "-m", "uvicorn", "main:app", "--host", "0.0.0.0", "--port", "8000", "--proxy-headers"]

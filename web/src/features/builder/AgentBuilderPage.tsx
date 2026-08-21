@@ -275,7 +275,7 @@ export function AgentBuilderPage({ user, onLogout }: AgentBuilderPageProps) {
         name: agentName,
         description: draft.description,
         memoryProvider: 'sqlite',
-        cacheProvider: 'memory',
+        cacheProvider: 'sqlite',
         ragProvider: draft.ragProvider,
         enabledTools: ['file_reader'],
         enabledSkills: ['research'],

@@ -17,6 +17,11 @@ from pydantic import BaseModel, Field, SecretStr
 
 from runtime import AgentRuntimeConfig, ModelProviderConfig, create_runtime
 from runtime.capabilities import capability_health, capability_manifests
+from runtime.capability_lifecycle import (
+    announce_ready_tools,
+    enrich_prompt_with_capabilities,
+    remember_exchange,
+)
 from runtime.audio import create_speech_provider
 from runtime.embeddings import create_embedding_provider
 from runtime.llm import ProviderRequestError
@@ -37,6 +42,7 @@ class AgentRequest(BaseModel):
     tools: list[str] = Field(default_factory=list)
     skills: list[str] = Field(default_factory=list)
     memory_provider: str = "null"
+    memory_path: str | None = None
     cache_provider: str = "memory"
     cache_path: str | None = None
     rag_provider: str = "null"
@@ -119,6 +125,7 @@ def runtime_config(state: AgentState) -> AgentRuntimeConfig:
         enabled_tools=state["tools"],
         enabled_skills=state["skills"],
         memory_provider=options["memory_provider"],
+        memory_path=options.get("memory_path"),
         cache_provider=options["cache_provider"],
         cache_path=options.get("cache_path"),
         rag_provider=options["rag_provider"],
@@ -131,6 +138,8 @@ def runtime_config(state: AgentState) -> AgentRuntimeConfig:
 def intake(state: AgentState) -> dict[str, Any]:
     tools = normalize_tools(state["tools"])
     runtime = create_runtime(runtime_config({**state, "tools": tools}))
+    writer = get_stream_writer()
+    announce_ready_tools(runtime, state["agent"], writer)
     cache_event = None
     if runtime.cache.name != "null":
         cache_key = cache_key_for_goal(state["agent"], state["goal"])
@@ -204,6 +213,12 @@ async def respond(state: AgentState) -> dict[str, Any]:
     runtime = create_runtime(runtime_config(state))
     writer = get_stream_writer()
     system_message = f"You are {state['agent']}. Answer the user's request directly."
+    system_message = enrich_prompt_with_capabilities(
+        runtime,
+        state["agent"],
+        system_message,
+        writer,
+    )
     if state["context"]:
         system_message += f"\n\nUse this retrieved context and cite it when relevant:\n{state['context']}"
     answer_parts: list[str] = []
@@ -222,6 +237,7 @@ async def respond(state: AgentState) -> dict[str, Any]:
             },
         })
     answer = "".join(answer_parts)
+    remember_exchange(runtime, state["agent"], state["goal"], answer, writer)
     writer({
         "event": "agent.usage.reported",
         "payload": {
@@ -298,6 +314,7 @@ async def stream_graph(request: AgentRequest) -> AsyncIterator[str]:
         },
         "runtime_options": {
             "memory_provider": request.memory_provider,
+            "memory_path": request.memory_path,
             "cache_provider": request.cache_provider,
             "cache_path": request.cache_path,
             "rag_provider": request.rag_provider,

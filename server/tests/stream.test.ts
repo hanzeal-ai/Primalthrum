@@ -295,7 +295,14 @@ test('POST /api/stream can run by agentId and persist proxied events', async () 
     'configured-stream-run-1',
   );
   assert.equal(upstreamPayloads.length, 1);
-  assert.deepEqual(upstreamPayloads[0], {
+  const upstreamPayload = upstreamPayloads[0] as Record<string, unknown>;
+  assert.match(
+    String(upstreamPayload.memory_path),
+    new RegExp(`^\\.primalthrum/workspaces/\\d+/agents/${agent.id}/memory\\.sqlite3$`),
+  );
+  const payloadWithoutRuntimePath = { ...upstreamPayload };
+  delete payloadWithoutRuntimePath.memory_path;
+  assert.deepEqual(payloadWithoutRuntimePath, {
     goal: 'Use the saved agent config',
     agent: 'Configured Stream Agent',
     tools: ['file_reader'],

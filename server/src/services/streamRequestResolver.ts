@@ -16,7 +16,9 @@ export interface AgentStreamPayload {
   tools: string[];
   skills: string[];
   memory_provider: string;
+  memory_path?: string;
   cache_provider: string;
+  cache_path?: string;
   rag_provider: string;
   llm: RuntimeModelEndpoint;
   embedding: RuntimeModelEndpoint;
@@ -111,6 +113,12 @@ export async function resolveStreamRequest(
         skills: config.enabledSkills,
         memory_provider: config.memoryProvider,
         cache_provider: config.cacheProvider,
+        ...runtimePersistencePaths(
+          workspaceId,
+          agent.id,
+          config.memoryProvider,
+          config.cacheProvider,
+        ),
         rag_provider: config.ragProvider,
         llm: providers.llm,
         embedding: providers.embedding,
@@ -186,6 +194,20 @@ function mockRuntimeProviders() {
   return {
     llm: { provider: 'mock', model: 'mock-chat' },
     embedding: { provider: 'mock', model: 'mock-embedding' },
+  };
+}
+
+function runtimePersistencePaths(
+  workspaceId: number | undefined,
+  agentId: number,
+  memoryProvider: string,
+  cacheProvider: string,
+): Partial<Pick<AgentStreamPayload, 'memory_path' | 'cache_path'>> {
+  if (typeof workspaceId !== 'number') return {};
+  const root = `.primalthrum/workspaces/${workspaceId}/agents/${agentId}`;
+  return {
+    ...(memoryProvider === 'sqlite' ? { memory_path: `${root}/memory.sqlite3` } : {}),
+    ...(cacheProvider === 'sqlite' ? { cache_path: `${root}/cache.sqlite3` } : {}),
   };
 }
 

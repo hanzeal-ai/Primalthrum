@@ -163,14 +163,19 @@ class StreamContractTest(unittest.TestCase):
         )
         self.assertEqual(invalid.status_code, 400)
 
-    def test_stream_emits_cache_miss_then_hit_for_sqlite_cache(self) -> None:
+    def test_stream_exposes_hot_pluggable_runtime_activity(self) -> None:
         client = TestClient(app)
 
         with TemporaryDirectory() as temp_dir:
             cache_path = str(Path(temp_dir) / "cache.sqlite3")
+            memory_path = str(Path(temp_dir) / "memory.sqlite3")
             payload = {
                 "goal": "Cache this graph plan",
                 "agent": "ResearchAgent",
+                "tools": ["file_reader"],
+                "skills": ["research"],
+                "memory_provider": "sqlite",
+                "memory_path": memory_path,
                 "cache_provider": "sqlite",
                 "cache_path": cache_path,
             }
@@ -196,6 +201,29 @@ class StreamContractTest(unittest.TestCase):
         self.assertEqual(second_cache_events[0][0], "agent.cache.hit")
         self.assertEqual(second_cache_events[0][1]["status"], "hit")
         self.assertEqual(second_cache_events[0][1]["provider"], "sqlite")
+
+        first_messages = sse_messages(first_response.text)
+        second_messages = sse_messages(second_response.text)
+        self.assertTrue(any(
+            event == "agent.tool.ready" and message["tool"] == "file_reader"
+            for event, message in first_messages
+        ))
+        self.assertTrue(any(
+            event == "agent.skill.applied" and message["skill"] == "research"
+            for event, message in first_messages
+        ))
+        self.assertTrue(any(
+            event == "agent.memory.loaded" and message["count"] == 0
+            for event, message in first_messages
+        ))
+        self.assertTrue(any(
+            event == "agent.memory.written"
+            for event, _message in first_messages
+        ))
+        self.assertTrue(any(
+            event == "agent.memory.loaded" and message["count"] == 1
+            for event, message in second_messages
+        ))
 
     def test_stream_accepts_persistent_sqlite_rag_path(self) -> None:
         client = TestClient(app)

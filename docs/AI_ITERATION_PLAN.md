@@ -2349,7 +2349,10 @@ complete. Follow the same dependency and verification protocol used above.
   unauthorized discovery requests for Member and Viewer Agent users. A clean
   zero-retry aggregate run passed 33 Agent tests, 238 Server tests, 76 Web tests,
   4 production-server tests, all 20 browser scenarios, deployment-artifact checks,
-  the generated demo smoke, and backup/restore.
+  the generated demo smoke, and backup/restore. The customer journey now repeats
+  the same Hosted request and directly verifies Tool readiness, Skill application,
+  isolated SQLite Memory read/write, and a real SQLite Cache hit. Production Agent
+  runtime state is retained in its dedicated writable volume.
   Provider sandbox payment, physical voice, and the remaining release matrix are
   still required before this item can move to Done.
 
