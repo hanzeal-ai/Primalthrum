@@ -10,6 +10,7 @@ export interface CreateCheckoutInput {
 
 export interface PaymentProviderAdapter {
   readonly name: string;
+  readonly checkoutCompletion?: 'immediate';
   createCustomer(input: {
     workspaceId: number;
     email: string;

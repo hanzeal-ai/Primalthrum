@@ -16,10 +16,17 @@ must use separate environments and databases.
 - `STRIPE_API_VERSION`: optional pinned API version managed by the operator.
 - `STRIPE_PRICE_*`: recurring Stripe Price IDs mapped to internal plan keys.
 - `PUBLIC_APP_URL`: trusted browser origin used to construct Checkout and portal returns.
+- `PAYMENT_PROVIDER`: `disabled`, `mock`, or `stripe`. Local development defaults
+  to `mock`; a real commercial release must use `stripe`.
 
 Secrets must never use a `VITE_` prefix or be stored in workspace provider
 configuration. Missing provider credentials disable payment mutation APIs with a
 stable `503` response; the public plan catalog remains available.
+
+Mock mode completes Checkout, plan changes, and cancellation immediately against
+the normal subscription, entitlement, and credit repositories. It exists only to
+exercise the complete product flow before Stripe credentials are available and
+never creates payment evidence or charges a customer.
 
 ## Stripe Workbench
 

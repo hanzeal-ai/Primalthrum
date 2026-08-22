@@ -39,3 +39,19 @@ test('application runtime validates the durable job polling interval', () => {
     /JOB_LEASE_DURATION_MS/,
   );
 });
+
+test('application runtime supports mock, disabled, and Stripe payment modes', () => {
+  assert.equal(createApplicationAppOptions({}).paymentAdapter?.name, 'mock');
+  assert.equal(
+    createApplicationAppOptions({ PAYMENT_PROVIDER: 'disabled' }).paymentAdapter,
+    undefined,
+  );
+  assert.throws(
+    () => createApplicationAppOptions({ PAYMENT_PROVIDER: 'stripe' }),
+    /STRIPE_SECRET_KEY/,
+  );
+  assert.equal(createApplicationAppOptions({
+    PAYMENT_PROVIDER: 'stripe',
+    STRIPE_SECRET_KEY: 'sk_test_example',
+  }).paymentAdapter?.name, 'stripe');
+});

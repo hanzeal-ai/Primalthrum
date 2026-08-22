@@ -125,6 +125,12 @@ export function BillingPage({
       user={user}
     >
       {checkoutNotice()}
+      {summary?.paymentProvider === 'mock' ? (
+        <div className="mb-5 flex items-start gap-3 rounded-md border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900">
+          <AlertCircle className="mt-0.5 size-4 shrink-0" />
+          <p>当前为模拟支付模式，套餐变更会立即生效且不会产生真实扣款。</p>
+        </div>
+      ) : null}
       {error ? <ErrorNotice message={error} onRetry={() => void load()} /> : null}
       {loading ? <LoadingState /> : summary ? (
         <div className="grid gap-8">
@@ -211,7 +217,11 @@ export function BillingPage({
 
             <aside className="rounded-lg border bg-white p-5">
               <div className="flex items-center gap-2"><CreditCard className="size-4" /><h2 className="font-semibold">支付管理</h2></div>
-              <p className="mt-2 text-sm leading-6 text-zinc-500">支付卡信息由托管支付页面处理，Primalthrum 不保存卡号。</p>
+              <p className="mt-2 text-sm leading-6 text-zinc-500">
+                {summary.paymentProvider === 'mock'
+                  ? '当前跳过外部支付，接入 Stripe 后可切换为托管支付。'
+                  : '支付卡信息由托管支付页面处理，Primalthrum 不保存卡号。'}
+              </p>
               {canManage && summary.subscription.providerCustomerRef ? (
                 <Button className="mt-5 w-full" disabled={Boolean(action)} onClick={() => void openPortal()} variant="outline">
                   {action === 'portal' ? <Loader2 className="animate-spin" /> : null}管理支付方式

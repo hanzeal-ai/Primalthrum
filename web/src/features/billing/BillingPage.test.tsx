@@ -15,6 +15,7 @@ const api = vi.hoisted(() => ({
 vi.mock('../../api/client', () => api)
 
 const summary = {
+  paymentProvider: 'mock',
   entitlementSnapshot: {
     workspaceId: 1,
     planKey: 'free',
@@ -83,6 +84,7 @@ describe('BillingPage', () => {
     }} />)
 
     expect(await screen.findByRole('heading', { name: '账单与套餐' })).toBeTruthy()
+    expect(screen.getByText(/当前为模拟支付模式/)).toBeTruthy()
     expect(screen.getByText('750')).toBeTruthy()
     fireEvent.click(screen.getByRole('button', { name: '升级到 Pro' }))
 

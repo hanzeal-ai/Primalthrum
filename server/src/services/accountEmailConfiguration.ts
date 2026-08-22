@@ -7,12 +7,13 @@ import {
   SignedAccountEmailWebhookVerifier,
   type AccountEmailWebhookVerifier,
 } from './accountEmailWebhook';
+import { MockAccountEmailSender } from './mockAccountEmailSender';
 
 export interface AccountEmailIntegration {
   sender?: AccountEmailSender;
   webhookVerifier?: AccountEmailWebhookVerifier;
   exposePreview: boolean;
-  provider: 'disabled' | 'http' | 'resend';
+  provider: 'disabled' | 'http' | 'mock' | 'resend';
 }
 
 export function createAccountEmailIntegration(
@@ -24,13 +25,19 @@ export function createAccountEmailIntegration(
   const inferredProvider = environment.TRANSACTIONAL_EMAIL_URL?.trim() ? 'http'
     : environment.TRANSACTIONAL_EMAIL_API_KEY?.trim() ? 'resend'
       : '';
-  const provider = explicitProvider || inferredProvider;
+  const provider = explicitProvider || inferredProvider || (production ? '' : 'mock');
   if (!provider) {
     if (production) throw new Error('TRANSACTIONAL_EMAIL_PROVIDER is required in production');
     return { provider: 'disabled', exposePreview: true };
   }
+  if (provider === 'disabled') {
+    return { provider, exposePreview: true };
+  }
+  if (provider === 'mock') {
+    return { provider, exposePreview: true, sender: new MockAccountEmailSender() };
+  }
   if (provider !== 'http' && provider !== 'resend') {
-    throw new Error('TRANSACTIONAL_EMAIL_PROVIDER must be http or resend');
+    throw new Error('TRANSACTIONAL_EMAIL_PROVIDER must be disabled, mock, http, or resend');
   }
 
   const from = required(environment.TRANSACTIONAL_EMAIL_FROM, 'TRANSACTIONAL_EMAIL_FROM');

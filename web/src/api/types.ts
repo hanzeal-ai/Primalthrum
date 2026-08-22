@@ -495,6 +495,7 @@ export interface BillingInvoiceRecord {
 }
 
 export interface BillingSummary {
+  paymentProvider?: 'disabled' | 'mock' | 'stripe'
   entitlementSnapshot: BillingEntitlementSnapshot
   creditAccount: CreditAccountRecord
   subscription: WorkspaceSubscriptionRecord

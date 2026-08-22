@@ -119,11 +119,28 @@ test('email webhook rejects invalid signatures and exposes bounded metrics', asy
   assert.match(metrics, /primalthrum_account_email_outbox\{status="dead_lettered"\} 0/);
 });
 
-test('production email configuration fails closed and supports Resend', () => {
+test('email configuration defaults to mock locally and supports explicit production providers', async () => {
+  const local = createAccountEmailIntegration({});
+  assert.equal(local.provider, 'mock');
+  assert.equal(local.exposePreview, true);
+  assert.deepEqual(await local.sender?.send({
+    id: 42,
+    template: 'verify_email',
+    recipientEmail: 'local@example.com',
+    payload: {},
+  }), { provider: 'mock', providerMessageId: 'mock-email-42' });
+
   assert.throws(
     () => createAccountEmailIntegration({ NODE_ENV: 'production' }),
     /TRANSACTIONAL_EMAIL_PROVIDER/,
   );
+  const mock = createAccountEmailIntegration({
+    NODE_ENV: 'production',
+    TRANSACTIONAL_EMAIL_PROVIDER: 'mock',
+  });
+  assert.equal(mock.provider, 'mock');
+  assert.equal(mock.exposePreview, true);
+
   const integration = createAccountEmailIntegration({
     NODE_ENV: 'production',
     TRANSACTIONAL_EMAIL_PROVIDER: 'resend',

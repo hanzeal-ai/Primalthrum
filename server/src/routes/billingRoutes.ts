@@ -4,15 +4,22 @@ import type Koa from 'koa';
 import { sendApiError } from '../services/apiErrors';
 import { BillingError } from '../services/billingRepository';
 import { type BillingStore } from '../services/billingStore';
-import { normalizeBillingKey } from '../services/billingValidation';
 import { type StructuredLogger } from '../services/logger';
+import { ImmediatePaymentLifecycle } from '../services/immediatePaymentLifecycle';
 import { type PaymentLifecycleStore } from '../services/paymentLifecycleStore';
-import { PaymentProviderError, type PaymentProviderAdapter } from '../services/paymentProvider';
+import { type PaymentProviderAdapter } from '../services/paymentProvider';
 import { PaymentError, type PaymentWebhookEvent } from '../services/paymentTypes';
 import { PaymentWebhookProcessor } from '../services/paymentWebhookProcessor';
 import { verifyStripeWebhookSignature } from '../services/stripeWebhookSignature';
 import { type WorkspacePermission } from '../services/workspaceAuthorization';
 import { type UsageRatingStore } from '../services/usageRatingStore';
+import {
+  optionalBoolean,
+  optionalLimit,
+  paymentMutationError,
+  providerUnavailable,
+  requestIdempotencyKey,
+} from './billingRouteSupport';
 
 interface BillingRouteDependencies {
   authorize: (ctx: Koa.Context, permission: WorkspacePermission) => boolean;
@@ -47,6 +54,9 @@ export function registerBillingRoutes(
     usage,
   } = dependencies;
   const paymentsReady = dependencies.paymentsReady ?? Promise.resolve();
+  const immediatePayments = paymentAdapter?.checkoutCompletion === 'immediate'
+    ? new ImmediatePaymentLifecycle(paymentAdapter.name, payments, billing)
+    : null;
 
   router.get('/api/public/plans', async (ctx) => {
     ctx.body = await billing.listPlans();
@@ -92,6 +102,7 @@ export function registerBillingRoutes(
     const workspaceId = currentWorkspaceId(ctx);
     await paymentsReady;
     ctx.body = {
+      paymentProvider: paymentAdapter?.name ?? 'disabled',
       entitlementSnapshot: await billing.entitlementSnapshot(workspaceId),
       creditAccount: await billing.creditAccount(workspaceId),
       subscription: await payments.subscription(workspaceId),
@@ -203,8 +214,7 @@ export function registerBillingRoutes(
         cancelUrl: `${publicAppUrl}/app/billing?checkout=canceled`,
         idempotencyKey,
       });
-      ctx.status = 201;
-      ctx.body = await payments.recordCheckout({
+      const checkout = await payments.recordCheckout({
         workspaceId,
         provider: paymentAdapter.name,
         idempotencyKey,
@@ -214,6 +224,20 @@ export function registerBillingRoutes(
         createdByUserId: userId,
         expiresAt: session.expiresAt,
       });
+      if (immediatePayments) {
+        await immediatePayments.activatePlan({
+          workspaceId,
+          plan,
+          priceRef: price.providerPriceRef,
+          customerRef: customer.providerCustomerRef,
+          sessionRef: session.id,
+          idempotencyKey,
+        });
+      }
+      ctx.status = 201;
+      ctx.body = immediatePayments
+        ? await payments.checkoutByKey(workspaceId, paymentAdapter.name, idempotencyKey) ?? checkout
+        : checkout;
     } catch (error) {
       paymentMutationError(ctx, logger, error, 'PAYMENT_CHECKOUT_INVALID', 'checkout creation failed');
     }
@@ -261,7 +285,19 @@ export function registerBillingRoutes(
         priceRef: price.providerPriceRef,
         idempotencyKey: requestIdempotencyKey(ctx),
       });
-      await payments.markPendingPlan(workspaceId, planKey);
+      if (immediatePayments) {
+        const plan = (await billing.listPlans()).find((candidate) => candidate.key === planKey);
+        if (!plan) throw new Error('target plan is not configured');
+        await immediatePayments.activatePlan({
+          workspaceId,
+          plan,
+          priceRef: price.providerPriceRef,
+          customerRef: subscription.providerCustomerRef,
+          idempotencyKey: requestIdempotencyKey(ctx),
+        });
+      } else {
+        await payments.markPendingPlan(workspaceId, planKey);
+      }
       ctx.status = 202;
       ctx.body = await payments.subscription(workspaceId);
     } catch (error) {
@@ -288,6 +324,12 @@ export function registerBillingRoutes(
         subscriptionRef: subscription.providerSubscriptionRef,
         idempotencyKey: requestIdempotencyKey(ctx),
       });
+      if (immediatePayments) {
+        await immediatePayments.cancel(
+          currentWorkspaceId(ctx),
+          requestIdempotencyKey(ctx),
+        );
+      }
       ctx.status = 202;
       ctx.body = { accepted: true };
     } catch (error) {
@@ -333,45 +375,5 @@ export function registerBillingRoutes(
         message: error instanceof Error ? error.message : 'trial activation failed',
       });
     }
-  });
-}
-
-function requestIdempotencyKey(ctx: Koa.Context): string {
-  return normalizeBillingKey(ctx.get('idempotency-key'), 'Idempotency-Key');
-}
-
-function optionalLimit(value: unknown): number | null | undefined {
-  if (value === undefined) return undefined;
-  if (value === null || value === '') return null;
-  const parsed = Number(value);
-  if (!Number.isSafeInteger(parsed) || parsed < 0) throw new Error('cost limit must be non-negative');
-  return parsed;
-}
-
-function optionalBoolean(value: unknown, fallback: boolean): boolean {
-  if (value === undefined) return fallback;
-  if (typeof value !== 'boolean') throw new Error('cost control flags must be boolean');
-  return value;
-}
-
-function providerUnavailable(ctx: Koa.Context, logger: StructuredLogger): void {
-  sendApiError(ctx, logger, {
-    status: 503,
-    code: 'PAYMENT_PROVIDER_UNAVAILABLE',
-    message: 'payment provider is not configured',
-  });
-}
-
-function paymentMutationError(
-  ctx: Koa.Context,
-  logger: StructuredLogger,
-  error: unknown,
-  invalidCode: 'PAYMENT_CHECKOUT_INVALID' | 'PAYMENT_SUBSCRIPTION_INVALID',
-  fallbackMessage: string,
-): void {
-  sendApiError(ctx, logger, {
-    status: error instanceof PaymentProviderError ? error.status : 400,
-    code: error instanceof PaymentProviderError ? 'PAYMENT_PROVIDER_FAILED' : invalidCode,
-    message: error instanceof Error ? error.message : fallbackMessage,
   });
 }

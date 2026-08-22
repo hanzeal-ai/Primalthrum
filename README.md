@@ -57,6 +57,10 @@ bash start.sh
 PYTHON_BIN=python3.12 AGENT_PORT=8000 PORT=3000 WEB_PORT=5173 bash start.sh
 ```
 
+本地默认使用模拟支付和模拟邮件投递，页面会明确标识且不会产生真实扣款。
+接入外部服务时设置 `PAYMENT_PROVIDER=stripe` 和
+`TRANSACTIONAL_EMAIL_PROVIDER=resend`；无需修改业务代码。
+
 ## API
 
 Agent 元数据与生成：

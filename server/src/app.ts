@@ -638,7 +638,7 @@ export function createApp(options: AppOptions = {}): Koa {
     Object.entries(options.paymentPriceRefs ?? {})
       .filter(([, priceRef]) => Boolean(priceRef.trim()))
       .map(([planKey, priceRef]) => Promise.resolve(
-        paymentRepository.configurePrice('stripe', planKey, priceRef.trim()),
+        paymentRepository.configurePrice(paymentAdapter?.name ?? 'stripe', planKey, priceRef.trim()),
       )),
   ).then(() => undefined);
   void paymentReady.catch((error) => {

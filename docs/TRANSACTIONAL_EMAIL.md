@@ -25,9 +25,12 @@ Set `TRANSACTIONAL_EMAIL_URL`, `TRANSACTIONAL_EMAIL_TOKEN`, and provider `http`
 to use a compatible relay. The relay must accept the documented JSON message,
 honor `Idempotency-Key`, and return a JSON `id`, `messageId`, or `data.id`.
 
-Production startup fails unless the provider, credentials, From identity, and
-Webhook secret are all present. Development without a provider uses local action
-URL previews. Never enable preview URLs in production.
+Local development defaults to provider `mock`: the Outbox is marked delivered and
+the action URL remains available in the authenticated preview UI. Explicit
+`disabled` skips delivery entirely. Production startup requires an explicit
+provider; `mock` and `disabled` are pre-release placeholders and must not be used
+as commercial delivery evidence. Resend and HTTP require their matching From,
+credential, and Webhook configuration.
 
 ## Signed Delivery Webhook
 

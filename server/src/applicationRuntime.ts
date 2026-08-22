@@ -8,7 +8,7 @@ import {
 } from './services/applicationDatabaseConfiguration';
 import { createDocumentFileStorage } from './services/documentStorageConfiguration';
 import { loadManagedSecretEnvironment } from './services/managedSecretEnvironment';
-import { StripePaymentAdapter } from './services/stripePaymentAdapter';
+import { createPaymentConfiguration } from './services/paymentConfiguration';
 import { HttpUsageMeterExporter } from './services/usageMeterExporter';
 import { createTraceExporter } from './services/tracingConfiguration';
 
@@ -55,31 +55,15 @@ export async function createApplicationRuntime(
 
 export function createApplicationAppOptions(environment: NodeJS.ProcessEnv): AppOptions {
   const traceExporter = createTraceExporter(environment);
-  const stripeSecretKey = environment.STRIPE_SECRET_KEY?.trim();
-  const paymentAdapter = stripeSecretKey
-    ? new StripePaymentAdapter(
-        stripeSecretKey,
-        fetch,
-        'https://api.stripe.com',
-        environment.STRIPE_API_VERSION,
-      )
-    : undefined;
-  const paymentPriceRefs = Object.fromEntries(
-    [
-      ['pro', environment.STRIPE_PRICE_PRO],
-      ['team', environment.STRIPE_PRICE_TEAM],
-      ['business', environment.STRIPE_PRICE_BUSINESS],
-      ['enterprise', environment.STRIPE_PRICE_ENTERPRISE],
-    ].filter((entry): entry is [string, string] => Boolean(entry[1]?.trim())),
-  );
+  const payment = createPaymentConfiguration(environment);
   const usageMeterExportUrl = environment.USAGE_METER_EXPORT_URL?.trim();
   const accountEmail = createAccountEmailIntegration(environment);
   const abuseProtection = createAbuseProtectionConfiguration(environment);
 
   return {
     documentStorage: createDocumentFileStorage(environment),
-    paymentAdapter,
-    paymentPriceRefs,
+    paymentAdapter: payment.adapter,
+    paymentPriceRefs: payment.priceRefs,
     publicAppUrl: environment.PUBLIC_APP_URL,
     stripeWebhookSecret: environment.STRIPE_WEBHOOK_SECRET,
     usageMeterExporter: usageMeterExportUrl
